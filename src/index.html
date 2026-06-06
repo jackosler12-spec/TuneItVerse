@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TuneItVerse</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+
+<body>
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-logo">
+      <div class="sidebar-logo-mark">TV</div>
+      <div class="sidebar-logo-text">TuneItVerse</div>
+    </div>
+
+    <nav class="sidebar-nav">
+      <a href="#" class="nav-item active" data-view="dashboard">
+        <span>Dashboard</span>
+      </a>
+      <a href="#" class="nav-item" data-view="read-write">
+        <span>Read / Write</span>
+      </a>
+      <a href="#" class="nav-item" data-view="live-data">
+        <span>Live Data</span>
+      </a>
+      <a href="#" class="nav-item" data-view="dtc">
+        <span>DTC</span>
+        <span class="nav-badge" id="dtc-count-badge">3</span>
+      </a>
+      <a href="#" class="nav-item" data-view="calibration">
+        <span>Calibration</span>
+      </a>
+      <a href="#" class="nav-item" data-view="logs">
+        <span>Logs</span>
+      </a>
+    </nav>
+
+    <div class="sidebar-footer">
+      <div class="connection-status">
+        <span class="conn-dot" id="conn-dot"></span>
+        <span id="conn-label">Disconnected</span>
+      </div>
+      <button id="btn-connect" class="btn-connect">Connect ECU</button>
+    </div>
+  </aside>
+
+  <div class="main-wrapper">
+    <header class="topbar">
+      <div class="topbar-left">
+        <button id="sidebar-toggle" class="btn-icon" aria-label="Toggle sidebar">☰</button>
+        <div>
+          <h1 id="page-title" class="page-title">ECU Diagnostics</h1>
+          <div id="page-sub" class="page-sub">2001 LS1 Nissan Patrol GU</div>
+        </div>
+      </div>
+
+      <div class="topbar-right">
+        <div class="vehicle-chip">P01 / OS 12225074</div>
+        <div class="vehicle-chip" id="last-update">Disconnected</div>
+        <button class="btn-icon" data-theme-toggle aria-label="Toggle theme">◐</button>
+      </div>
+    </header>
+
+    <main>
+      <section class="content" id="view-dashboard">
+        <div class="kpi-row">
+          <article class="kpi-card">
+            <div class="kpi-label">Engine RPM</div>
+            <div class="kpi-value" id="kpi-rpm">0</div>
+            <div class="kpi-unit">rpm</div>
+          </article>
+
+          <article class="kpi-card">
+            <div class="kpi-label">Coolant Temp</div>
+            <div class="kpi-value" id="kpi-temp">0</div>
+            <div class="kpi-unit">°C</div>
+          </article>
+
+          <article class="kpi-card">
+            <div class="kpi-label">Battery Voltage</div>
+            <div class="kpi-value" id="kpi-volt">0.0</div>
+            <div class="kpi-unit">V</div>
+          </article>
+
+          <article class="kpi-card kpi-card--alert" id="kpi-dtc-card">
+            <div class="kpi-label">Active DTCs</div>
+            <div class="kpi-value" id="kpi-dtc">3</div>
+            <div class="kpi-unit">faults</div>
+          </article>
+        </div>
+
+        <div class="gauge-row">
+          <article class="gauge-card">
+            <div class="gauge-wrap">
+              <canvas id="gauge-rpm" width="180" height="100"></canvas>
+              <div class="gauge-readout">
+                <span id="gauge-rpm-val">0</span>
+                <small>rpm</small>
+              </div>
+            </div>
+            <div class="gauge-label">Engine RPM</div>
+          </article>
+
+          <article class="gauge-card">
+            <div class="gauge-wrap">
+              <canvas id="gauge-map" width="180" height="100"></canvas>
+              <div class="gauge-readout">
+                <span id="gauge-map-val">0</span>
+                <small>kPa</small>
+              </div>
+            </div>
+            <div class="gauge-label">Manifold Pressure</div>
+          </article>
+
+          <article class="gauge-card">
+            <div class="gauge-wrap">
+              <canvas id="gauge-iat" width="180" height="100"></canvas>
+              <div class="gauge-readout">
+                <span id="gauge-iat-val">0</span>
+                <small>°C</small>
+              </div>
+            </div>
+            <div class="gauge-label">Intake Air Temp</div>
+          </article>
+
+          <article class="gauge-card">
+            <div class="gauge-wrap">
+              <canvas id="gauge-afr" width="180" height="100"></canvas>
+              <div class="gauge-readout">
+                <span id="gauge-afr-val">14.7</span>
+                <small>AFR</small>
+              </div>
+            </div>
+            <div class="gauge-label">Air / Fuel Ratio</div>
+          </article>
+        </div>
+
+        <div class="bottom-grid">
+          <article class="panel chart-panel">
+            <div class="panel-header">
+              <div class="panel-title">RPM / MAP Live Trace</div>
+              <div class="chart-controls">
+                <button class="chip chip--active" data-chart="rpm">RPM</button>
+                <button class="chip" data-chart="map">MAP</button>
+                <button class="chip" data-chart="iat">IAT</button>
+              </div>
+            </div>
+            <canvas id="live-chart"></canvas>
+          </article>
+
+          <article class="panel">
+            <div class="panel-header">
+              <div class="panel-title">Fault Codes</div>
+              <button class="btn-sm" id="btn-clear-dtc">Clear</button>
+            </div>
+            <ul class="dtc-list">
+              <li class="dtc-item dtc-item--active">
+                <span class="dtc-code">P0300</span>
+                <div>
+                  <span class="dtc-desc">Random / Multiple Cylinder Misfire</span>
+                  <span class="dtc-meta">Stored / Pending</span>
+                </div>
+                <span class="dtc-sev sev--high">High</span>
+              </li>
+              <li class="dtc-item dtc-item--active">
+                <span class="dtc-code">P0131</span>
+                <div>
+                  <span class="dtc-desc">O2 Sensor Low Voltage Bank 1 S1</span>
+                  <span class="dtc-meta">Stored</span>
+                </div>
+                <span class="dtc-sev sev--med">Med</span>
+              </li>
+              <li class="dtc-item">
+                <span class="dtc-code">P0171</span>
+                <div>
+                  <span class="dtc-desc">System Too Lean Bank 1</span>
+                  <span class="dtc-meta">History</span>
+                </div>
+                <span class="dtc-sev sev--low">Low</span>
+              </li>
+            </ul>
+          </article>
+        </div>
+
+        <article class="panel">
+          <div class="panel-header">
+            <div class="panel-title">Sensor Readings</div>
+          </div>
+          <div class="sensor-grid">
+            <div class="sensor-row">
+              <div class="sensor-name">Throttle Position</div>
+              <div class="sensor-bar-wrap">
+                <div class="sensor-bar" id="bar-tps"></div>
+              </div>
+              <div class="sensor-val" id="val-tps">0</div>
+              <div class="sensor-unit">%</div>
+            </div>
+            <div class="sensor-row">
+              <div class="sensor-name">O2 Voltage B1S1</div>
+              <div class="sensor-bar-wrap">
+                <div class="sensor-bar" id="bar-o2"></div>
+              </div>
+              <div class="sensor-val" id="val-o2">0</div>
+              <div class="sensor-unit">V</div>
+            </div>
+            <div class="sensor-row">
+              <div class="sensor-name">Fuel Trims ST B1</div>
+              <div class="sensor-bar-wrap">
+                <div class="sensor-bar sensor-bar--trim" id="bar-stft"></div>
+              </div>
+              <div class="sensor-val" id="val-stft">0</div>
+              <div class="sensor-unit">%</div>
+            </div>
+            <div class="sensor-row">
+              <div class="sensor-name">Ignition Timing</div>
+              <div class="sensor-bar-wrap">
+                <div class="sensor-bar" id="bar-ign"></div>
+              </div>
+              <div class="sensor-val" id="val-ign">0</div>
+              <div class="sensor-unit">°BTDC</div>
+            </div>
+            <div class="sensor-row">
+              <div class="sensor-name">Injector PW B1</div>
+              <div class="sensor-bar-wrap">
+                <div class="sensor-bar" id="bar-inj"></div>
+              </div>
+              <div class="sensor-val" id="val-inj">0</div>
+              <div class="sensor-unit">ms</div>
+            </div>
+            <div class="sensor-row">
+              <div class="sensor-name">Vehicle Speed</div>
+              <div class="sensor-bar-wrap">
+                <div class="sensor-bar" id="bar-vss"></div>
+              </div>
+              <div class="sensor-val" id="val-vss">0</div>
+              <div class="sensor-unit">km/h</div>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <section class="content content--hidden" id="view-read-write">
+        <div class="rw-grid">
+          <article class="panel">
+            <div class="panel-header">
+              <div class="panel-title">ECU Identity</div>
+            </div>
+            <div class="detail-grid">
+              <div class="detail-item"><span>Protocol</span><strong id="rw-protocol">GM J1850 VPW</strong></div>
+              <div class="detail-item"><span>PCM Type</span><strong id="rw-pcm-type">P01 / 0411</strong></div>
+              <div class="detail-item"><span>Operating System</span><strong id="rw-osid">Unknown</strong></div>
+              <div class="detail-item"><span>VIN</span><strong id="rw-vin">Unknown</strong></div>
+              <div class="detail-item"><span>Hardware</span><strong id="rw-hardware">Unknown</strong></div>
+              <div class="detail-item"><span>Status</span><strong id="rw-status">Not identified</strong></div>
+            </div>
+            <div class="panel-actions">
+              <button class="btn-primary" id="btn-read-properties">Read Properties</button>
+            </div>
+          </article>
+
+          <article class="panel">
+            <div class="panel-header">
+              <div class="panel-title">Backup</div>
+            </div>
+            <div class="status-stack">
+              <div class="status-row">
+                <span>Backup required before write</span>
+                <strong id="backup-required">Yes</strong>
+              </div>
+              <div class="status-row">
+                <span>Last backup file</span>
+                <strong id="backup-file">None</strong>
+              </div>
+              <div class="status-row">
+                <span>Last backup size</span>
+                <strong id="backup-size">—</strong>
+              </div>
+              <div class="status-row">
+                <span>Last backup hash</span>
+                <strong id="backup-hash">—</strong>
+              </div>
+            </div>
+            <div class="panel-actions">
+              <button class="btn-primary" id="btn-read-entire">Read Entire PCM</button>
+            </div>
+          </article>
+
+          <article class="panel">
+            <div class="panel-header">
+              <div class="panel-title">BIN Validation</div>
+            </div>
+            <div class="upload-box">
+              <label for="bin-file">Choose BIN or CAL file</label>
+              <input type="file" id="bin-file" accept=".bin,.cal" />
+            </div>
+            <div class="status-stack">
+              <div class="status-row">
+                <span>Selected file</span>
+                <strong id="bin-name">None</strong>
+              </div>
+              <div class="status-row">
+                <span>Detected OSID</span>
+                <strong id="bin-osid">Unknown</strong>
+              </div>
+              <div class="status-row">
+                <span>Checksum</span>
+                <strong id="bin-checksum">Not validated</strong>
+              </div>
+              <div class="status-row">
+                <span>Compatibility</span>
+                <strong id="bin-compat">Unchecked</strong>
+              </div>
+            </div>
+            <div class="panel-actions">
+              <button class="btn-secondary" id="btn-validate-bin">Validate BIN</button>
+              <button class="btn-secondary" id="btn-compare-bin">Compare to ECU</button>
+            </div>
+          </article>
+
+          <article class="panel">
+            <div class="panel-header">
+              <div class="panel-title">Write Mode</div>
+            </div>
+            <div class="radio-stack">
+              <label class="radio-card">
+                <input type="radio" name="write-mode" value="calibration_only" checked />
+                <div>
+                  <strong>Calibration Only</strong>
+                  <span>Safest default write path.</span>
+                </div>
+              </label>
+              <label class="radio-card">
+                <input type="radio" name="write-mode" value="os_calibration" />
+                <div>
+                  <strong>OS + Calibration</strong>
+                  <span>Advanced, larger flash region.</span>
+                </div>
+              </label>
+            </div>
+            <div class="panel-actions">
+              <button class="btn-danger" id="btn-start-write">Start Write</button>
+            </div>
+          </article>
+        </div>
+
+        <article class="panel">
+          <div class="panel-header">
+            <div class="panel-title">Preflight Checklist</div>
+          </div>
+          <div class="checklist">
+            <label class="check-row"><input type="checkbox" id="chk-connected" disabled /> ECU connected.</label>
+            <label class="check-row"><input type="checkbox" id="chk-identified" disabled /> ECU identified.</label>
+            <label class="check-row"><input type="checkbox" id="chk-backup" disabled /> Backup completed this
+              session.</label>
+            <label class="check-row"><input type="checkbox" id="chk-bin" disabled /> BIN validated.</label>
+            <label class="check-row"><input type="checkbox" id="chk-compat" disabled /> OSID / compatibility check
+              passed.</label>
+            <label class="check-row"><input type="checkbox" id="chk-user" /> I understand write operations can brick the
+              PCM if interrupted.</label>
+          </div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-header">
+            <div class="panel-title">Job Status</div>
+            <div class="panel-meta" id="job-phase">Idle</div>
+          </div>
+          <div class="job-log" id="job-log"></div>
+        </article>
+      </section>
+
+      <section class="content content--hidden" id="view-live-data">
+        <div class="placeholder-view">
+          <h2>Live Data Stream</h2>
+          <p>Use the dashboard trace and gauges for now. This view is reserved for higher-rate logging and record
+            controls.</p>
+        </div>
+      </section>
+
+      <section class="content content--hidden" id="view-dtc">
+        <div class="placeholder-view">
+          <h2>DTC Fault Codes</h2>
+          <p>Detailed DTC workflows, freeze-frame data, and clear-code confirmation will be added after the read/write
+            pipeline is stable.</p>
+        </div>
+      </section>
+
+      <section class="content content--hidden" id="view-calibration">
+        <div class="placeholder-view">
+          <h2>Calibration</h2>
+          <p>Definition-backed table editing comes after BIN validation, compare, and safe write verification are in
+            place.</p>
+        </div>
+      </section>
+
+      <section class="content content--hidden" id="view-logs">
+        <div class="placeholder-view">
+          <h2>Logs</h2>
+          <p>Session history, backups, hashes, and flash audit records will appear here.</p>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script type="module" src="./main.js"></script>
+</body>
+
+</html>
