@@ -1,0 +1,52 @@
+#Global delay (ms) between send command and receive answer:
+globaldelay:300
+6C FE F1 20
+6C FE F1 28 00
+
+#Loop 4 cycles:
+loop:4 
+8c fe f0 3f
+endloop
+
+#Create variable, name: var1, size 3 bytes, value 0C
+variable:var1:3:0C
+loop:10
+#Replace var1 by value of var1(first cycle: 00 00 0C)
+6c 10 f0 35 00 10 00 var1
+#Increment variable every cycle by A0:
+variable:var1:3:+A0
+endloop
+
+#setvariable:name:size:position
+#Send command and set variable from response bytes:
+setvariable:myvarX:3:4
+6C 10 F0 3C 0A
+
+
+#Add delay (milliseconds)
+delay:100
+
+#Add delay (milliseconds)
+t:100
+
+#getseed:startbyte:algo
+#For unlocking, row1:settings for get seed command, row2: command to get seed, row3: unlock command
+getseed:5:5b
+6c 10 f0 27 01
+6c 10 f0 27 02 key
+
+
+loop:10
+#break loop if byte 3 == 3C
+break:3:3C
+6C 10 F0 3C 0A
+endloop
+
+loop:10
+#break loop if byte 2 != 3C
+break!:2:3C
+6C 10 F0 3C 0A
+endloop
+
+#Add block checksum:
+6C 10 F0 36 00 00 FF 04 7C 7F 44 60 0A 7A 01 11 C5 91 5D 11 C5 blchk:2:1500

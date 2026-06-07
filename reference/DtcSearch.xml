@@ -1,0 +1,1185 @@
+<?xml version="1.0"?>
+<ArrayOfDtcSearchConfig xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <DtcSearchConfig>
+    <XMLFile>p01-p59</XMLFile>
+    <CodeSearch>18 30 35 B0</CodeSearch>
+    <StatusSearch>18 30 31 B0 * * * * 67</StatusSearch>
+    <MilTable>afterstatus</MilTable>
+    <CodeOffset>2</CodeOffset>
+    <CodeSteps>4</CodeSteps>
+    <StatusOffset>1</StatusOffset>
+    <MilOffset>1</MilOffset>
+    <StatusSteps>1</StatusSteps>
+    <MilSteps>1</MilSteps>
+    <ConditionalOffset />
+    <Linear>true</Linear>
+    <CodesPerStatus>1</CodesPerStatus>
+  </DtcSearchConfig>
+  <DtcSearchConfig>
+    <XMLFile>p01-p59</XMLFile>
+    <CodeSearch>BC 30 59 B0 * * * * 66</CodeSearch>
+    <StatusSearch>00 03 41 B0 * * * * 66</StatusSearch>
+    <MilSearch>4A 30 31 B0 * * * * 67 2E</MilSearch>
+    <MilTable>opcode</MilTable>
+    <CodeOffset>2</CodeOffset>
+    <CodeSteps>6</CodeSteps>
+    <StatusOffset>1</StatusOffset>
+    <MilOffset>1</MilOffset>
+    <StatusSteps>1</StatusSteps>
+    <MilSteps>1</MilSteps>
+    <ConditionalOffset />
+    <Linear>true</Linear>
+    <CodesPerStatus>1</CodesPerStatus>
+  </DtcSearchConfig>
+  <DtcSearchConfig>
+    <XMLFile>p01-p59</XMLFile>
+    <CodeSearch>B0 30 55 B0 * * * * 66</CodeSearch>
+    <StatusSearch>00 03 41 B0 * * * * 66</StatusSearch>
+    <MilSearch>4A 30 31 B0 * * * * 67 2E</MilSearch>
+    <MilTable>opcode</MilTable>
+    <CodeOffset>1</CodeOffset>
+    <CodeSteps>4</CodeSteps>
+    <StatusOffset>1</StatusOffset>
+    <MilOffset>1</MilOffset>
+    <StatusSteps>1</StatusSteps>
+    <MilSteps>1</MilSteps>
+    <ConditionalOffset />
+    <Linear>true</Linear>
+    <CodesPerStatus>1</CodesPerStatus>
+  </DtcSearchConfig>
+  <DtcSearchConfig>
+    <XMLFile>p01-p59</XMLFile>
+    <CodeSearch>B0 30 55 B0 * * * * 66</CodeSearch>
+    <StatusSearch>00 03 41 B0 * * * * 67</StatusSearch>
+    <MilSearch>67 0C 4A 30 31 B0 * * * *</MilSearch>
+    <MilTable>opcode</MilTable>
+    <CodeOffset>1</CodeOffset>
+    <CodeSteps>4</CodeSteps>
+    <StatusOffset>1</StatusOffset>
+    <MilOffset>1</MilOffset>
+    <StatusSteps>1</StatusSteps>
+    <MilSteps>1</MilSteps>
+    <ConditionalOffset />
+    <Values />
+    <Linear>true</Linear>
+    <CodesPerStatus>1</CodesPerStatus>
+  </DtcSearchConfig>
+  <DtcSearchConfig>
+    <XMLFile>p01-p59</XMLFile>
+    <CodeSearch>BE 30 35 B0 * * * * 66</CodeSearch>
+    <StatusSearch>20 1f 4e 75 4A 38 * * 67 08 24 7C @ @ @ @ 60 * * * * * * * * * * * * * 00 00 4e 75</StatusSearch>
+    <MilSearch>00 00 4e 75 4A 38 * * 67 08 24 7C @ @ @ @ 60 * * * * * * * * * * * * * 00 00 4e 75</MilSearch>
+    <MilTable>opcode</MilTable>
+    <CodeOffset>1</CodeOffset>
+    <CodeSteps>4</CodeSteps>
+    <StatusOffset>1</StatusOffset>
+    <MilOffset>1</MilOffset>
+    <StatusSteps>1</StatusSteps>
+    <MilSteps>1</MilSteps>
+    <ConditionalOffset />
+    <Values />
+    <Linear>true</Linear>
+    <CodesPerStatus>1</CodesPerStatus>
+  </DtcSearchConfig>
+  <DtcSearchConfig>
+    <XMLFile>p01-p59-DTC2</XMLFile>
+    <CodeSearch>BE 30 35 B0 * * * * 66</CodeSearch>
+    <StatusSearch>20 1f 4e 75 4A 38 * * 67 08 24 7C * * * * 60 * * * @ @ @ @ * * * * * * 00 00 4e 75</StatusSearch>
+    <MilSearch>00 00 4e 75 4A 38 * * 67 08 24 7C * * * * 60 * * * @ @ @ @ * * * * * * 00 00 4e 75</MilSearch>
+    <MilTable>opcode</MilTable>
+    <CodeOffset>1</CodeOffset>
+    <CodeSteps>4</CodeSteps>
+    <StatusOffset>1</StatusOffset>
+    <MilOffset>1</MilOffset>
+    <StatusSteps>1</StatusSteps>
+    <MilSteps>1</MilSteps>
+    <ConditionalOffset />
+    <Linear>true</Linear>
+    <CodesPerStatus>1</CodesPerStatus>
+  </DtcSearchConfig>
+  <DtcSearchConfig>
+    <XMLFile>v6-96-97</XMLFile>
+    <CodeSearch>B6 30 05 B0 * * * * 66</CodeSearch>
+    <StatusSearch>BC 30 11 B0 * * * * 65</StatusSearch>
+    <MilSearch>67 0C 4A 30 01 B0 * * * *</MilSearch>
+    <MilTable>opcode</MilTable>
+    <CodeOffset>2</CodeOffset>
+    <CodeSteps>4</CodeSteps>
+    <StatusOffset>1</StatusOffset>
+    <MilOffset>1</MilOffset>
+    <StatusSteps>1</StatusSteps>
+    <MilSteps>1</MilSteps>
+    <ConditionalOffset />
+    <Linear>true</Linear>
+    <CodesPerStatus>1</CodesPerStatus>
+  </DtcSearchConfig>
+  <DtcSearchConfig>
+    <XMLFile>v6-98-05</XMLFile>
+    <CodeSearch>B2 30 55 B0 * * * * 66</CodeSearch>
+    <StatusSearch>00 03 41 B0 * * * * 66</StatusSearch>
+    <MilSearch>4A 30 11 B0 * * * * 67 2E</MilSearch>
+    <MilTable>opcode</MilTable>
+    <CodeOffset>1</CodeOffset>
+    <CodeSteps>4</CodeSteps>
+    <StatusOffset>1</StatusOffset>
+    <MilOffset>1</MilOffset>
+    <StatusSteps>1</StatusSteps>
+    <MilSteps>1</MilSteps>
+    <ConditionalOffset />
+    <Linear>true</Linear>
+    <CodesPerStatus>1</CodesPerStatus>
+  </DtcSearchConfig>
+  <DtcSearchConfig>
+    <XMLFile>v6-98-05</XMLFile>
+    <CodeSearch>B0 30 55 B0 * * * * 66</CodeSearch>
+    <StatusSearch>00 03 41 B0 * * * * 66</StatusSearch>
+    <MilSearch>4A 30 11 B0 * * * * 67</MilSearch>
+    <MilTable>opcode</MilTable>
+    <CodeOffset>2</CodeOffset>
+    <CodeSteps>4</CodeSteps>
+    <StatusOffset>1</StatusOffset>
+    <MilOffset>1</MilOffset>
+    <StatusSteps>1</StatusSteps>
+    <MilSteps>1</MilSteps>
+    <ConditionalOffset />
+    <Linear>true</Linear>
+    <CodesPerStatus>1</CodesPerStatus>
+  </DtcSearchConfig>
+  <DtcSearchConfig>
+    <XMLFile>v6-98-05</XMLFile>
+    <CodeSearch>B6 30 05 B0 * * * * 66</CodeSearch>
+    <StatusSearch>BC 30 11 B0 * * * * 65</StatusSearch>
+    <MilSearch>67 0C 4A 30 01 B0 * * * *</MilSearch>
+    <MilTable>opcode</MilTable>
+    <CodeOffset>2</CodeOffset>
+    <CodeSteps>4</CodeSteps>
+    <StatusOffset>1</StatusOffset>
+    <MilOffset>1</MilOffset>
+    <StatusSteps>1</StatusSteps>
+    <MilSteps>1</MilSteps>
+    <ConditionalOffset />
+    <Linear>true</Linear>
+    <CodesPerStatus>1</CodesPerStatus>
+  </DtcSearchConfig>
+  <DtcSearchConfig>
+    <XMLFile>v6-98-05</XMLFile>
+    <CodeSearch>B8 30 35 B0 * * * * 66</CodeSearch>
+    <StatusSearch>00 03 01 B0 * * * * 67</StatusSearch>
+    <MilSearch>67 0c 4A 30 31 B0 * * * *</MilSearch>
+    <MilTable>opcode</MilTable>
+    <CodeOffset>2</CodeOffset>
+    <CodeSteps>4</CodeSteps>
+    <StatusOffset>1</StatusOffset>
+    <MilOffset>1</MilOffset>
+    <StatusSteps>1</StatusSteps>
+    <MilSteps>1</MilSteps>
+    <ConditionalOffset />
+    <Linear>true</Linear>
+    <CodesPerStatus>1</CodesPerStatus>
+  </DtcSearchConfig>
+  <DtcSearchConfig>
+    <XMLFile>v6-1mb</XMLFile>
+    <CodeSearch>10 30 05 B0 * * * *</CodeSearch>
+    <StatusSearch>18 30 31 B0 * * * * 67 06</StatusSearch>
+    <MilSearch>4A 30 11 B0 * * * * 67 2E</MilSearch>
+    <MilTable>opcode</MilTable>
+    <CodeOffset>2</CodeOffset>
+    <CodeSteps>4</CodeSteps>
+    <StatusOffset>1</StatusOffset>
+    <MilOffset>1</MilOffset>
+    <StatusSteps>1</StatusSteps>
+    <MilSteps>1</MilSteps>
+    <ConditionalOffset />
+    <Linear>true</Linear>
+    <CodesPerStatus>1</CodesPerStatus>
+  </DtcSearchConfig>
+  <DtcSearchConfig>
+    <XMLFile>p05c-v6</XMLFile>
+    <CodeSearch>10 30 05 B0 * * * *</CodeSearch>
+    <StatusSearch>18 30 31 B0 * * * * 67 06</StatusSearch>
+    <MilSearch>4A 30 11 B0 * * * * 67</MilSearch>
+    <MilTable>opcode</MilTable>
+    <CodeOffset>2</CodeOffset>
+    <CodeSteps>4</CodeSteps>
+    <StatusOffset>1</StatusOffset>
+    <MilOffset>1</MilOffset>
+    <StatusSteps>1</StatusSteps>
+    <MilSteps>1</MilSteps>
+    <ConditionalOffset />
+    <Linear>true</Linear>
+    <CodesPerStatus>1</CodesPerStatus>
+  </DtcSearchConfig>
+  <DtcSearchConfig>
+    <XMLFile>ls1-97-98</XMLFile>
+    <CodeSearch>B0 30 55 B0 * * * * 66</CodeSearch>
+    <StatusSearch>00 03 41 B0 * * * * 67</StatusSearch>
+    <MilSearch>67 0C 4A 30 31 B0 * * * *</MilSearch>
+    <MilTable>opcode</MilTable>
+    <CodeOffset>1</CodeOffset>
+    <CodeSteps>4</CodeSteps>
+    <StatusOffset>1</StatusOffset>
+    <MilOffset>1</MilOffset>
+    <StatusSteps>1</StatusSteps>
+    <MilSteps>1</MilSteps>
+    <ConditionalOffset />
+    <Linear>true</Linear>
+    <CodesPerStatus>1</CodesPerStatus>
+  </DtcSearchConfig>
+  <DtcSearchConfig>
+    <XMLFile>diesel01-05</XMLFile>
+    <CodeSearch>42 10 20 7C * * * * 1C</CodeSearch>
+    <StatusSearch>67 24 20 7C * * * * D1</StatusSearch>
+    <MilSearch>67 0C 20 7C * * * * D1</MilSearch>
+    <MilTable>opcode</MilTable>
+    <CodeOffset>2</CodeOffset>
+    <CodeSteps>4</CodeSteps>
+    <StatusOffset>1</StatusOffset>
+    <MilOffset>1</MilOffset>
+    <StatusSteps>1</StatusSteps>
+    <MilSteps>1</MilSteps>
+    <ConditionalOffset />
+    <Values />
+    <Linear>true</Linear>
+    <CodesPerStatus>1</CodesPerStatus>
+  </DtcSearchConfig>
+  <DtcSearchConfig>
+    <XMLFile>diesel01-05-custom</XMLFile>
+    <CodeSearch>42 10 20 7C * * * * 1C</CodeSearch>
+    <StatusSearch>67 24 20 7C * * * * D1</StatusSearch>
+    <MilSearch>67 0C 20 7C * * * * D1</MilSearch>
+    <MilTable>opcode</MilTable>
+    <CodeOffset>-98302</CodeOffset>
+    <CodeSteps>4</CodeSteps>
+    <StatusOffset>327681</StatusOffset>
+    <MilOffset>327681</MilOffset>
+    <StatusSteps>1</StatusSteps>
+    <MilSteps>1</MilSteps>
+    <ConditionalOffset />
+    <Linear>true</Linear>
+    <CodesPerStatus>1</CodesPerStatus>
+  </DtcSearchConfig>
+  <DtcSearchConfig>
+    <XMLFile>diesel01-05-1mb</XMLFile>
+    <CodeSearch>42 10 20 7C * * * * 1C</CodeSearch>
+    <StatusSearch>67 24 20 7C * * * * D1</StatusSearch>
+    <MilSearch>67 0C 20 7C * * * * D1</MilSearch>
+    <MilTable>opcode</MilTable>
+    <CodeOffset>2</CodeOffset>
+    <CodeSteps>4</CodeSteps>
+    <StatusOffset>1</StatusOffset>
+    <MilOffset>1</MilOffset>
+    <StatusSteps>1</StatusSteps>
+    <MilSteps>1</MilSteps>
+    <ConditionalOffset />
+    <Linear>true</Linear>
+    <CodesPerStatus>1</CodesPerStatus>
+  </DtcSearchConfig>
+  <DtcSearchConfig>
+    <XMLFile>e40</XMLFile>
+    <CodeSearch>00 72 00 2A 7C * * * * 2A 3C</CodeSearch>
+    <StatusSearch>66 CC 20 7C * * * * 48</StatusSearch>
+    <MilTable>combined</MilTable>
+    <CodeOffset>0</CodeOffset>
+    <CodeSteps>2</CodeSteps>
+    <StatusOffset>1</StatusOffset>
+    <MilOffset>1</MilOffset>
+    <StatusSteps>2</StatusSteps>
+    <MilSteps>2</MilSteps>
+    <ConditionalOffset />
+    <Linear>true</Linear>
+    <CodesPerStatus>1</CodesPerStatus>
+  </DtcSearchConfig>
+  <DtcSearchConfig>
+    <XMLFile>e40-wsl</XMLFile>
+    <CodeSearch>00 72 00 2A 7C * * * * 2A 3C</CodeSearch>
+    <StatusSearch>66 CC 20 7C * * * * 48</StatusSearch>
+    <MilTable>combined</MilTable>
+    <CodeOffset>0</CodeOffset>
+    <CodeSteps>2</CodeSteps>
+    <StatusOffset>1</StatusOffset>
+    <MilOffset>1</MilOffset>
+    <StatusSteps>2</StatusSteps>
+    <MilSteps>2</MilSteps>
+    <ConditionalOffset />
+    <Linear>true</Linear>
+    <CodesPerStatus>1</CodesPerStatus>
+  </DtcSearchConfig>
+  <DtcSearchConfig>
+    <XMLFile>e38</XMLFile>
+    <CodeSearch>3D 80 * * 39 8C * * 7D 7B DA 14 7C 8C 5A 2E 80 BD</CodeSearch>
+    <StatusSearch>3C A0 * * 38 A5 * * 7D 85 50</StatusSearch>
+    <MilTable>combined</MilTable>
+    <CodeOffset>0</CodeOffset>
+    <CodeSteps>2</CodeSteps>
+    <StatusOffset>0</StatusOffset>
+    <MilOffset>0</MilOffset>
+    <StatusSteps>1</StatusSteps>
+    <MilSteps>1</MilSteps>
+    <ConditionalOffset>signed:code,signed:offset</ConditionalOffset>
+    <Linear>true</Linear>
+    <CodesPerStatus>1</CodesPerStatus>
+  </DtcSearchConfig>
+  <DtcSearchConfig>
+    <XMLFile>e67</XMLFile>
+    <CodeSearch>3D 80 * * 39 8C * * 7D 7B DA 14 7C 8C 5A 2E 80 BD</CodeSearch>
+    <StatusSearch>3C A0 * * 38 A5 * * 7D 85 50</StatusSearch>
+    <MilSearch />
+    <MilTable>combined</MilTable>
+    <CodeOffset>0</CodeOffset>
+    <CodeSteps>2</CodeSteps>
+    <StatusOffset>0</StatusOffset>
+    <MilOffset>0</MilOffset>
+    <StatusSteps>1</StatusSteps>
+    <MilSteps>1</MilSteps>
+    <ConditionalOffset>signed:code,signed:offset</ConditionalOffset>
+    <Values />
+    <Linear>true</Linear>
+    <CodesPerStatus>1</CodesPerStatus>
+  </DtcSearchConfig>
+  <DtcSearchConfig>
+    <XMLFile>e67</XMLFile>
+    <CodeSearch>3D 80 * * 39 8C * * 7D 67 3A 14 7C CC</CodeSearch>
+    <StatusSearch>3C A0 * * 38 A5 * * 7D 85 50</StatusSearch>
+    <MilTable>combined</MilTable>
+    <CodeOffset>0</CodeOffset>
+    <CodeSteps>2</CodeSteps>
+    <StatusOffset>0</StatusOffset>
+    <MilOffset>0</MilOffset>
+    <StatusSteps>1</StatusSteps>
+    <MilSteps>1</MilSteps>
+    <ConditionalOffset>signed:code,signed:offset</ConditionalOffset>
+    <Linear>true</Linear>
+    <CodesPerStatus>1</CodesPerStatus>
+  </DtcSearchConfig>
+  <DtcSearchConfig>
+    <XMLFile>e92</XMLFile>
+    <CodeSearch>3D 80 * * 39 8C * * 57 EB 08 3C 7C 8C 5A 2E</CodeSearch>
+    <StatusSearch>3C A0 * * 38 A5 * * 89 65 01</StatusSearch>
+    <MilTable>combined</MilTable>
+    <CodeOffset>0</CodeOffset>
+    <CodeSteps>2</CodeSteps>
+    <StatusOffset>-65536</StatusOffset>
+    <MilOffset>0</MilOffset>
+    <StatusSteps>1</StatusSteps>
+    <MilSteps>1</MilSteps>
+    <ConditionalOffset />
+    <Linear>true</Linear>
+    <CodesPerStatus>1</CodesPerStatus>
+  </DtcSearchConfig>
+  <DtcSearchConfig>
+    <XMLFile>e92_nbb</XMLFile>
+    <CodeSearch>3D 80 * * 39 8C * * 57 EB 08 3C 7C 8C 5A 2E</CodeSearch>
+    <StatusSearch>3C A0 * * 38 A5 * * 89 65 01</StatusSearch>
+    <MilTable>combined</MilTable>
+    <CodeOffset>0</CodeOffset>
+    <CodeSteps>2</CodeSteps>
+    <StatusOffset>-65536</StatusOffset>
+    <MilOffset>0</MilOffset>
+    <StatusSteps>1</StatusSteps>
+    <MilSteps>1</MilSteps>
+    <ConditionalOffset />
+    <Linear>true</Linear>
+    <CodesPerStatus>1</CodesPerStatus>
+  </DtcSearchConfig>
+  <DtcSearchConfig>
+    <XMLFile>e92.a</XMLFile>
+    <CodeSearch>3F 70 E0 * * 1C E7 * * 77 C6 08 3D 7C 87</CodeSearch>
+    <StatusSearch>14 DD 01 73 60 * * 1F 7B * * 30 DB 00 * 74</StatusSearch>
+    <MilTable>combined</MilTable>
+    <CodeOffset>-3758096384</CodeOffset>
+    <CodeSteps>2</CodeSteps>
+    <StatusOffset>-3758161920</StatusOffset>
+    <MilOffset>0</MilOffset>
+    <StatusSteps>1</StatusSteps>
+    <MilSteps>1</MilSteps>
+    <ConditionalOffset />
+    <Linear>true</Linear>
+    <CodesPerStatus>1</CodesPerStatus>
+  </DtcSearchConfig>
+  <DtcSearchConfig>
+    <XMLFile>e92a_nbb</XMLFile>
+    <CodeSearch>3F 70 E0 * * 1C E7 * * 77 C6 08 3D 7C 87</CodeSearch>
+    <StatusSearch>14 DD 01 73 60 * * 1F 7B * * 30 DB 00 * 74</StatusSearch>
+    <MilTable>combined</MilTable>
+    <CodeOffset>-3758096384</CodeOffset>
+    <CodeSteps>2</CodeSteps>
+    <StatusOffset>-3758161920</StatusOffset>
+    <MilOffset>0</MilOffset>
+    <StatusSteps>1</StatusSteps>
+    <MilSteps>1</MilSteps>
+    <ConditionalOffset />
+    <Linear>true</Linear>
+    <CodesPerStatus>1</CodesPerStatus>
+  </DtcSearchConfig>
+  <DtcSearchConfig>
+    <XMLFile>p01-p59-CNG</XMLFile>
+    <CodeSearch>16 30 05 B0 * * * * 42</CodeSearch>
+    <StatusSearch>16 30 01 B0 * * * * 67 16</StatusSearch>
+    <MilSearch>00 03 64 B0 * * * * 00 03</MilSearch>
+    <MilTable>opcode</MilTable>
+    <CodeOffset>2</CodeOffset>
+    <CodeSteps>4</CodeSteps>
+    <StatusOffset>1</StatusOffset>
+    <MilOffset>1</MilOffset>
+    <StatusSteps>1</StatusSteps>
+    <MilSteps>1</MilSteps>
+    <ConditionalOffset />
+    <Linear>true</Linear>
+    <CodesPerStatus>1</CodesPerStatus>
+  </DtcSearchConfig>
+  <DtcSearchConfig>
+    <XMLFile>e78</XMLFile>
+    <CodeSearch>ae 3D 80 * * 39 8C * * 55 6B 08 3C 7C 8C 5A 2E A1</CodeSearch>
+    <StatusSearch>3C A0 * * 38 A5 * * 89 65 01</StatusSearch>
+    <MilTable>combined</MilTable>
+    <CodeOffset>0</CodeOffset>
+    <CodeSteps>2</CodeSteps>
+    <StatusOffset>-65536</StatusOffset>
+    <MilOffset>0</MilOffset>
+    <StatusSteps>1</StatusSteps>
+    <MilSteps>1</MilSteps>
+    <ConditionalOffset />
+    <Linear>true</Linear>
+    <CodesPerStatus>1</CodesPerStatus>
+    <StatusMath>X&amp;7</StatusMath>
+  </DtcSearchConfig>
+  <DtcSearchConfig>
+    <XMLFile>e78</XMLFile>
+    <CodeSearch>3D 80 * * 39 8C * * 57 EB 08 3C 7C 8C 5A 2E 3D 20</CodeSearch>
+    <StatusSearch>3C A0 * * 38 A5 * * 7F EB 07 34 </StatusSearch>
+    <MilTable>combined</MilTable>
+    <CodeOffset>0</CodeOffset>
+    <CodeSteps>2</CodeSteps>
+    <StatusOffset>-65536</StatusOffset>
+    <MilOffset>0</MilOffset>
+    <StatusSteps>1</StatusSteps>
+    <MilSteps>1</MilSteps>
+    <ConditionalOffset />
+    <Linear>true</Linear>
+    <CodesPerStatus>1</CodesPerStatus>
+    <StatusMath>X&amp;7</StatusMath>
+  </DtcSearchConfig>
+  <DtcSearchConfig>
+    <XMLFile>e82</XMLFile>
+    <CodeSearch>91 3F 70 E0 * * 1C E7 * * 77 C6 08 3D 7C</CodeSearch>
+    <StatusSearch>73 60 * * 1F 7B * * 30 DB</StatusSearch>
+    <MilTable>combined</MilTable>
+    <CodeOffset>-3766484992</CodeOffset>
+    <CodeSteps>2</CodeSteps>
+    <StatusOffset>-3766550528</StatusOffset>
+    <MilOffset>0</MilOffset>
+    <StatusSteps>1</StatusSteps>
+    <MilSteps>1</MilSteps>
+    <ConditionalOffset>signed:code</ConditionalOffset>
+    <Linear>true</Linear>
+    <CodesPerStatus>1</CodesPerStatus>
+    <StatusMath>X&amp;7</StatusMath>
+  </DtcSearchConfig>
+  <DtcSearchConfig>
+    <XMLFile>e82</XMLFile>
+    <CodeSearch>91 3F 70 E0 * * 1C E7 * * 77 C6 08 3D 7C</CodeSearch>
+    <StatusSearch>04 44 44 70 E0 * * 1C E7 * * 7C 67 18 AE 74</StatusSearch>
+    <MilTable>combined</MilTable>
+    <CodeOffset>-3766484992</CodeOffset>
+    <CodeSteps>2</CodeSteps>
+    <StatusOffset>-3766550528</StatusOffset>
+    <MilOffset>1</MilOffset>
+    <StatusSteps>1</StatusSteps>
+    <MilSteps>1</MilSteps>
+    <ConditionalOffset>signed:code</ConditionalOffset>
+    <Linear>true</Linear>
+    <CodesPerStatus>1</CodesPerStatus>
+    <StatusMath>X&amp;7</StatusMath>
+  </DtcSearchConfig>
+  <DtcSearchConfig>
+    <XMLFile>e98</XMLFile>
+    <CodeSearch>91 3F 70 E0 * * 1C E7 * * 77 C6 08 3D 7C</CodeSearch>
+    <StatusSearch>4D E4 * 48 1D 73 60 @ @ 1F 7B @ @ 18 FB 00 01 74</StatusSearch>
+    <MilSearch />
+    <MilTable>combined</MilTable>
+    <CodeOffset>-3758096384</CodeOffset>
+    <CodeSteps>2</CodeSteps>
+    <StatusOffset>-3758096384</StatusOffset>
+    <MilOffset>1</MilOffset>
+    <StatusSteps>1</StatusSteps>
+    <MilSteps>1</MilSteps>
+    <ConditionalOffset>signed:code</ConditionalOffset>
+    <Values />
+    <Linear>true</Linear>
+    <CodesPerStatus>1</CodesPerStatus>
+    <StatusMath>X&amp;7</StatusMath>
+  </DtcSearchConfig>
+  <DtcSearchConfig>
+    <XMLFile>e98</XMLFile>
+    <CodeSearch>91 3F 70 E0 * * 1C E7 * * 77 C6 08 3D 7C</CodeSearch>
+    <StatusSearch>04 44 44 70 E0 * * 1C E7 * * 7C 67 18 AE 74</StatusSearch>
+    <MilTable>combined</MilTable>
+    <CodeOffset>-3758096384</CodeOffset>
+    <CodeSteps>2</CodeSteps>
+    <StatusOffset>-3758096384</StatusOffset>
+    <MilOffset>1</MilOffset>
+    <StatusSteps>1</StatusSteps>
+    <MilSteps>1</MilSteps>
+    <ConditionalOffset>signed:code</ConditionalOffset>
+    <Linear>true</Linear>
+    <CodesPerStatus>1</CodesPerStatus>
+    <StatusMath>X&amp;7</StatusMath>
+  </DtcSearchConfig>
+  <DtcSearchConfig>
+    <XMLFile>e83b</XMLFile>
+    <CodeSearch>FF FF 2A 1D * * 70 E0 @ @ 1C E7 @ @ 77 C6</CodeSearch>
+    <StatusSearch>73 60 * * 1F 7B * * 7C DB 30 AE 74</StatusSearch>
+    <MilTable>combined</MilTable>
+    <CodeOffset>-3758096384</CodeOffset>
+    <CodeSteps>2</CodeSteps>
+    <StatusOffset>-3758096384</StatusOffset>
+    <MilOffset>1</MilOffset>
+    <StatusSteps>1</StatusSteps>
+    <MilSteps>1</MilSteps>
+    <ConditionalOffset>signed:code,signed:status</ConditionalOffset>
+    <Values>Enum: 0:MIL and reporting off,1:Type A/no MIL,2:Type B/no MIL,3:Type C/no MIL,4:Not reported/MIL,5:Type A/MIL,6:Type B/MIL,7:Type C/MIL,15:hui,23:17</Values>
+    <Linear>true</Linear>
+    <CodesPerStatus>1</CodesPerStatus>
+  </DtcSearchConfig>
+  <DtcSearchConfig>
+    <XMLFile>e83a</XMLFile>
+    <CodeSearch>FF FF 2A 1D * * 70 E0 @ @ 1C E7 @ @ 77 C6</CodeSearch>
+    <StatusSearch>73 60 * * 1F 7B * * 7C DB 30 AE 74</StatusSearch>
+    <MilTable>combined</MilTable>
+    <CodeOffset>-3758096384</CodeOffset>
+    <CodeSteps>2</CodeSteps>
+    <StatusOffset>-3758096384</StatusOffset>
+    <MilOffset>1</MilOffset>
+    <StatusSteps>1</StatusSteps>
+    <MilSteps>1</MilSteps>
+    <ConditionalOffset>signed:code,signed:status</ConditionalOffset>
+    <Values>Enum: 0:MIL and reporting off,1:Type A/no MIL,2:Type B/no MIL,3:Type C/no MIL,4:Not reported/MIL,5:Type A/MIL,6:Type B/MIL,7:Type C/MIL,15:hui,23:17</Values>
+    <Linear>true</Linear>
+    <CodesPerStatus>1</CodesPerStatus>
+  </DtcSearchConfig>
+  <DtcSearchConfig>
+    <XMLFile>e83a</XMLFile>
+    <CodeSearch>3D 80 * * 39 8C * * 55 0B 08 3C 7C</CodeSearch>
+    <StatusSearch>3C A0 * * 38 A5 * * 7F EB 07 34 7D 65 58 AE 55 63</StatusSearch>
+    <MilTable>combined</MilTable>
+    <CodeOffset>0</CodeOffset>
+    <CodeSteps>2</CodeSteps>
+    <StatusOffset>0</StatusOffset>
+    <MilOffset>1</MilOffset>
+    <StatusSteps>1</StatusSteps>
+    <MilSteps>1</MilSteps>
+    <ConditionalOffset>signed:code,signed:status</ConditionalOffset>
+    <Values>Enum: 0:MIL and reporting off,1:Type A/no MIL,2:Type B/no MIL,3:Type C/no MIL,4:Not reported/MIL,5:Type A/MIL,6:Type B/MIL,7:Type C/MIL,15:hui,23:17</Values>
+    <Linear>true</Linear>
+    <CodesPerStatus>1</CodesPerStatus>
+  </DtcSearchConfig>
+  <DtcSearchConfig>
+    <XMLFile>e39</XMLFile>
+    <CodeSearch>ae 3D 80 * * 39 8C * * 55 6B 08 3C 7C 8C 5A 2E A1 4E</CodeSearch>
+    <StatusSearch>3C A0 * * 38 A5 * * 89 65 01</StatusSearch>
+    <MilTable>combined</MilTable>
+    <CodeOffset>0</CodeOffset>
+    <CodeSteps>2</CodeSteps>
+    <StatusOffset>0</StatusOffset>
+    <MilOffset>1</MilOffset>
+    <StatusSteps>1</StatusSteps>
+    <MilSteps>1</MilSteps>
+    <ConditionalOffset>signed:code,signed:status</ConditionalOffset>
+    <Linear>true</Linear>
+    <CodesPerStatus>1</CodesPerStatus>
+  </DtcSearchConfig>
+  <DtcSearchConfig>
+    <XMLFile>e39_nbb</XMLFile>
+    <CodeSearch>ae 3D 80 * * 39 8C * * 55 6B 08 3C 7C 8C 5A 2E A1 4E</CodeSearch>
+    <StatusSearch>3C A0 * * 38 A5 * * 89 65 01</StatusSearch>
+    <MilTable>combined</MilTable>
+    <CodeOffset>0</CodeOffset>
+    <CodeSteps>2</CodeSteps>
+    <StatusOffset>0</StatusOffset>
+    <MilOffset>1</MilOffset>
+    <StatusSteps>1</StatusSteps>
+    <MilSteps>1</MilSteps>
+    <ConditionalOffset />
+    <Linear>true</Linear>
+    <CodesPerStatus>1</CodesPerStatus>
+  </DtcSearchConfig>
+  <DtcSearchConfig>
+    <XMLFile>e39</XMLFile>
+    <CodeSearch>3D 80 * * 39 8C * * 57 EB 08 3C 7C 8C 5A 2E 3D 20</CodeSearch>
+    <StatusSearch>3C A0 * * 38 A5 * * 7F EB 07 34 7D</StatusSearch>
+    <MilTable>combined</MilTable>
+    <CodeOffset>0</CodeOffset>
+    <CodeSteps>2</CodeSteps>
+    <StatusOffset>0</StatusOffset>
+    <MilOffset>1</MilOffset>
+    <StatusSteps>1</StatusSteps>
+    <MilSteps>1</MilSteps>
+    <ConditionalOffset>signed:code,signed:status</ConditionalOffset>
+    <Linear>true</Linear>
+    <CodesPerStatus>1</CodesPerStatus>
+  </DtcSearchConfig>
+  <DtcSearchConfig>
+    <XMLFile>e39_nbb</XMLFile>
+    <CodeSearch>3D 80 * * 39 8C * * 57 EB 08 3C 7C 8C 5A 2E 3D 20</CodeSearch>
+    <StatusSearch>3C A0 * * 38 A5 * * 7F EB 07 34 7D</StatusSearch>
+    <MilTable>combined</MilTable>
+    <CodeOffset>0</CodeOffset>
+    <CodeSteps>2</CodeSteps>
+    <StatusOffset>0</StatusOffset>
+    <MilOffset>1</MilOffset>
+    <StatusSteps>1</StatusSteps>
+    <MilSteps>1</MilSteps>
+    <ConditionalOffset>signed:code,signed:status</ConditionalOffset>
+    <Linear>true</Linear>
+    <CodesPerStatus>1</CodesPerStatus>
+  </DtcSearchConfig>
+  <DtcSearchConfig>
+    <XMLFile>e39a</XMLFile>
+    <CodeSearch>3D 80 * * 39 8C * * 57 EB 08 3C 7C 8C 5A 2E 3D 20</CodeSearch>
+    <StatusSearch>3C A0 * * 38 A5 * * 7F EB 07 34 7D</StatusSearch>
+    <MilTable>combined</MilTable>
+    <CodeOffset>0</CodeOffset>
+    <CodeSteps>2</CodeSteps>
+    <StatusOffset>0</StatusOffset>
+    <MilOffset>1</MilOffset>
+    <StatusSteps>1</StatusSteps>
+    <MilSteps>1</MilSteps>
+    <ConditionalOffset>signed:code,signed:status</ConditionalOffset>
+    <Linear>true</Linear>
+    <CodesPerStatus>1</CodesPerStatus>
+  </DtcSearchConfig>
+  <DtcSearchConfig>
+    <XMLFile>e39a_nbb</XMLFile>
+    <CodeSearch>3D 80 * * 39 8C * * 57 EB 08 3C 7C 8C 5A 2E 3D 20</CodeSearch>
+    <StatusSearch>3C A0 * * 38 A5 * * 7F EB 07 34 7D</StatusSearch>
+    <MilTable>combined</MilTable>
+    <CodeOffset>0</CodeOffset>
+    <CodeSteps>2</CodeSteps>
+    <StatusOffset>0</StatusOffset>
+    <MilOffset>1</MilOffset>
+    <StatusSteps>1</StatusSteps>
+    <MilSteps>1</MilSteps>
+    <ConditionalOffset>signed:code,signed:status</ConditionalOffset>
+    <Linear>true</Linear>
+    <CodesPerStatus>1</CodesPerStatus>
+  </DtcSearchConfig>
+  <DtcSearchConfig>
+    <XMLFile>e37</XMLFile>
+    <CodeSearch>3D 80 * * 39 8C * * 7D 7B DA 14 7C 8c 5a</CodeSearch>
+    <StatusSearch>3C A0 * * 38 A5 * * 7D 85 50</StatusSearch>
+    <MilTable>combined</MilTable>
+    <CodeOffset>0</CodeOffset>
+    <CodeSteps>2</CodeSteps>
+    <StatusOffset>0</StatusOffset>
+    <MilOffset>1</MilOffset>
+    <StatusSteps>1</StatusSteps>
+    <MilSteps>1</MilSteps>
+    <ConditionalOffset>signed:code,signed:status</ConditionalOffset>
+    <Linear>true</Linear>
+    <CodesPerStatus>1</CodesPerStatus>
+  </DtcSearchConfig>
+  <DtcSearchConfig>
+    <XMLFile>e55-wsl</XMLFile>
+    <CodeSearch>01 * 82 00 10 3D 80 @ @ 39 8C @ @ 48 00 00 0C 3D 80 * * 39 8c * * 91 8d * * 4e</CodeSearch>
+    <StatusSearch>80 * * 3D 60 @ @ 39 6B @ @ 7D 6B * * 3D 80 * * 1D 6B</StatusSearch>
+    <MilTable>combined</MilTable>
+    <CodeOffset>-4194304</CodeOffset>
+    <CodeSteps>2</CodeSteps>
+    <StatusOffset>-4194304</StatusOffset>
+    <MilOffset>1</MilOffset>
+    <StatusSteps>1</StatusSteps>
+    <MilSteps>1</MilSteps>
+    <ConditionalOffset />
+    <Values>Enum: 0:0,2:2,3:3,4:4,5:5,6:6,9:9,11:11,12:12,13:13,19:19,20:20,21:21,30:30,32:32,33:33,34:34,35:35,36:36</Values>
+    <Linear>false</Linear>
+    <CodesPerStatus>4</CodesPerStatus>
+  </DtcSearchConfig>
+  <DtcSearchConfig>
+    <XMLFile>e55</XMLFile>
+    <CodeSearch>01 * 82 00 10 3D 80 @ @ 39 8C @ @ 48 00 00 0C 3D 80 * * 39 8c * * 91 8d * * 4e</CodeSearch>
+    <StatusSearch>80 * * 3D 60 @ @ 39 6B @ @ 7D 6B * * 3D 80 * * 1D 6B</StatusSearch>
+    <MilTable>combined</MilTable>
+    <CodeOffset>-4194304</CodeOffset>
+    <CodeSteps>2</CodeSteps>
+    <StatusOffset>-4194304</StatusOffset>
+    <MilOffset>1</MilOffset>
+    <StatusSteps>1</StatusSteps>
+    <MilSteps>1</MilSteps>
+    <ConditionalOffset />
+    <Values>Enum: 0:0,2:2,3:3,4:4,5:5,6:6,9:9,11:11,12:12,13:13,19:19,20:20,21:21,30:30,32:32,33:33,34:34,35:35,36:36</Values>
+    <Linear>false</Linear>
+    <CodesPerStatus>4</CodesPerStatus>
+  </DtcSearchConfig>
+  <DtcSearchConfig>
+    <XMLFile>e55-wsl</XMLFile>
+    <CodeSearch>01 * 82 00 10 3C 60 @ @ 38 63 @ @ 48 00 00 0C 3C</CodeSearch>
+    <StatusSearch>80 * * 3D 60 @ @ 39 6B @ @ 7D 6B * * 3D 80 * * 1D 6B</StatusSearch>
+    <MilTable>combined</MilTable>
+    <CodeOffset>-4194304</CodeOffset>
+    <CodeSteps>2</CodeSteps>
+    <StatusOffset>-4194304</StatusOffset>
+    <MilOffset>1</MilOffset>
+    <StatusSteps>1</StatusSteps>
+    <MilSteps>1</MilSteps>
+    <ConditionalOffset />
+    <Values>Enum: 0:0,2:2,3:3,4:4,5:5,6:6,9:9,11:11,12:12,13:13,19:19,20:20,21:21,30:30,32:32,33:33,34:34,35:35,36:36</Values>
+    <Linear>false</Linear>
+    <CodesPerStatus>4</CodesPerStatus>
+  </DtcSearchConfig>
+  <DtcSearchConfig>
+    <XMLFile>e55</XMLFile>
+    <CodeSearch>01 * 82 00 10 3C 60 @ @ 38 63 @ @ 48 00 00 0C 3C</CodeSearch>
+    <StatusSearch>80 * * 3D 60 @ @ 39 6B @ @ 7D 6B * * 3D 80 * * 1D 6B</StatusSearch>
+    <MilTable>combined</MilTable>
+    <CodeOffset>-4194304</CodeOffset>
+    <CodeSteps>2</CodeSteps>
+    <StatusOffset>-4194304</StatusOffset>
+    <MilOffset>1</MilOffset>
+    <StatusSteps>1</StatusSteps>
+    <MilSteps>1</MilSteps>
+    <ConditionalOffset />
+    <Values>Enum: 0:0,2:2,3:3,4:4,5:5,6:6,9:9,11:11,12:12,13:13,19:19,20:20,21:21,30:30,32:32,33:33,34:34,35:35,36:36</Values>
+    <Linear>false</Linear>
+    <CodesPerStatus>4</CodesPerStatus>
+  </DtcSearchConfig>
+  <DtcSearchConfig>
+    <XMLFile>e55-wsl</XMLFile>
+    <CodeSearch>82 00 14 3D 80 @ @ 39 8C @ @ 91 8D 97 30 48 </CodeSearch>
+    <StatusSearch>2c * * * 40 80 * * 89 8D * * 2C 0C * * 40 82 * * 3F 60 @ @ 3B 7B @ @</StatusSearch>
+    <MilTable>combined</MilTable>
+    <CodeOffset>-4194304</CodeOffset>
+    <CodeSteps>2</CodeSteps>
+    <StatusOffset>-4194304</StatusOffset>
+    <MilOffset>1</MilOffset>
+    <StatusSteps>1</StatusSteps>
+    <MilSteps>1</MilSteps>
+    <ConditionalOffset />
+    <Values>Enum: 0:0,2:2,3:3,4:4,5:5,6:6,9:9,11:11,12:12,13:13,19:19,20:20,21:21,30:30,32:32,33:33,34:34,35:35,36:36</Values>
+    <Linear>false</Linear>
+    <CodesPerStatus>4</CodesPerStatus>
+  </DtcSearchConfig>
+  <DtcSearchConfig>
+    <XMLFile>e55</XMLFile>
+    <CodeSearch>82 00 14 3D 80 @ @ 39 8C @ @ 91 8D 97 30 48 </CodeSearch>
+    <StatusSearch>2c * * * 40 80 * * 89 8D * * 2C 0C * * 40 82 * * 3F 60 @ @ 3B 7B @ @</StatusSearch>
+    <MilTable>combined</MilTable>
+    <CodeOffset>-4194304</CodeOffset>
+    <CodeSteps>2</CodeSteps>
+    <StatusOffset>-4194304</StatusOffset>
+    <MilOffset>1</MilOffset>
+    <StatusSteps>1</StatusSteps>
+    <MilSteps>1</MilSteps>
+    <ConditionalOffset />
+    <Values>Enum: 0:0,2:2,3:3,4:4,5:5,6:6,9:9,11:11,12:12,13:13,19:19,20:20,21:21,30:30,32:32,33:33,34:34,35:35,36:36</Values>
+    <Linear>false</Linear>
+    <CodesPerStatus>4</CodesPerStatus>
+  </DtcSearchConfig>
+  <DtcSearchConfig>
+    <XMLFile>med9_1</XMLFile>
+    <CodeSearch>01 * 82 00 10 3C 60 @ @ 38 63 @ @ 48 00 00 0C 3C 60 * * 38 63 * * * * * * 4e</CodeSearch>
+    <StatusSearch>80 * * 3D 60 @ @ 39 6B @ @ 7D 6B * * 3D 80 * * 1D 6B</StatusSearch>
+    <MilTable>combined</MilTable>
+    <CodeOffset>-4194304</CodeOffset>
+    <CodeSteps>2</CodeSteps>
+    <StatusOffset>-4194304</StatusOffset>
+    <MilOffset>1</MilOffset>
+    <StatusSteps>1</StatusSteps>
+    <MilSteps>1</MilSteps>
+    <ConditionalOffset />
+    <Values>Enum: 0:0,2:2,3:3,4:4,5:5,6:6,9:9,11:11,12:12,13:13,19:19,20:20,21:21,30:30,32:32,33:33,34:34,35:35,36:36</Values>
+    <Linear>false</Linear>
+    <CodesPerStatus>4</CodesPerStatus>
+  </DtcSearchConfig>
+  <DtcSearchConfig>
+    <XMLFile>e69</XMLFile>
+    <CodeSearch>01 40 82 00 10 3D 80 @ @ 39 8C @ @ 48 00 00 0C</CodeSearch>
+    <StatusSearch>82 * * 3D 80 @ @ 39 8C @ @ 7D 8C * * 7D 8C * * 2C 0C</StatusSearch>
+    <MilTable>combined</MilTable>
+    <CodeOffset>-4194304</CodeOffset>
+    <CodeSteps>2</CodeSteps>
+    <StatusOffset>-4194304</StatusOffset>
+    <MilOffset>1</MilOffset>
+    <StatusSteps>1</StatusSteps>
+    <MilSteps>1</MilSteps>
+    <ConditionalOffset>signed:code,signed:status</ConditionalOffset>
+    <Values>Enum: 0:0,2:2,3:3,4:4,5:5,6:6,9:9,11:11,12:12,13:13,19:19,20:20,21:21,30:30,32:32,33:33,34:34,35:35,36:36</Values>
+    <Linear>false</Linear>
+    <CodesPerStatus>4</CodesPerStatus>
+  </DtcSearchConfig>
+  <DtcSearchConfig>
+    <XMLFile>e69</XMLFile>
+    <CodeSearch>3D 80 @ @ 39 8C @ @ 91 8D * * 4E 80 * * * * ff</CodeSearch>
+    <StatusSearch>82 * * 3D 80 @ @ 39 8C @ @ 7D 8C * * 7D 8C * * 2C 0C</StatusSearch>
+    <MilSearch />
+    <MilTable>combined</MilTable>
+    <CodeOffset>-4194304</CodeOffset>
+    <CodeSteps>2</CodeSteps>
+    <StatusOffset>-4194304</StatusOffset>
+    <MilOffset>1</MilOffset>
+    <StatusSteps>1</StatusSteps>
+    <MilSteps>1</MilSteps>
+    <ConditionalOffset>signed:code,signed:status</ConditionalOffset>
+    <Values>Enum: 0:0,2:2,3:3,4:4,5:5,6:6,9:9,11:11,12:12,13:13,19:19,20:20,21:21,30:30,32:32,33:33,34:34,35:35,36:36</Values>
+    <Linear>false</Linear>
+    <CodesPerStatus>4</CodesPerStatus>
+  </DtcSearchConfig>
+  <DtcSearchConfig>
+    <XMLFile>e69-op</XMLFile>
+    <CodeSearch>01 40 82 00 10 3D 80 @ @ 39 8C @ @ 48 00 00 0C</CodeSearch>
+    <StatusSearch>82 * * 3D 80 @ @ 39 8C @ @ 7D 8C * * 7D 8C * * 2C 0C</StatusSearch>
+    <MilSearch />
+    <MilTable>combined</MilTable>
+    <CodeOffset>-4194304</CodeOffset>
+    <CodeSteps>2</CodeSteps>
+    <StatusOffset>-4194304</StatusOffset>
+    <MilOffset>1</MilOffset>
+    <StatusSteps>1</StatusSteps>
+    <MilSteps>1</MilSteps>
+    <ConditionalOffset>signed:code,signed:status</ConditionalOffset>
+    <Values>Enum: 0:0,2:2,3:3,4:4,5:5,6:6,9:9,11:11,12:12,13:13,19:19,20:20,21:21,30:30,32:32,33:33,34:34,35:35,36:36</Values>
+    <Linear>false</Linear>
+    <CodesPerStatus>4</CodesPerStatus>
+  </DtcSearchConfig>
+  <DtcSearchConfig>
+    <XMLFile>e69-op</XMLFile>
+    <CodeSearch>01 40 82 00 14 3D 80 @ @ 39 8C @ @ 91 8D * * 4e 80</CodeSearch>
+    <StatusSearch>82 * * 3D 80 @ @ 39 8C @ @ 7D 8C * * 7D 8C * * 2C 0C</StatusSearch>
+    <MilSearch />
+    <MilTable>combined</MilTable>
+    <CodeOffset>-4194304</CodeOffset>
+    <CodeSteps>2</CodeSteps>
+    <StatusOffset>-4194304</StatusOffset>
+    <MilOffset>1</MilOffset>
+    <StatusSteps>1</StatusSteps>
+    <MilSteps>1</MilSteps>
+    <ConditionalOffset>signed:code,signed:status</ConditionalOffset>
+    <Values>Enum: 0:0,2:2,3:3,4:4,5:5,6:6,9:9,11:11,12:12,13:13,19:19,20:20,21:21,30:30,32:32,33:33,34:34,35:35,36:36</Values>
+    <Linear>false</Linear>
+    <CodesPerStatus>4</CodesPerStatus>
+  </DtcSearchConfig>
+  <DtcSearchConfig>
+    <XMLFile>p12</XMLFile>
+    <CodeSearch>20 7C * * * * 48 C2 D1 C2 1D * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * @ @ @ @</CodeSearch>
+    <StatusSearch>20 7C @ @ @ @ 48 C2 D1 C2 1D</StatusSearch>
+    <MilTable>combined</MilTable>
+    <CodeOffset>0</CodeOffset>
+    <CodeSteps>2</CodeSteps>
+    <StatusOffset>0</StatusOffset>
+    <MilOffset>1</MilOffset>
+    <StatusSteps>1</StatusSteps>
+    <MilSteps>1</MilSteps>
+    <ConditionalOffset />
+    <Linear>true</Linear>
+    <CodesPerStatus>1</CodesPerStatus>
+    <StatusMath>X&amp;7</StatusMath>
+  </DtcSearchConfig>
+  <DtcSearchConfig>
+    <XMLFile>p12b</XMLFile>
+    <CodeSearch>20 7C * * * * 48 C2 D1 C2 1D * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * @ @ @ @</CodeSearch>
+    <StatusSearch>20 7C @ @ @ @ 48 C2 D1 C2 1D</StatusSearch>
+    <MilSearch />
+    <MilTable>combined</MilTable>
+    <CodeOffset>0</CodeOffset>
+    <CodeSteps>2</CodeSteps>
+    <StatusOffset>0</StatusOffset>
+    <MilOffset>1</MilOffset>
+    <StatusSteps>1</StatusSteps>
+    <MilSteps>1</MilSteps>
+    <ConditionalOffset />
+    <Linear>true</Linear>
+    <CodesPerStatus>1</CodesPerStatus>
+    <StatusMath>X&amp;7</StatusMath>
+  </DtcSearchConfig>
+  <DtcSearchConfig>
+    <XMLFile>p08-03-05-l6</XMLFile>
+    <CodeSearch>47 f8 @ @ 45 f9 * * * * 42 44</CodeSearch>
+    <StatusSearch>47 f8 * * 45 f9 @ @ @ @ 42 44</StatusSearch>
+    <MilTable>opcode</MilTable>
+    <CodeOffset>2</CodeOffset>
+    <CodeSteps>4</CodeSteps>
+    <StatusOffset>1</StatusOffset>
+    <MilOffset>1</MilOffset>
+    <StatusSteps>1</StatusSteps>
+    <MilSteps>1</MilSteps>
+    <ConditionalOffset />
+    <Linear>false</Linear>
+    <CodesPerStatus>1</CodesPerStatus>
+    <StatusMath>p10</StatusMath>
+  </DtcSearchConfig>
+  <DtcSearchConfig>
+    <XMLFile>t76</XMLFile>
+    <CodeSearch>3d 80 * * 39 8c * * 54 6b 08 3c 7c 6c 5a 2e 4e 80 00 20 00</CodeSearch>
+    <StatusSearch>82 00 40 3C A0 * * 38 A5 * * 7F EB 07 34 7D</StatusSearch>
+    <MilTable>combined</MilTable>
+    <CodeOffset>0</CodeOffset>
+    <CodeSteps>2</CodeSteps>
+    <StatusOffset>0</StatusOffset>
+    <MilOffset>0</MilOffset>
+    <StatusSteps>1</StatusSteps>
+    <MilSteps>1</MilSteps>
+    <ConditionalOffset>signed:code,signed:status</ConditionalOffset>
+    <Linear>true</Linear>
+    <CodesPerStatus>1</CodesPerStatus>
+  </DtcSearchConfig>
+  <DtcSearchConfig>
+    <XMLFile>t76</XMLFile>
+    <CodeSearch>DC 3D 80 * * 39 8C * * 57 6B 08 3C 7C</CodeSearch>
+    <StatusSearch>82 00 40 3C A0 * * 38 A5 * * 7F EB 07 34 7D</StatusSearch>
+    <MilTable>combined</MilTable>
+    <CodeOffset>0</CodeOffset>
+    <CodeSteps>2</CodeSteps>
+    <StatusOffset>0</StatusOffset>
+    <MilOffset>0</MilOffset>
+    <StatusSteps>1</StatusSteps>
+    <MilSteps>1</MilSteps>
+    <ConditionalOffset>signed:code,signed:status</ConditionalOffset>
+    <Linear>true</Linear>
+    <CodesPerStatus>1</CodesPerStatus>
+  </DtcSearchConfig>
+  <DtcSearchConfig>
+    <XMLFile>t43-0</XMLFile>
+    <CodeSearch>6B 52 AE 3D 80 @ @ 39 8C @ @ 55 6B 08 3C 7C</CodeSearch>
+    <StatusSearch>3D 80 @ @ 39 8C @ @ 7D 8C 18 AE 55 * 07</StatusSearch>
+    <MilTable>combined</MilTable>
+    <CodeOffset>0</CodeOffset>
+    <CodeSteps>2</CodeSteps>
+    <StatusOffset>0</StatusOffset>
+    <MilOffset>0</MilOffset>
+    <StatusSteps>1</StatusSteps>
+    <MilSteps>1</MilSteps>
+    <ConditionalOffset>signed:code,signed:status</ConditionalOffset>
+    <Linear>true</Linear>
+    <CodesPerStatus>1</CodesPerStatus>
+  </DtcSearchConfig>
+  <DtcSearchConfig>
+    <XMLFile>t43</XMLFile>
+    <CodeSearch>3D 80 @ @ 39 8c @ @ * 6B 08 3C 7C * 5A 2E</CodeSearch>
+    <StatusSearch>3D 80 @ @ 39 8C @ @ 7D 8C 18 AE 55 * 07</StatusSearch>
+    <MilTable>combined</MilTable>
+    <CodeOffset>0</CodeOffset>
+    <CodeSteps>2</CodeSteps>
+    <StatusOffset>0</StatusOffset>
+    <MilOffset>0</MilOffset>
+    <StatusSteps>1</StatusSteps>
+    <MilSteps>1</MilSteps>
+    <ConditionalOffset>signed:code,signed:status</ConditionalOffset>
+    <Linear>true</Linear>
+    <CodesPerStatus>1</CodesPerStatus>
+  </DtcSearchConfig>
+  <DtcSearchConfig>
+    <XMLFile>t42</XMLFile>
+    <CodeSearch>10 7C 01 20 7C @ @ @ @ 48 C7 3D 70 7A</CodeSearch>
+    <StatusSearch>67 00 00 5A 22 7C @ @ @ @ 72 01 70 03 C0 31</StatusSearch>
+    <MilTable>combined</MilTable>
+    <CodeOffset>0</CodeOffset>
+    <CodeSteps>2</CodeSteps>
+    <StatusOffset>0</StatusOffset>
+    <MilOffset>0</MilOffset>
+    <StatusSteps>1</StatusSteps>
+    <MilSteps>1</MilSteps>
+    <ConditionalOffset />
+    <Linear>true</Linear>
+    <CodesPerStatus>1</CodesPerStatus>
+  </DtcSearchConfig>
+  <DtcSearchConfig>
+    <XMLFile>e90-e99</XMLFile>
+    <CodeSearch>91 3F 70 E0 * * 1C E7 * * 77 C6 08 3D 7C</CodeSearch>
+    <StatusSearch>04 44 44 70 E0 * * 1C E7 * * 7C 67 18 AE 74</StatusSearch>
+    <MilTable>combined</MilTable>
+    <CodeOffset>-3766484992</CodeOffset>
+    <CodeSteps>2</CodeSteps>
+    <StatusOffset>-3766550528</StatusOffset>
+    <MilOffset>1</MilOffset>
+    <StatusSteps>1</StatusSteps>
+    <MilSteps>1</MilSteps>
+    <ConditionalOffset>signed:code</ConditionalOffset>
+    <Linear>true</Linear>
+    <CodesPerStatus>1</CodesPerStatus>
+  </DtcSearchConfig>
+  <DtcSearchConfig>
+    <XMLFile>e16a</XMLFile>
+    <CodeSearch>20 7C * * * * 48 C2 D1 C2 1D * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * @ @ @ @</CodeSearch>
+    <StatusSearch>20 7C @ @ @ @ 48 C2 D1 C2 1D</StatusSearch>
+    <MilTable>combined</MilTable>
+    <CodeOffset>0</CodeOffset>
+    <CodeSteps>2</CodeSteps>
+    <StatusOffset>0</StatusOffset>
+    <MilOffset>1</MilOffset>
+    <StatusSteps>1</StatusSteps>
+    <MilSteps>1</MilSteps>
+    <ConditionalOffset />
+    <Linear>true</Linear>
+    <CodesPerStatus>1</CodesPerStatus>
+    <StatusMath>X&amp;7</StatusMath>
+  </DtcSearchConfig>
+  <DtcSearchConfig>
+    <XMLFile>e41</XMLFile>
+    <CodeSearch>91 3F 70 E0 * * 1C E7 * * 77 C6 08 3D 7C</CodeSearch>
+    <StatusSearch>04 44 44 70 E0 * * 1C E7 * * 7C 67 18 AE 74</StatusSearch>
+    <MilTable>combined</MilTable>
+    <CodeOffset>-3758096384</CodeOffset>
+    <CodeSteps>2</CodeSteps>
+    <StatusOffset>-3758096384</StatusOffset>
+    <MilOffset>1</MilOffset>
+    <StatusSteps>1</StatusSteps>
+    <MilSteps>1</MilSteps>
+    <ConditionalOffset>signed:code</ConditionalOffset>
+    <Linear>true</Linear>
+    <CodesPerStatus>1</CodesPerStatus>
+  </DtcSearchConfig>
+  <DtcSearchConfig>
+    <XMLFile>e41</XMLFile>
+    <CodeSearch>91 3F 70 E0 * * 1C E7 * * 77 C6 08 3D 7C</CodeSearch>
+    <StatusSearch>73 60 * * 1F 7B * * 04 3B 80 6B 74</StatusSearch>
+    <MilTable>combined</MilTable>
+    <CodeOffset>-3758096384</CodeOffset>
+    <CodeSteps>2</CodeSteps>
+    <StatusOffset>-3758096384</StatusOffset>
+    <MilOffset>1</MilOffset>
+    <StatusSteps>1</StatusSteps>
+    <MilSteps>1</MilSteps>
+    <ConditionalOffset>signed:code</ConditionalOffset>
+    <Linear>true</Linear>
+    <CodesPerStatus>1</CodesPerStatus>
+  </DtcSearchConfig>
+  <DtcSearchConfig>
+    <XMLFile>l4-98</XMLFile>
+    <CodeSearch>47 f8 @ @ 45 f9 * * * * 42 44</CodeSearch>
+    <StatusSearch>47 f8 * * 45 f9 @ @ @ @ 42 44</StatusSearch>
+    <MilTable>opcode</MilTable>
+    <CodeOffset>2</CodeOffset>
+    <CodeSteps>4</CodeSteps>
+    <StatusOffset>1</StatusOffset>
+    <MilOffset>1</MilOffset>
+    <StatusSteps>1</StatusSteps>
+    <MilSteps>1</MilSteps>
+    <ConditionalOffset />
+    <Linear>false</Linear>
+    <CodesPerStatus>1</CodesPerStatus>
+    <StatusMath>p10</StatusMath>
+  </DtcSearchConfig>
+  <DtcSearchConfig>
+    <XMLFile>l4-98-on</XMLFile>
+    <CodeSearch>47 f8 @ @ 45 f9 * * * * 42 44</CodeSearch>
+    <StatusSearch>47 f8 * * 45 f9 @ @ @ @ 42 44</StatusSearch>
+    <MilTable>opcode</MilTable>
+    <CodeOffset>2</CodeOffset>
+    <CodeSteps>4</CodeSteps>
+    <StatusOffset>1</StatusOffset>
+    <MilOffset>1</MilOffset>
+    <StatusSteps>1</StatusSteps>
+    <MilSteps>1</MilSteps>
+    <ConditionalOffset />
+    <Linear>false</Linear>
+    <CodesPerStatus>1</CodesPerStatus>
+    <StatusMath>p10</StatusMath>
+  </DtcSearchConfig>
+  <DtcSearchConfig>
+    <XMLFile>e01-2ndtable</XMLFile>
+    <CodeSearch>d8 * 2a 14 e2 06 70 E0 @ @ 1C E7 @ @ E8 05 70 E0</CodeSearch>
+    <StatusSearch>90 20 F1 00 04 70 E0 * * 1C E7 * * 7C 67 18 AE 00</StatusSearch>
+    <MilTable>combined</MilTable>
+    <CodeOffset>-3766484992</CodeOffset>
+    <CodeSteps>2</CodeSteps>
+    <StatusOffset>-3766550528</StatusOffset>
+    <MilOffset>1</MilOffset>
+    <StatusSteps>1</StatusSteps>
+    <MilSteps>1</MilSteps>
+    <ConditionalOffset>signed:code</ConditionalOffset>
+    <Linear>true</Linear>
+    <CodesPerStatus>1</CodesPerStatus>
+    <StatusMath>X&amp;7</StatusMath>
+  </DtcSearchConfig>
+  <DtcSearchConfig>
+    <XMLFile>e01</XMLFile>
+    <CodeSearch>18 ae 00 04 00 00 70 E0 * * 1C E7 * * 74 66 08 3D 7C</CodeSearch>
+    <StatusSearch>90 20 F1 00 04 70 E0 * * 1C E7 * * 7C 67 18 AE 00</StatusSearch>
+    <MilTable>combined</MilTable>
+    <CodeOffset>-3766484992</CodeOffset>
+    <CodeSteps>2</CodeSteps>
+    <StatusOffset>-3766550528</StatusOffset>
+    <MilOffset>1</MilOffset>
+    <StatusSteps>1</StatusSteps>
+    <MilSteps>1</MilSteps>
+    <ConditionalOffset>signed:code</ConditionalOffset>
+    <Linear>true</Linear>
+    <CodesPerStatus>1</CodesPerStatus>
+    <StatusMath>X&amp;7</StatusMath>
+  </DtcSearchConfig>
+  <DtcSearchConfig>
+    <XMLFile>e01</XMLFile>
+    <CodeSearch>E8 05 70 E0 * * 1C E7 * * 74 66 08 3D 7C</CodeSearch>
+    <StatusSearch>90 20 F1 00 04 70 E0 * * 1C E7 * * 7C 67 18 AE 00</StatusSearch>
+    <MilTable>combined</MilTable>
+    <CodeOffset>-3766484992</CodeOffset>
+    <CodeSteps>2</CodeSteps>
+    <StatusOffset>-3766550528</StatusOffset>
+    <MilOffset>1</MilOffset>
+    <StatusSteps>1</StatusSteps>
+    <MilSteps>1</MilSteps>
+    <ConditionalOffset>signed:code</ConditionalOffset>
+    <Linear>true</Linear>
+    <CodesPerStatus>1</CodesPerStatus>
+    <StatusMath>X&amp;7</StatusMath>
+  </DtcSearchConfig>
+  <DtcSearchConfig>
+    <XMLFile>e46</XMLFile>
+    <CodeSearch>91 3F 70 E0 * * 1C E7 * * 77 C6 08 3D 7C</CodeSearch>
+    <StatusSearch>04 44 44 70 E0 * * 1C E7 * * 7C 67 18 AE 74</StatusSearch>
+    <MilTable>combined</MilTable>
+    <CodeOffset>-3766484992</CodeOffset>
+    <CodeSteps>2</CodeSteps>
+    <StatusOffset>-3766550528</StatusOffset>
+    <MilOffset>1</MilOffset>
+    <StatusSteps>1</StatusSteps>
+    <MilSteps>1</MilSteps>
+    <ConditionalOffset>signed:code</ConditionalOffset>
+    <Linear>true</Linear>
+    <CodesPerStatus>1</CodesPerStatus>
+  </DtcSearchConfig>
+  <DtcSearchConfig>
+    <XMLFile>t87a</XMLFile>
+    <CodeSearch>00 00 3D 80 @ @ 39 8c @ @ * 6B 08 3C 7C * 5A 2E</CodeSearch>
+    <StatusSearch>3D 80 @ @ 39 8C @ @ * * 18 AE 54 63</StatusSearch>
+    <MilTable>combined</MilTable>
+    <CodeOffset>0</CodeOffset>
+    <CodeSteps>2</CodeSteps>
+    <StatusOffset>0</StatusOffset>
+    <MilOffset>0</MilOffset>
+    <StatusSteps>1</StatusSteps>
+    <MilSteps>1</MilSteps>
+    <ConditionalOffset>signed:code,signed:status</ConditionalOffset>
+    <Linear>true</Linear>
+    <CodesPerStatus>1</CodesPerStatus>
+  </DtcSearchConfig>
+  <DtcSearchConfig>
+    <XMLFile>t87a</XMLFile>
+    <CodeSearch>00 00 3D 80 @ @ 39 8c @ @ * 6B 08 3C 7C * 5A 2E</CodeSearch>
+    <StatusSearch>3D 80 @ @ 39 8C @ @ * * 18 AE 55 85</StatusSearch>
+    <MilTable>combined</MilTable>
+    <CodeOffset>0</CodeOffset>
+    <CodeSteps>2</CodeSteps>
+    <StatusOffset>0</StatusOffset>
+    <MilOffset>0</MilOffset>
+    <StatusSteps>1</StatusSteps>
+    <MilSteps>1</MilSteps>
+    <ConditionalOffset>signed:code,signed:status</ConditionalOffset>
+    <Linear>true</Linear>
+    <CodesPerStatus>1</CodesPerStatus>
+  </DtcSearchConfig>
+  <DtcSearchConfig>
+    <XMLFile>t87</XMLFile>
+    <CodeSearch>00 00 3D 80 @ @ 39 8c @ @ * 6B 08 3C 7C * 5A 2E</CodeSearch>
+    <StatusSearch>3D 80 @ @ 39 8C @ @ 7D 8C 18 AE 55 * 07</StatusSearch>
+    <MilTable>combined</MilTable>
+    <CodeOffset>0</CodeOffset>
+    <CodeSteps>2</CodeSteps>
+    <StatusOffset>0</StatusOffset>
+    <MilOffset>0</MilOffset>
+    <StatusSteps>1</StatusSteps>
+    <MilSteps>1</MilSteps>
+    <ConditionalOffset>signed:code,signed:status</ConditionalOffset>
+    <Linear>true</Linear>
+    <CodesPerStatus>1</CodesPerStatus>
+  </DtcSearchConfig>
+</ArrayOfDtcSearchConfig>
