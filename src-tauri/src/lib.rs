@@ -1,11 +1,15 @@
 //! TuneItVerse — LS1 P01 PCM backend (Tauri)
 //!
 //! Stage 2: Full VPW PID decode via pid_decode.rs
+//! Stage 2b: GM P01 seed-key security unlock via security.rs
 //! Protocol: J1850 VPW via USB-serial bridge @ 115200 baud
 //! PID source-of-truth: PidParameters-VPW.XML (GM Gen III V8)
 
 pub mod pid_decode;
+pub mod security;
+
 use pid_decode::*;
+use security::{SecurityLevel, SecurityState, unlock_level1, unlock_level2};
 
 use serde::Serialize;
 use serialport::{available_ports, SerialPort};
@@ -20,7 +24,8 @@ use std::{
 // ─────────────────────────────────────────────────────────────────────────────
 
 struct AppState {
-    port: Mutex<Option<Box<dyn SerialPort>>>,
+    port:     Mutex<Option<Box<dyn SerialPort>>>,
+    security: Mutex<SecurityState>,
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -41,12 +46,12 @@ struct RawFrame {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// J1850 VPW frame helpers
+// J1850 VPW frame helpers  (pub(crate) so security.rs can call them)
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Build a Mode 01 (OBD-II) single-PID request.
 /// Frame: [ 0x68 0x6A 0xF1 0x01 <pid> <checksum> ]
-fn build_pid_request(pid: u8) -> Vec<u8> {
+pub(crate) fn build_pid_request(pid: u8) -> Vec<u8> {
     let mut frame = vec![0x68u8, 0x6A, 0xF1, 0x01, pid];
     let cs = frame.iter().fold(0u8, |a, &b| a.wrapping_add(b));
     frame.push(cs);
@@ -54,8 +59,7 @@ fn build_pid_request(pid: u8) -> Vec<u8> {
 }
 
 /// Build a Mode 22 (GM 2-byte PID) request.
-/// Frame: [ 0x68 0x6A 0xF1 0x22 <pid_hi> <pid_lo> <checksum> ]
-fn build_mode22_request(pid: u16) -> Vec<u8> {
+pub(crate) fn build_mode22_request(pid: u16) -> Vec<u8> {
     let mut frame = vec![
         0x68u8, 0x6A, 0xF1, 0x22,
         (pid >> 8) as u8,
@@ -76,7 +80,7 @@ fn build_multi_pid_request(pids: &[u8]) -> Vec<u8> {
     frame
 }
 
-fn validate_checksum(frame: &[u8]) -> bool {
+pub(crate) fn validate_checksum(frame: &[u8]) -> bool {
     if frame.len() < 2 { return false; }
     let expected = frame[..frame.len() - 1]
         .iter()
@@ -109,14 +113,14 @@ fn parse_mode22_response(frame: &[u8], expected_pid: u16) -> Option<Vec<u8>> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Serial I/O
+// Serial I/O  (pub(crate) so security.rs can call them)
 // ─────────────────────────────────────────────────────────────────────────────
 
-fn write_frame(port: &mut Box<dyn SerialPort>, frame: &[u8]) -> Result<(), String> {
+pub(crate) fn write_frame(port: &mut Box<dyn SerialPort>, frame: &[u8]) -> Result<(), String> {
     port.write_all(frame).map_err(|e| format!("Write error: {}", e))
 }
 
-fn read_response(port: &mut Box<dyn SerialPort>) -> Result<Vec<u8>, String> {
+pub(crate) fn read_response(port: &mut Box<dyn SerialPort>) -> Result<Vec<u8>, String> {
     let mut buf = [0u8; 256];
     let n = port.read(&mut buf).map_err(|e| format!("Read error: {}", e))?;
     Ok(buf[..n].to_vec())
@@ -163,18 +167,67 @@ fn connect_ecu(
         .open()
         .map_err(|e| format!("Failed to open {}: {}", port, e))?;
     *state.port.lock().map_err(|_| "Lock failed".to_string())? = Some(serial);
+    // Reset security state on new connection
+    *state.security.lock().map_err(|_| "Lock failed".to_string())? = SecurityState::default();
     Ok(format!("Connected to {} @ {} baud", port, baud))
 }
 
 #[tauri::command]
 fn disconnect_ecu(state: tauri::State<AppState>) -> Result<String, String> {
     *state.port.lock().map_err(|_| "Lock failed".to_string())? = None;
+    *state.security.lock().map_err(|_| "Lock failed".to_string())? = SecurityState::default();
     Ok("Disconnected".to_string())
 }
 
 #[tauri::command]
 fn connection_status(state: tauri::State<AppState>) -> Result<bool, String> {
     Ok(state.port.lock().map_err(|_| "Lock failed".to_string())?.is_some())
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tauri commands — security access
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Perform Level 1 security unlock (read/diagnostics).
+/// Must be called after connect_ecu and before any Mode 22/23 data reads.
+/// Safe to call when engine is off (key-on engine-off is ideal).
+#[tauri::command]
+fn security_unlock_l1(state: tauri::State<AppState>) -> Result<SecurityState, String> {
+    let mut port_guard = state.port.lock().map_err(|_| "Lock failed".to_string())?;
+    let port = port_guard.as_mut().ok_or("No connection — connect first".to_string())?;
+    let result = unlock_level1(port)?;
+    *state.security.lock().map_err(|_| "Lock failed".to_string())? = result.clone();
+    Ok(result)
+}
+
+/// Perform Level 2 security unlock (flash programming).
+/// ⚠️  Requires Level 1 to already be active.
+/// ⚠️  Engine MUST be off. Wrong key locks ECM for this ignition cycle.
+/// ⚠️  Only call when you are ready to flash — do not unlock speculatively.
+#[tauri::command]
+fn security_unlock_l2(state: tauri::State<AppState>) -> Result<SecurityState, String> {
+    // Guard: Level 1 must be active before escalating to Level 2
+    {
+        let sec = state.security.lock().map_err(|_| "Lock failed".to_string())?;
+        if sec.locked || sec.level != Some(SecurityLevel::Level1) {
+            return Err(
+                "Level 1 must be unlocked before requesting Level 2. \
+                 Call security_unlock_l1 first.".to_string()
+            );
+        }
+    }
+    let mut port_guard = state.port.lock().map_err(|_| "Lock failed".to_string())?;
+    let port = port_guard.as_mut().ok_or("No connection".to_string())?;
+    let result = unlock_level2(port)?;
+    *state.security.lock().map_err(|_| "Lock failed".to_string())? = result.clone();
+    Ok(result)
+}
+
+/// Get the current security state without performing any unlock.
+#[tauri::command]
+fn security_status(state: tauri::State<AppState>) -> Result<SecurityState, String> {
+    let sec = state.security.lock().map_err(|_| "Lock failed".to_string())?;
+    Ok(sec.clone())
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -203,9 +256,6 @@ fn read_ecu_frame(state: tauri::State<AppState>) -> Result<RawFrame, String> {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Tauri command — full ECU telemetry poll
-//
-// Polls Mode 01 (standard OBD-II) and Mode 22 (GM-specific) PIDs in sequence.
-// Falls back to default values for any PID that doesn't respond.
 // ─────────────────────────────────────────────────────────────────────────────
 
 #[tauri::command]
@@ -217,7 +267,6 @@ fn read_ecu_data(state: tauri::State<AppState>) -> Result<EcuTelemetry, String> 
     d.batt_volt = 12.0;
     d.wb_afr    = 14.7;
 
-    // ── Mode 01 standard PIDs ────────────────────────────────────────────
     macro_rules! poll01 {
         ($pid:expr, $field:ident, $decoder:expr) => {
             if let Ok(r) = request_pid01(port, $pid) {
@@ -225,34 +274,27 @@ fn read_ecu_data(state: tauri::State<AppState>) -> Result<EcuTelemetry, String> 
             }
         };
     }
-    macro_rules! poll01_bit {
-        ($pid:expr, $decoder:expr) => {{
-            request_pid01(port, $pid).ok().and_then(|r| r.first().copied())
-        }};
-    }
 
-    poll01!(0x01, mil_on,      |r: &[u8]| decode_monitor_status(r).map(|(mil,_)| mil as u8 as f32));
     if let Ok(r) = request_pid01(port, 0x01) {
         if let Some((mil, cnt)) = decode_monitor_status(&r) {
             d.mil_on    = mil;
             d.dtc_count = cnt;
         }
     }
-    poll01!(0x04, engine_load, decode_engine_load);
-    poll01!(0x05, ect_c,       decode_ect);
-    poll01!(0x06, stft_b1_pct, decode_stft_b1);
-    poll01!(0x07, ltft_b1_pct, decode_ltft_b1);
-    poll01!(0x08, stft_b2_pct, decode_stft_b2);
-    poll01!(0x09, ltft_b2_pct, decode_ltft_b2);
-    poll01!(0x0B, map_kpa,     decode_map);
-    poll01!(0x0C, rpm,         decode_rpm);
-    poll01!(0x0D, vss_kph,     decode_vss);
+    poll01!(0x04, engine_load,   decode_engine_load);
+    poll01!(0x05, ect_c,         decode_ect);
+    poll01!(0x06, stft_b1_pct,   decode_stft_b1);
+    poll01!(0x07, ltft_b1_pct,   decode_ltft_b1);
+    poll01!(0x08, stft_b2_pct,   decode_stft_b2);
+    poll01!(0x09, ltft_b2_pct,   decode_ltft_b2);
+    poll01!(0x0B, map_kpa,       decode_map);
+    poll01!(0x0C, rpm,           decode_rpm);
+    poll01!(0x0D, vss_kph,       decode_vss);
     poll01!(0x0E, spark_adv_deg, decode_spark_adv);
-    poll01!(0x0F, iat_c,       decode_iat);
-    poll01!(0x10, maf_gs,      decode_maf);
-    poll01!(0x11, tps_pct,     decode_tps);
+    poll01!(0x0F, iat_c,         decode_iat);
+    poll01!(0x10, maf_gs,        decode_maf);
+    poll01!(0x11, tps_pct,       decode_tps);
 
-    // O2 sensors (Mode 01 — SWORD)
     if let Ok(r) = request_pid01(port, 0x14) {
         if let Some(v) = decode_o2_left_up(&r)  { d.o2_left_up_v  = v; }
     }
@@ -266,7 +308,6 @@ fn read_ecu_data(state: tauri::State<AppState>) -> Result<EcuTelemetry, String> 
         if let Some(v) = decode_o2_right_dn(&r) { d.o2_right_dn_v = v; }
     }
 
-    // ── Mode 22 GM-specific PIDs ─────────────────────────────────────────
     macro_rules! poll22 {
         ($pid:expr, $field:ident, $decoder:expr) => {
             if let Ok(r) = request_pid22(port, $pid) {
@@ -274,51 +315,38 @@ fn read_ecu_data(state: tauri::State<AppState>) -> Result<EcuTelemetry, String> 
             }
         };
     }
-    macro_rules! poll22b {
-        ($pid:expr, $field:ident, $decoder:expr) => {
-            if let Ok(r) = request_pid22(port, $pid) {
-                if let Some(&b) = r.first() { d.$field = $decoder(b); }
-            }
-        };
-    }
 
-    poll22!(0x1140, maf_hi_gs,     decode_maf_hi);
-    poll22!(0x1141, batt_volt,     decode_batt_volt);
-    poll22!(0x1142, map_volts,     decode_map_volts);
-    poll22!(0x1145, o2_lf_mv,      decode_o2_lf_mv);
-    poll22!(0x1146, o2_lr_mv,      decode_o2_lr_mv);
-    poll22!(0x1148, o2_rf_mv,      decode_o2_rf_mv);
-    poll22!(0x1149, o2_rr_mv,      decode_o2_rr_mv);
-    poll22!(0x1151, ect_c,         decode_accel_pedal);  // reuse field — override if needed
-    poll22!(0x1170, evap_purge_pct,decode_evap_purge);
-    poll22!(0x1176, iac_learned,   decode_iac_learned);
-    poll22!(0x1179, iac_current,   decode_iac_current);
-    poll22!(0x1190, fuel_trim_cell,decode_fuel_trim_cell);
-    poll22!(0x1192, idle_desired,  decode_desired_idle);
-    poll22!(0x119D, baro_kpa,      decode_baro);
-    poll22!(0x119E, target_afr,    decode_target_afr);
-    poll22!(0x119F, oil_life_pct,  decode_oil_life);
-    poll22!(0x11A1, engine_run_min,decode_run_time_min);
-    poll22!(0x11A3, cat_temp_c,    decode_cat_temp);
-    poll22!(0x11A6, knock_retard,  decode_knock_retard);
-    poll22!(0x116F, startup_ect_c, decode_startup_ect);
-    poll22!(0x115C, oil_press_kpa, decode_oil_press_kpa);
-    poll22!(0x125A, inj_pw_b1_ms,  decode_inj_pw);
-    poll22!(0x125B, inj_pw_b2_ms,  decode_inj_pw);
-
-    // Misfire
-    poll22!(0x11EA, misfire_c5, decode_misfire);
-    poll22!(0x11EB, misfire_c6, decode_misfire);
-    poll22!(0x11EC, misfire_c7, decode_misfire);
-    poll22!(0x11ED, misfire_c8, decode_misfire);
-
-    // Transmission
+    poll22!(0x1140, maf_hi_gs,      decode_maf_hi);
+    poll22!(0x1141, batt_volt,      decode_batt_volt);
+    poll22!(0x1142, map_volts,      decode_map_volts);
+    poll22!(0x1145, o2_lf_mv,       decode_o2_lf_mv);
+    poll22!(0x1146, o2_lr_mv,       decode_o2_lr_mv);
+    poll22!(0x1148, o2_rf_mv,       decode_o2_rf_mv);
+    poll22!(0x1149, o2_rr_mv,       decode_o2_rr_mv);
+    poll22!(0x1170, evap_purge_pct, decode_evap_purge);
+    poll22!(0x1176, iac_learned,    decode_iac_learned);
+    poll22!(0x1179, iac_current,    decode_iac_current);
+    poll22!(0x1190, fuel_trim_cell, decode_fuel_trim_cell);
+    poll22!(0x1192, idle_desired,   decode_desired_idle);
+    poll22!(0x119D, baro_kpa,       decode_baro);
+    poll22!(0x119E, target_afr,     decode_target_afr);
+    poll22!(0x119F, oil_life_pct,   decode_oil_life);
+    poll22!(0x11A1, engine_run_min, decode_run_time_min);
+    poll22!(0x11A3, cat_temp_c,     decode_cat_temp);
+    poll22!(0x11A6, knock_retard,   decode_knock_retard);
+    poll22!(0x116F, startup_ect_c,  decode_startup_ect);
+    poll22!(0x115C, oil_press_kpa,  decode_oil_press_kpa);
+    poll22!(0x125A, inj_pw_b1_ms,   decode_inj_pw);
+    poll22!(0x125B, inj_pw_b2_ms,   decode_inj_pw);
+    poll22!(0x11EA, misfire_c5,     decode_misfire);
+    poll22!(0x11EB, misfire_c6,     decode_misfire);
+    poll22!(0x11EC, misfire_c7,     decode_misfire);
+    poll22!(0x11ED, misfire_c8,     decode_misfire);
     poll22!(0x19F3, trans_oil_temp, decode_trans_oil_temp);
     poll22!(0x19F4, trans_ratio,    decode_trans_ratio);
     poll22!(0x19F5, trans_gear,     decode_trans_gear);
     poll22!(0x199A, current_gear,   decode_current_gear);
 
-    // Bitmapped registers
     if let Ok(r) = request_pid22(port, 0x1100) {
         if let Some(&b) = r.first() {
             d.ac_relay   = decode_ac_relay(b);
@@ -332,8 +360,8 @@ fn read_ecu_data(state: tauri::State<AppState>) -> Result<EcuTelemetry, String> 
     }
     if let Ok(r) = request_pid22(port, 0x1102) {
         if let Some(&b) = r.first() {
-            d.vtd_fuel_dis = decode_vtd_fuel_disable(b);
-            d.tcc_solenoid = decode_tcc_solenoid(b);
+            d.vtd_fuel_dis  = decode_vtd_fuel_disable(b);
+            d.tcc_solenoid  = decode_tcc_solenoid(b);
             d.traction_ctrl = decode_traction_ctrl(b);
         }
     }
@@ -362,11 +390,6 @@ fn read_ecu_data(state: tauri::State<AppState>) -> Result<EcuTelemetry, String> 
         if let Some(&b) = r.first() { d.tac_comm_good = decode_tac_comm(b); }
     }
 
-    // Derived channels
-    if let Some(load) = calc_load_gcyl(d.maf_gs, d.rpm) {
-        // stored in EcuTelemetry — future field: d.load_gcyl = load;
-        let _ = load;
-    }
     d.idc_b1_pct = calc_idc_b1(d.rpm, d.inj_pw_b1_ms);
 
     Ok(d)
@@ -380,7 +403,8 @@ fn read_ecu_data(state: tauri::State<AppState>) -> Result<EcuTelemetry, String> 
 pub fn run() {
     tauri::Builder::default()
         .manage(AppState {
-            port: Mutex::new(None),
+            port:     Mutex::new(None),
+            security: Mutex::new(SecurityState::default()),
         })
         .invoke_handler(tauri::generate_handler![
             list_serial_ports,
@@ -390,6 +414,9 @@ pub fn run() {
             write_ecu_frame,
             read_ecu_frame,
             read_ecu_data,
+            security_unlock_l1,
+            security_unlock_l2,
+            security_status,
         ])
         .run(tauri::generate_context!())
         .expect("Tauri runtime error");
