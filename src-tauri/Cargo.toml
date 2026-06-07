@@ -2,7 +2,7 @@
 name = "TuneItVerse"
 version = "0.1.0"
 description = "ECU Tuning platform for JRTuners"
-authors = ["you"]
+authors = ["JRTuners"]
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
