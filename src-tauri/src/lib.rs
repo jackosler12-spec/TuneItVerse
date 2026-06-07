@@ -1,13 +1,19 @@
 //! TuneItVerse — LS1 P01 PCM backend (Tauri)
 //!
-//! Stage 2: Full VPW PID decode via pid_decode.rs
+//! Stage 2:  Full VPW PID decode via pid_decode.rs
 //! Stage 2b: GM P01 seed-key security unlock via security.rs
+//! Stage 3:  Mode 23/34/36/37 flash read/write via flash.rs
 //! Protocol: J1850 VPW via USB-serial bridge @ 115200 baud
-//! PID source-of-truth: PidParameters-VPW.XML (GM Gen III V8)
 
+pub mod flash;
 pub mod pid_decode;
 pub mod security;
 
+use flash::{
+    FlashProgress, FlashReadResult, FlashWriteResult,
+    flash_read, flash_write, read_calibration, write_calibration,
+    guard_write_range, CAL_A_START, CAL_REGION_SIZE,
+};
 use pid_decode::*;
 use security::{SecurityLevel, SecurityState, unlock_level1, unlock_level2};
 
@@ -46,11 +52,9 @@ struct RawFrame {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// J1850 VPW frame helpers  (pub(crate) so security.rs can call them)
+// J1850 VPW frame helpers  (pub(crate) so security.rs + flash.rs can call them)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Build a Mode 01 (OBD-II) single-PID request.
-/// Frame: [ 0x68 0x6A 0xF1 0x01 <pid> <checksum> ]
 pub(crate) fn build_pid_request(pid: u8) -> Vec<u8> {
     let mut frame = vec![0x68u8, 0x6A, 0xF1, 0x01, pid];
     let cs = frame.iter().fold(0u8, |a, &b| a.wrapping_add(b));
@@ -58,7 +62,6 @@ pub(crate) fn build_pid_request(pid: u8) -> Vec<u8> {
     frame
 }
 
-/// Build a Mode 22 (GM 2-byte PID) request.
 pub(crate) fn build_mode22_request(pid: u16) -> Vec<u8> {
     let mut frame = vec![
         0x68u8, 0x6A, 0xF1, 0x22,
@@ -70,7 +73,6 @@ pub(crate) fn build_mode22_request(pid: u16) -> Vec<u8> {
     frame
 }
 
-/// Build a multi-PID Mode 01 request (up to 6 PIDs at once).
 fn build_multi_pid_request(pids: &[u8]) -> Vec<u8> {
     assert!(!pids.is_empty() && pids.len() <= 6);
     let mut frame = vec![0x68u8, 0x6A, 0xF1, 0x01];
@@ -82,38 +84,32 @@ fn build_multi_pid_request(pids: &[u8]) -> Vec<u8> {
 
 pub(crate) fn validate_checksum(frame: &[u8]) -> bool {
     if frame.len() < 2 { return false; }
-    let expected = frame[..frame.len() - 1]
-        .iter()
-        .fold(0u8, |a, &b| a.wrapping_add(b));
-    expected == frame[frame.len() - 1]
+    frame[..frame.len()-1].iter().fold(0u8, |a, &b| a.wrapping_add(b))
+        == frame[frame.len()-1]
 }
 
-/// Parse a Mode 01 (0x41) response and return the data bytes.
 fn parse_pid_response(frame: &[u8], expected_pid: u8) -> Option<Vec<u8>> {
     if frame.len() < 6 { return None; }
     if frame[3] == 0x41 && frame[4] == expected_pid && validate_checksum(frame) {
-        return Some(frame[5..frame.len() - 1].to_vec());
+        return Some(frame[5..frame.len()-1].to_vec());
     }
     None
 }
 
-/// Parse a Mode 22 (0x62) response and return the data bytes.
 fn parse_mode22_response(frame: &[u8], expected_pid: u16) -> Option<Vec<u8>> {
     if frame.len() < 7 { return None; }
     let pid_hi = (expected_pid >> 8) as u8;
     let pid_lo = (expected_pid & 0xFF) as u8;
-    if frame[3] == 0x62
-        && frame[4] == pid_hi
-        && frame[5] == pid_lo
+    if frame[3] == 0x62 && frame[4] == pid_hi && frame[5] == pid_lo
         && validate_checksum(frame)
     {
-        return Some(frame[6..frame.len() - 1].to_vec());
+        return Some(frame[6..frame.len()-1].to_vec());
     }
     None
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Serial I/O  (pub(crate) so security.rs can call them)
+// Serial I/O  (pub(crate) so security.rs + flash.rs can call them)
 // ─────────────────────────────────────────────────────────────────────────────
 
 pub(crate) fn write_frame(port: &mut Box<dyn SerialPort>, frame: &[u8]) -> Result<(), String> {
@@ -147,27 +143,19 @@ fn request_pid22(port: &mut Box<dyn SerialPort>, pid: u16) -> Result<Vec<u8>, St
 #[tauri::command]
 fn list_serial_ports() -> Result<Vec<SerialPortInfo>, String> {
     let ports = available_ports().map_err(|e| e.to_string())?;
-    Ok(ports
-        .into_iter()
-        .map(|p| SerialPortInfo {
-            port_name: p.port_name,
-            port_type: format!("{:?}", p.port_type),
-        })
-        .collect())
+    Ok(ports.into_iter().map(|p| SerialPortInfo {
+        port_name: p.port_name,
+        port_type: format!("{:?}", p.port_type),
+    }).collect())
 }
 
 #[tauri::command]
-fn connect_ecu(
-    port: String,
-    baud: u32,
-    state: tauri::State<AppState>,
-) -> Result<String, String> {
+fn connect_ecu(port: String, baud: u32, state: tauri::State<AppState>) -> Result<String, String> {
     let serial = serialport::new(&port, baud)
         .timeout(Duration::from_millis(100))
         .open()
         .map_err(|e| format!("Failed to open {}: {}", port, e))?;
     *state.port.lock().map_err(|_| "Lock failed".to_string())? = Some(serial);
-    // Reset security state on new connection
     *state.security.lock().map_err(|_| "Lock failed".to_string())? = SecurityState::default();
     Ok(format!("Connected to {} @ {} baud", port, baud))
 }
@@ -188,9 +176,6 @@ fn connection_status(state: tauri::State<AppState>) -> Result<bool, String> {
 // Tauri commands — security access
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Perform Level 1 security unlock (read/diagnostics).
-/// Must be called after connect_ecu and before any Mode 22/23 data reads.
-/// Safe to call when engine is off (key-on engine-off is ideal).
 #[tauri::command]
 fn security_unlock_l1(state: tauri::State<AppState>) -> Result<SecurityState, String> {
     let mut port_guard = state.port.lock().map_err(|_| "Lock failed".to_string())?;
@@ -200,13 +185,8 @@ fn security_unlock_l1(state: tauri::State<AppState>) -> Result<SecurityState, St
     Ok(result)
 }
 
-/// Perform Level 2 security unlock (flash programming).
-/// ⚠️  Requires Level 1 to already be active.
-/// ⚠️  Engine MUST be off. Wrong key locks ECM for this ignition cycle.
-/// ⚠️  Only call when you are ready to flash — do not unlock speculatively.
 #[tauri::command]
 fn security_unlock_l2(state: tauri::State<AppState>) -> Result<SecurityState, String> {
-    // Guard: Level 1 must be active before escalating to Level 2
     {
         let sec = state.security.lock().map_err(|_| "Lock failed".to_string())?;
         if sec.locked || sec.level != Some(SecurityLevel::Level1) {
@@ -223,11 +203,116 @@ fn security_unlock_l2(state: tauri::State<AppState>) -> Result<SecurityState, St
     Ok(result)
 }
 
-/// Get the current security state without performing any unlock.
 #[tauri::command]
 fn security_status(state: tauri::State<AppState>) -> Result<SecurityState, String> {
-    let sec = state.security.lock().map_err(|_| "Lock failed".to_string())?;
-    Ok(sec.clone())
+    Ok(state.security.lock().map_err(|_| "Lock failed".to_string())?.clone())
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tauri commands — flash read (Mode 23)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Read `length` bytes from flash at `start_addr`.
+/// Requires Level 1 security. Progress events emitted via Tauri event system
+/// (event name: "flash-progress").
+///
+/// For a full calibration backup, use flash_read_cal instead.
+#[tauri::command]
+fn flash_read_region(
+    start_addr: u32,
+    length: u32,
+    app: tauri::AppHandle,
+    state: tauri::State<AppState>,
+) -> Result<FlashReadResult, String> {
+    use tauri::Emitter;
+    let mut port_guard = state.port.lock().map_err(|_| "Lock failed".to_string())?;
+    let port = port_guard.as_mut().ok_or("No connection".to_string())?;
+
+    flash_read(port, start_addr, length, |p| {
+        let _ = app.emit("flash-progress", &p);
+    })
+}
+
+/// Read the full calibration region (Cal A + B = 128 KB) starting at 0x00020000.
+/// This is the safe backup command — does not touch the OS region.
+#[tauri::command]
+fn flash_read_cal(
+    app: tauri::AppHandle,
+    state: tauri::State<AppState>,
+) -> Result<FlashReadResult, String> {
+    use tauri::Emitter;
+    let mut port_guard = state.port.lock().map_err(|_| "Lock failed".to_string())?;
+    let port = port_guard.as_mut().ok_or("No connection".to_string())?;
+
+    read_calibration(port, |p| {
+        let _ = app.emit("flash-progress", &p);
+    })
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tauri commands — flash write (Mode 34/36/37)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Write raw bytes to flash at `start_addr`.
+///
+/// ⚠️  Requires Level 2 security (enforced here).
+/// ⚠️  Rejects any write into OS region (0x00000000–0x0001FFFF).
+/// ⚠️  Caller must supply correctly checksummed data — no checksum patching here.
+#[tauri::command]
+fn flash_write_region(
+    start_addr: u32,
+    data: Vec<u8>,
+    app: tauri::AppHandle,
+    state: tauri::State<AppState>,
+) -> Result<FlashWriteResult, String> {
+    use tauri::Emitter;
+    // Enforce Level 2
+    {
+        let sec = state.security.lock().map_err(|_| "Lock failed".to_string())?;
+        if sec.locked || sec.level != Some(SecurityLevel::Level2) {
+            return Err(
+                "Flash write requires Level 2 security. \
+                 Call security_unlock_l2 first.".to_string()
+            );
+        }
+    }
+    // OS guard (redundant with flash.rs guard but belt-and-suspenders)
+    guard_write_range(start_addr, data.len() as u32)?;
+
+    let mut port_guard = state.port.lock().map_err(|_| "Lock failed".to_string())?;
+    let port = port_guard.as_mut().ok_or("No connection".to_string())?;
+
+    flash_write(port, start_addr, &data, |p| {
+        let _ = app.emit("flash-progress", &p);
+    })
+}
+
+/// Write a full 128 KB calibration image to Cal A+B region.
+///
+/// ⚠️  data must be exactly 131072 bytes (128 KB).
+/// ⚠️  Requires Level 2 security.
+#[tauri::command]
+fn flash_write_cal(
+    data: Vec<u8>,
+    app: tauri::AppHandle,
+    state: tauri::State<AppState>,
+) -> Result<FlashWriteResult, String> {
+    use tauri::Emitter;
+    {
+        let sec = state.security.lock().map_err(|_| "Lock failed".to_string())?;
+        if sec.locked || sec.level != Some(SecurityLevel::Level2) {
+            return Err(
+                "Flash write requires Level 2 security. \
+                 Call security_unlock_l2 first.".to_string()
+            );
+        }
+    }
+    let mut port_guard = state.port.lock().map_err(|_| "Lock failed".to_string())?;
+    let port = port_guard.as_mut().ok_or("No connection".to_string())?;
+
+    write_calibration(port, &data, |p| {
+        let _ = app.emit("flash-progress", &p);
+    })
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -235,10 +320,7 @@ fn security_status(state: tauri::State<AppState>) -> Result<SecurityState, Strin
 // ─────────────────────────────────────────────────────────────────────────────
 
 #[tauri::command]
-fn write_ecu_frame(
-    data: Vec<u8>,
-    state: tauri::State<AppState>,
-) -> Result<String, String> {
+fn write_ecu_frame(data: Vec<u8>, state: tauri::State<AppState>) -> Result<String, String> {
     let mut guard = state.port.lock().map_err(|_| "Lock failed".to_string())?;
     let port = guard.as_mut().ok_or("No connection".to_string())?;
     write_frame(port, &data)?;
@@ -274,6 +356,13 @@ fn read_ecu_data(state: tauri::State<AppState>) -> Result<EcuTelemetry, String> 
             }
         };
     }
+    macro_rules! poll22 {
+        ($pid:expr, $field:ident, $decoder:expr) => {
+            if let Ok(r) = request_pid22(port, $pid) {
+                if let Some(v) = $decoder(&r) { d.$field = v; }
+            }
+        };
+    }
 
     if let Ok(r) = request_pid01(port, 0x01) {
         if let Some((mil, cnt)) = decode_monitor_status(&r) {
@@ -295,26 +384,10 @@ fn read_ecu_data(state: tauri::State<AppState>) -> Result<EcuTelemetry, String> 
     poll01!(0x10, maf_gs,        decode_maf);
     poll01!(0x11, tps_pct,       decode_tps);
 
-    if let Ok(r) = request_pid01(port, 0x14) {
-        if let Some(v) = decode_o2_left_up(&r)  { d.o2_left_up_v  = v; }
-    }
-    if let Ok(r) = request_pid01(port, 0x15) {
-        if let Some(v) = decode_o2_left_dn(&r)  { d.o2_left_dn_v  = v; }
-    }
-    if let Ok(r) = request_pid01(port, 0x18) {
-        if let Some(v) = decode_o2_right_up(&r) { d.o2_right_up_v = v; }
-    }
-    if let Ok(r) = request_pid01(port, 0x19) {
-        if let Some(v) = decode_o2_right_dn(&r) { d.o2_right_dn_v = v; }
-    }
-
-    macro_rules! poll22 {
-        ($pid:expr, $field:ident, $decoder:expr) => {
-            if let Ok(r) = request_pid22(port, $pid) {
-                if let Some(v) = $decoder(&r) { d.$field = v; }
-            }
-        };
-    }
+    if let Ok(r) = request_pid01(port, 0x14) { if let Some(v) = decode_o2_left_up(&r)  { d.o2_left_up_v  = v; } }
+    if let Ok(r) = request_pid01(port, 0x15) { if let Some(v) = decode_o2_left_dn(&r)  { d.o2_left_dn_v  = v; } }
+    if let Ok(r) = request_pid01(port, 0x18) { if let Some(v) = decode_o2_right_up(&r) { d.o2_right_up_v = v; } }
+    if let Ok(r) = request_pid01(port, 0x19) { if let Some(v) = decode_o2_right_dn(&r) { d.o2_right_dn_v = v; } }
 
     poll22!(0x1140, maf_hi_gs,      decode_maf_hi);
     poll22!(0x1141, batt_volt,      decode_batt_volt);
@@ -391,7 +464,6 @@ fn read_ecu_data(state: tauri::State<AppState>) -> Result<EcuTelemetry, String> 
     }
 
     d.idc_b1_pct = calc_idc_b1(d.rpm, d.inj_pw_b1_ms);
-
     Ok(d)
 }
 
@@ -407,16 +479,26 @@ pub fn run() {
             security: Mutex::new(SecurityState::default()),
         })
         .invoke_handler(tauri::generate_handler![
+            // Connection
             list_serial_ports,
             connect_ecu,
             disconnect_ecu,
             connection_status,
-            write_ecu_frame,
-            read_ecu_frame,
-            read_ecu_data,
+            // Security
             security_unlock_l1,
             security_unlock_l2,
             security_status,
+            // Flash read
+            flash_read_region,
+            flash_read_cal,
+            // Flash write
+            flash_write_region,
+            flash_write_cal,
+            // Raw I/O
+            write_ecu_frame,
+            read_ecu_frame,
+            // Telemetry
+            read_ecu_data,
         ])
         .run(tauri::generate_context!())
         .expect("Tauri runtime error");
