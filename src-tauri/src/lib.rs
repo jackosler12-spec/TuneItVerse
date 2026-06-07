@@ -4,17 +4,23 @@
 //! Stage 2b: GM P01 seed-key security unlock via security.rs
 //! Stage 3:  Mode 23/34/36/37 flash read/write via flash.rs
 //! Stage 3b: P01 calibration checksum correction via checksum.rs
+//! Stage 4:  DTC read / clear / freeze frame via dtc.rs
 //! Protocol: J1850 VPW via USB-serial bridge @ 115200 baud
 
 pub mod checksum;
+pub mod dtc;
 pub mod flash;
 pub mod pid_decode;
 pub mod security;
 
 use checksum::{
     ChecksumReport, CorrectedCal,
-    validate_checksums, correct_checksums, correct_and_validate_checksums,
+    validate_checksums, correct_and_validate_checksums,
     CAL_IMAGE_SIZE,
+};
+use dtc::{
+    DtcReadResult, DtcClearResult, FreezeFrameResult,
+    read_dtcs, clear_dtcs, read_freeze_frame,
 };
 use flash::{
     FlashProgress, FlashReadResult, FlashWriteResult,
@@ -59,7 +65,7 @@ struct RawFrame {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// J1850 VPW frame helpers  (pub(crate) so security.rs + flash.rs can call them)
+// J1850 VPW frame helpers  (pub(crate) so security.rs + flash.rs + dtc.rs)
 // ─────────────────────────────────────────────────────────────────────────────
 
 pub(crate) fn build_pid_request(pid: u8) -> Vec<u8> {
@@ -116,7 +122,7 @@ fn parse_mode22_response(frame: &[u8], expected_pid: u16) -> Option<Vec<u8>> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Serial I/O  (pub(crate) so security.rs + flash.rs can call them)
+// Serial I/O  (pub(crate))
 // ─────────────────────────────────────────────────────────────────────────────
 
 pub(crate) fn write_frame(port: &mut Box<dyn SerialPort>, frame: &[u8]) -> Result<(), String> {
@@ -216,21 +222,55 @@ fn security_status(state: tauri::State<AppState>) -> Result<SecurityState, Strin
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Tauri commands — checksum validation / correction (offline, no ECU needed)
+// Tauri commands — DTC read / clear / freeze frame
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Validate all 16 P01 calibration checksum regions in a 128 KB image.
-/// Does NOT modify the data.  Returns a full report of all regions.
-/// Use this to audit a .bin file before deciding to flash it.
+/// Read all DTCs from the ECM (stored, pending, permanent).
+/// Returns a DtcReadResult with all three groups and descriptions.
+/// Requires: ECU connected. Level 1 security recommended.
+#[tauri::command]
+fn read_dtcs_cmd(state: tauri::State<AppState>) -> Result<DtcReadResult, String> {
+    let mut port_guard = state.port.lock().map_err(|_| "Lock failed".to_string())?;
+    let port = port_guard.as_mut().ok_or("No connection — connect first".to_string())?;
+    read_dtcs(port)
+}
+
+/// Clear all DTCs and reset readiness monitors (Mode 04).
+///
+/// ⚠️  This is destructive — all stored/pending DTCs and freeze frame
+///    data will be erased. Readiness monitors will reset.
+/// ⚠️  Does NOT require Level 2 — Mode 04 is a standard OBD-II service.
+#[tauri::command]
+fn clear_dtcs_cmd(state: tauri::State<AppState>) -> Result<DtcClearResult, String> {
+    let mut port_guard = state.port.lock().map_err(|_| "Lock failed".to_string())?;
+    let port = port_guard.as_mut().ok_or("No connection — connect first".to_string())?;
+
+    // Read current count first so the result message is informative
+    let prior_count = read_dtcs(port)
+        .map(|r| r.total)
+        .unwrap_or(0);
+
+    clear_dtcs(port, prior_count)
+}
+
+/// Read freeze frame data (Mode 02) — snapshot captured when the first DTC was set.
+/// Returns sensor values at the moment of fault.
+#[tauri::command]
+fn read_freeze_frame_cmd(state: tauri::State<AppState>) -> Result<FreezeFrameResult, String> {
+    let mut port_guard = state.port.lock().map_err(|_| "Lock failed".to_string())?;
+    let port = port_guard.as_mut().ok_or("No connection — connect first".to_string())?;
+    read_freeze_frame(port)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tauri commands — checksum validation / correction (offline)
+// ─────────────────────────────────────────────────────────────────────────────
+
 #[tauri::command]
 fn validate_cal_checksum(data: Vec<u8>) -> Result<ChecksumReport, String> {
     validate_checksums(&data)
 }
 
-/// Correct all P01 calibration checksum regions in a 128 KB image.
-/// Returns the corrected image plus a report of what changed.
-/// Regions already valid are left untouched (idempotent).
-/// Use this to prepare a modified tune for flashing.
 #[tauri::command]
 fn correct_cal_checksum(data: Vec<u8>) -> Result<CorrectedCal, String> {
     correct_and_validate_checksums(&data)
@@ -272,10 +312,6 @@ fn flash_read_cal(
 // Tauri commands — flash write (Mode 34/36/37)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Write raw bytes to flash at `start_addr`.
-/// Checksum correction applied automatically for cal-region writes.
-/// ⚠️  Requires Level 2 security.
-/// ⚠️  Rejects any write into OS region.
 #[tauri::command]
 fn flash_write_region(
     start_addr: u32,
@@ -301,10 +337,6 @@ fn flash_write_region(
     })
 }
 
-/// Write a full 128 KB calibration image.
-/// Checksum correction applied automatically before Mode 34.
-/// ⚠️  data must be exactly 131072 bytes.
-/// ⚠️  Requires Level 2 security.
 #[tauri::command]
 fn flash_write_cal(
     data: Vec<u8>,
@@ -501,13 +533,17 @@ pub fn run() {
             security_unlock_l1,
             security_unlock_l2,
             security_status,
-            // Checksum (offline — no ECU needed)
+            // DTC
+            read_dtcs_cmd,
+            clear_dtcs_cmd,
+            read_freeze_frame_cmd,
+            // Checksum (offline)
             validate_cal_checksum,
             correct_cal_checksum,
             // Flash read
             flash_read_region,
             flash_read_cal,
-            // Flash write (checksum auto-corrected for cal region)
+            // Flash write
             flash_write_region,
             flash_write_cal,
             // Raw I/O
