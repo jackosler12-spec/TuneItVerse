@@ -3,12 +3,19 @@
 //! Stage 2:  Full VPW PID decode via pid_decode.rs
 //! Stage 2b: GM P01 seed-key security unlock via security.rs
 //! Stage 3:  Mode 23/34/36/37 flash read/write via flash.rs
+//! Stage 3b: P01 calibration checksum correction via checksum.rs
 //! Protocol: J1850 VPW via USB-serial bridge @ 115200 baud
 
+pub mod checksum;
 pub mod flash;
 pub mod pid_decode;
 pub mod security;
 
+use checksum::{
+    ChecksumReport, CorrectedCal,
+    validate_checksums, correct_checksums, correct_and_validate_checksums,
+    CAL_IMAGE_SIZE,
+};
 use flash::{
     FlashProgress, FlashReadResult, FlashWriteResult,
     flash_read, flash_write, read_calibration, write_calibration,
@@ -209,14 +216,30 @@ fn security_status(state: tauri::State<AppState>) -> Result<SecurityState, Strin
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Tauri commands — checksum validation / correction (offline, no ECU needed)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Validate all 16 P01 calibration checksum regions in a 128 KB image.
+/// Does NOT modify the data.  Returns a full report of all regions.
+/// Use this to audit a .bin file before deciding to flash it.
+#[tauri::command]
+fn validate_cal_checksum(data: Vec<u8>) -> Result<ChecksumReport, String> {
+    validate_checksums(&data)
+}
+
+/// Correct all P01 calibration checksum regions in a 128 KB image.
+/// Returns the corrected image plus a report of what changed.
+/// Regions already valid are left untouched (idempotent).
+/// Use this to prepare a modified tune for flashing.
+#[tauri::command]
+fn correct_cal_checksum(data: Vec<u8>) -> Result<CorrectedCal, String> {
+    correct_and_validate_checksums(&data)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Tauri commands — flash read (Mode 23)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Read `length` bytes from flash at `start_addr`.
-/// Requires Level 1 security. Progress events emitted via Tauri event system
-/// (event name: "flash-progress").
-///
-/// For a full calibration backup, use flash_read_cal instead.
 #[tauri::command]
 fn flash_read_region(
     start_addr: u32,
@@ -227,14 +250,11 @@ fn flash_read_region(
     use tauri::Emitter;
     let mut port_guard = state.port.lock().map_err(|_| "Lock failed".to_string())?;
     let port = port_guard.as_mut().ok_or("No connection".to_string())?;
-
     flash_read(port, start_addr, length, |p| {
         let _ = app.emit("flash-progress", &p);
     })
 }
 
-/// Read the full calibration region (Cal A + B = 128 KB) starting at 0x00020000.
-/// This is the safe backup command — does not touch the OS region.
 #[tauri::command]
 fn flash_read_cal(
     app: tauri::AppHandle,
@@ -243,7 +263,6 @@ fn flash_read_cal(
     use tauri::Emitter;
     let mut port_guard = state.port.lock().map_err(|_| "Lock failed".to_string())?;
     let port = port_guard.as_mut().ok_or("No connection".to_string())?;
-
     read_calibration(port, |p| {
         let _ = app.emit("flash-progress", &p);
     })
@@ -254,10 +273,9 @@ fn flash_read_cal(
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Write raw bytes to flash at `start_addr`.
-///
-/// ⚠️  Requires Level 2 security (enforced here).
-/// ⚠️  Rejects any write into OS region (0x00000000–0x0001FFFF).
-/// ⚠️  Caller must supply correctly checksummed data — no checksum patching here.
+/// Checksum correction applied automatically for cal-region writes.
+/// ⚠️  Requires Level 2 security.
+/// ⚠️  Rejects any write into OS region.
 #[tauri::command]
 fn flash_write_region(
     start_addr: u32,
@@ -266,7 +284,6 @@ fn flash_write_region(
     state: tauri::State<AppState>,
 ) -> Result<FlashWriteResult, String> {
     use tauri::Emitter;
-    // Enforce Level 2
     {
         let sec = state.security.lock().map_err(|_| "Lock failed".to_string())?;
         if sec.locked || sec.level != Some(SecurityLevel::Level2) {
@@ -276,20 +293,17 @@ fn flash_write_region(
             );
         }
     }
-    // OS guard (redundant with flash.rs guard but belt-and-suspenders)
     guard_write_range(start_addr, data.len() as u32)?;
-
     let mut port_guard = state.port.lock().map_err(|_| "Lock failed".to_string())?;
     let port = port_guard.as_mut().ok_or("No connection".to_string())?;
-
     flash_write(port, start_addr, &data, |p| {
         let _ = app.emit("flash-progress", &p);
     })
 }
 
-/// Write a full 128 KB calibration image to Cal A+B region.
-///
-/// ⚠️  data must be exactly 131072 bytes (128 KB).
+/// Write a full 128 KB calibration image.
+/// Checksum correction applied automatically before Mode 34.
+/// ⚠️  data must be exactly 131072 bytes.
 /// ⚠️  Requires Level 2 security.
 #[tauri::command]
 fn flash_write_cal(
@@ -309,7 +323,6 @@ fn flash_write_cal(
     }
     let mut port_guard = state.port.lock().map_err(|_| "Lock failed".to_string())?;
     let port = port_guard.as_mut().ok_or("No connection".to_string())?;
-
     write_calibration(port, &data, |p| {
         let _ = app.emit("flash-progress", &p);
     })
@@ -488,10 +501,13 @@ pub fn run() {
             security_unlock_l1,
             security_unlock_l2,
             security_status,
+            // Checksum (offline — no ECU needed)
+            validate_cal_checksum,
+            correct_cal_checksum,
             // Flash read
             flash_read_region,
             flash_read_cal,
-            // Flash write
+            // Flash write (checksum auto-corrected for cal region)
             flash_write_region,
             flash_write_cal,
             // Raw I/O

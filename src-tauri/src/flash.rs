@@ -22,13 +22,14 @@
 //!
 //!  WRITE (Mode 34/36/37):
 //!    1. Security Level 2 must be active.
-//!    2. Mode 34 — Request Download:
+//!    2. Checksum correction applied to data BEFORE Mode 34.
+//!    3. Mode 34 — Request Download:
 //!         TX: 68 6A F1  34  00  A2 A1 A0  S2 S1 S0  <cs>  (addr, size 3 bytes each)
 //!         RX: 48 6B 10  74  BL  <cs>                      (BL = max block length)
-//!    3. Mode 36 — Transfer Data (repeated for each block):
+//!    4. Mode 36 — Transfer Data (repeated for each block):
 //!         TX: 68 6A F1  36  <data[0..BL]>  <cs>
 //!         RX: 48 6B 10  76  <cs>           (positive ack per block)
-//!    4. Mode 37 — Request Transfer Exit:
+//!    5. Mode 37 — Request Transfer Exit:
 //!         TX: 68 6A F1  37  <cs>
 //!         RX: 48 6B 10  77  <cs>
 //!
@@ -39,6 +40,7 @@
 //!   • LS1edit / HPTuners community reverse-engineering
 
 use crate::{write_frame, read_response, validate_checksum};
+use crate::checksum::{correct_and_validate_checksums, ChecksumReport, CAL_IMAGE_SIZE};
 use serialport::SerialPort;
 use serde::{Deserialize, Serialize};
 
@@ -104,10 +106,12 @@ pub struct FlashReadResult {
 /// Result of a completed flash write.
 #[derive(Debug, Clone, Serialize)]
 pub struct FlashWriteResult {
-    pub start_address:  u32,
-    pub bytes_written:  u32,
-    pub blocks_written: u32,
-    pub crc32_written:  u32,
+    pub start_address:     u32,
+    pub bytes_written:     u32,
+    pub blocks_written:    u32,
+    pub crc32_written:     u32,
+    /// Checksum correction report (populated for cal-region writes)
+    pub checksum_report:   Option<ChecksumReport>,
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -116,8 +120,6 @@ pub struct FlashWriteResult {
 
 /// Validate that an address range is safe to write.
 /// Rejects any range that overlaps the OS kernel region.
-///
-/// Returns Err with a descriptive message if unsafe.
 pub fn guard_write_range(start: u32, length: u32) -> Result<(), String> {
     let end = start.checked_add(length)
         .ok_or_else(|| "Address + length overflow u32".to_string())?
@@ -140,13 +142,10 @@ pub fn guard_write_range(start: u32, length: u32) -> Result<(), String> {
 // Frame builders
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Mode 23 — Read Memory By Address.
-/// `addr`: 3-byte big-endian flash address.
-/// `len`:  number of bytes to read in this request (max ~249 for VPW).
 fn build_mode23_read(addr: u32, len: u8) -> Vec<u8> {
     let mut frame = vec![
-        0x68u8, 0x6A, 0xF1,  // header: physical, tester → ECM
-        0x23,                 // service ID: readMemoryByAddress
+        0x68u8, 0x6A, 0xF1,
+        0x23,
         ((addr >> 16) & 0xFF) as u8,
         ((addr >> 8)  & 0xFF) as u8,
         ( addr        & 0xFF) as u8,
@@ -157,14 +156,11 @@ fn build_mode23_read(addr: u32, len: u8) -> Vec<u8> {
     frame
 }
 
-/// Mode 34 — Request Download.
-/// `addr`: 3-byte start address of the write region.
-/// `size`: 3-byte total write size in bytes.
 fn build_mode34_request_download(addr: u32, size: u32) -> Vec<u8> {
     let mut frame = vec![
         0x68u8, 0x6A, 0xF1,
-        0x34,                          // requestDownload
-        0x00,                          // compression/encryption: none
+        0x34,
+        0x00,
         ((addr >> 16) & 0xFF) as u8,
         ((addr >> 8)  & 0xFF) as u8,
         ( addr        & 0xFF) as u8,
@@ -177,8 +173,6 @@ fn build_mode34_request_download(addr: u32, size: u32) -> Vec<u8> {
     frame
 }
 
-/// Mode 36 — Transfer Data block.
-/// `data`: up to `block_len` bytes of calibration data for this block.
 fn build_mode36_transfer(data: &[u8]) -> Vec<u8> {
     let mut frame = vec![0x68u8, 0x6A, 0xF1, 0x36];
     frame.extend_from_slice(data);
@@ -187,7 +181,6 @@ fn build_mode36_transfer(data: &[u8]) -> Vec<u8> {
     frame
 }
 
-/// Mode 37 — Request Transfer Exit.
 fn build_mode37_exit() -> Vec<u8> {
     let mut frame = vec![0x68u8, 0x6A, 0xF1, 0x37];
     let cs = frame.iter().fold(0u8, |a, &b| a.wrapping_add(b));
@@ -199,8 +192,6 @@ fn build_mode37_exit() -> Vec<u8> {
 // Response parsers
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Parse a Mode 23 (0x63) read response.
-/// Returns the data bytes on success.
 fn parse_mode23_response(frame: &[u8]) -> Result<Vec<u8>, String> {
     check_nrc(frame, 0x23)?;
     if frame.len() < 5 {
@@ -212,12 +203,9 @@ fn parse_mode23_response(frame: &[u8]) -> Result<Vec<u8>, String> {
     if frame[3] != 0x63 {
         return Err(format!("Mode23: unexpected SID 0x{:02X}", frame[3]));
     }
-    // Data is bytes 4..len-1
     Ok(frame[4..frame.len() - 1].to_vec())
 }
 
-/// Parse a Mode 34 (0x74) response.
-/// Returns the negotiated max block length.
 fn parse_mode34_response(frame: &[u8]) -> Result<usize, String> {
     check_nrc(frame, 0x34)?;
     if frame.len() < 6 {
@@ -231,14 +219,12 @@ fn parse_mode34_response(frame: &[u8]) -> Result<usize, String> {
     }
     let bl = frame[4] as usize;
     if bl == 0 || bl > MAX_BLOCK_LEN {
-        // ECM returned 0 or nonsense — use safe default
         Ok(DEFAULT_BLOCK_LEN)
     } else {
         Ok(bl)
     }
 }
 
-/// Parse a Mode 36 (0x76) transfer ACK.
 fn parse_mode36_ack(frame: &[u8]) -> Result<(), String> {
     check_nrc(frame, 0x36)?;
     if frame.len() < 5 {
@@ -253,7 +239,6 @@ fn parse_mode36_ack(frame: &[u8]) -> Result<(), String> {
     Ok(())
 }
 
-/// Parse a Mode 37 (0x77) exit ACK.
 fn parse_mode37_ack(frame: &[u8]) -> Result<(), String> {
     check_nrc(frame, 0x37)?;
     if frame.len() < 5 {
@@ -268,7 +253,6 @@ fn parse_mode37_ack(frame: &[u8]) -> Result<(), String> {
     Ok(())
 }
 
-/// Check for a 0x7F negative response and surface the NRC.
 fn check_nrc(frame: &[u8], sid: u8) -> Result<(), String> {
     if frame.len() >= 6 && frame[3] == 0x7F && frame[4] == sid {
         let nrc = frame[5];
@@ -320,14 +304,6 @@ pub fn crc32(data: &[u8]) -> u32 {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Read `length` bytes starting at `start_addr` using Mode 23.
-///
-/// Uses a progress callback so the UI can update a progress bar.
-/// The callback receives a `FlashProgress` after each successful block read.
-///
-/// Requires: Security Level 1 active.
-/// Safe for: full ROM backup (all regions), cal read.
-///
-/// Block size is capped at 0xF0 (240) bytes per VPW frame limit.
 pub fn flash_read<F>(
     port:       &mut Box<dyn SerialPort>,
     start_addr: u32,
@@ -337,7 +313,7 @@ pub fn flash_read<F>(
 where
     F: FnMut(FlashProgress),
 {
-    const READ_BLOCK: u8 = 0xF0;  // bytes per Mode 23 request
+    const READ_BLOCK: u8 = 0xF0;
     let mut data = Vec::with_capacity(length as usize);
     let mut progress = FlashProgress::new(length);
     let mut offset: u32 = 0;
@@ -380,21 +356,25 @@ where
 
 /// Write `data` to flash starting at `start_addr` using Mode 34/36/37.
 ///
-/// Steps performed internally:
+/// Pre-flight steps (before any bus traffic):
 ///   1. Guard: rejects any write into the OS kernel region.
-///   2. Mode 34 RequestDownload — negotiate block length with ECM.
-///   3. Mode 36 TransferData   — send data in blocks of `block_len` bytes.
-///   4. Mode 37 RequestTransferExit — finalize.
+///   2. Checksum correction: if data is exactly CAL_IMAGE_SIZE bytes AND
+///      start_addr == CAL_A_START, all 16 P01 calibration checksum regions
+///      are validated and corrected automatically.  The corrected image is
+///      what gets sent — the original `data` slice is never modified.
+///      For non-cal regions (e.g. seed-key patch) checksums are NOT touched.
 ///
-/// Progress callback is invoked after each Mode 36 block ACK.
+/// Protocol:
+///   3. Mode 34 RequestDownload — negotiate block length with ECM.
+///   4. Mode 36 TransferData   — send corrected data in blocks.
+///   5. Mode 37 RequestTransferExit — finalize.
 ///
-/// Requires: Security Level 2 active (caller must ensure this).
+/// Requires: Security Level 2 active.
 ///
 /// ⚠️  BRICKING RISK:
-///   - Only call with verified, correctly checksummed calibration data.
-///   - Never write to OS region (guard_write_range enforces this).
-///   - Ensure stable 12V supply before calling (charge battery / use charger).
-///   - Do not interrupt once Mode 36 transfer has started.
+///   - Stable 12 V supply required (use a charger/maintainer).
+///   - Do not interrupt once Mode 36 transfer starts.
+///   - OS region writes rejected by guard; cal checksum auto-corrected.
 pub fn flash_write<F>(
     port:       &mut Box<dyn SerialPort>,
     start_addr: u32,
@@ -405,24 +385,42 @@ where
     F: FnMut(FlashProgress),
 {
     let length = data.len() as u32;
+
     // Step 1: OS guard
     guard_write_range(start_addr, length)?;
 
-    // Step 2: Mode 34 — negotiate block length
+    // Step 2: Checksum correction (cal region only)
+    let (write_data, cs_report): (std::borrow::Cow<[u8]>, Option<ChecksumReport>) =
+        if start_addr == CAL_A_START && data.len() == CAL_IMAGE_SIZE {
+            let corrected = correct_and_validate_checksums(data)
+                .map_err(|e| format!("Checksum correction failed: {}", e))?;
+            if !corrected.report.all_valid {
+                return Err(format!(
+                    "Checksum correction did not produce a fully valid image \
+                     ({} regions still invalid). Aborting flash write.",
+                    corrected.report.failed_count
+                ));
+            }
+            (std::borrow::Cow::Owned(corrected.data), Some(corrected.report))
+        } else {
+            (std::borrow::Cow::Borrowed(data), None)
+        };
+
+    // Step 3: Mode 34 — negotiate block length
     write_frame(port, &build_mode34_request_download(start_addr, length))?;
     let resp34 = read_response(port)?;
     let block_len = parse_mode34_response(&resp34)
         .map_err(|e| format!("Mode34 failed: {}", e))?;
 
-    // Step 3: Mode 36 — transfer data in blocks
-    let crc = crc32(data);
+    // Step 4: Mode 36 — transfer corrected data in blocks
+    let crc = crc32(&write_data);
     let mut progress    = FlashProgress::new(length);
     let mut blocks_sent: u32 = 0;
     let mut offset: usize    = 0;
 
-    while offset < data.len() {
-        let end   = (offset + block_len).min(data.len());
-        let block = &data[offset..end];
+    while offset < write_data.len() {
+        let end   = (offset + block_len).min(write_data.len());
+        let block = &write_data[offset..end];
         let addr  = start_addr + offset as u32;
 
         write_frame(port, &build_mode36_transfer(block))?;
@@ -436,25 +434,25 @@ where
         on_progress(progress.clone());
     }
 
-    // Step 4: Mode 37 — exit
+    // Step 5: Mode 37 — exit
     write_frame(port, &build_mode37_exit())?;
     let resp37 = read_response(port)?;
     parse_mode37_ack(&resp37).map_err(|e| format!("Mode37 exit failed: {}", e))?;
 
     Ok(FlashWriteResult {
-        start_address:  start_addr,
-        bytes_written:  length,
-        blocks_written: blocks_sent,
-        crc32_written:  crc,
+        start_address:   start_addr,
+        bytes_written:   length,
+        blocks_written:  blocks_sent,
+        crc32_written:   crc,
+        checksum_report: cs_report,
     })
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Convenience wrappers: cal-only read/write with built-in address constants
+// Convenience wrappers
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Read the full calibration region (Cal A + Cal B = 128 KB).
-/// Equivalent to flash_read(port, CAL_A_START, CAL_REGION_SIZE, cb).
 pub fn read_calibration<F>(
     port: &mut Box<dyn SerialPort>,
     on_progress: F,
@@ -465,8 +463,9 @@ where
     flash_read(port, CAL_A_START, CAL_REGION_SIZE, on_progress)
 }
 
-/// Write `data` to the calibration region starting at CAL_A_START.
+/// Write a corrected 128 KB calibration image to Cal A+B.
 /// `data` must be exactly CAL_REGION_SIZE bytes (128 KB).
+/// Checksum correction is applied automatically inside flash_write.
 pub fn write_calibration<F>(
     port: &mut Box<dyn SerialPort>,
     data: &[u8],
@@ -492,26 +491,20 @@ where
 mod tests {
     use super::*;
 
-    // ── CRC-32 ──────────────────────────────────────────────────────────────
-
     #[test]
     fn crc32_empty() {
-        // Standard CRC-32 of empty input is 0x00000000
         assert_eq!(crc32(&[]), 0x0000_0000);
     }
 
     #[test]
     fn crc32_known_vector() {
-        // CRC-32 of b"123456789" = 0xCBF43926
         assert_eq!(crc32(b"123456789"), 0xCBF4_3926);
     }
-
-    // ── Address guard ────────────────────────────────────────────────────────
 
     #[test]
     fn guard_rejects_os_region() {
         assert!(guard_write_range(0x0000_0000, 0x1000).is_err());
-        assert!(guard_write_range(0x0001_0000, 0x2000).is_err()); // overlaps OS end
+        assert!(guard_write_range(0x0001_0000, 0x2000).is_err());
     }
 
     #[test]
@@ -523,8 +516,6 @@ mod tests {
     fn guard_rejects_zero_length() {
         assert!(guard_write_range(CAL_A_START, 0).is_err());
     }
-
-    // ── Frame builders ───────────────────────────────────────────────────────
 
     fn checksum_ok(frame: &[u8]) -> bool {
         if frame.len() < 2 { return false; }
@@ -545,7 +536,7 @@ mod tests {
         let f = build_mode34_request_download(CAL_A_START, 0x100);
         assert!(checksum_ok(&f));
         assert_eq!(f[3], 0x34);
-        assert_eq!(f[4], 0x00); // no compression
+        assert_eq!(f[4], 0x00);
     }
 
     #[test]
@@ -564,11 +555,8 @@ mod tests {
         assert_eq!(f[3], 0x37);
     }
 
-    // ── Response parsers ─────────────────────────────────────────────────────
-
     #[test]
     fn parse_mode34_extracts_block_len() {
-        // 48 6B 10  74  80  cs  — block length = 0x80 = 128
         let mut f = vec![0x48u8, 0x6B, 0x10, 0x74, 0x80];
         let cs = f.iter().fold(0u8, |a, &b| a.wrapping_add(b));
         f.push(cs);
@@ -585,7 +573,6 @@ mod tests {
 
     #[test]
     fn parse_nrc_mode34_security_denied() {
-        // 7F 34 33 — security access denied
         let mut f = vec![0x48u8, 0x6B, 0x10, 0x7F, 0x34, 0x33];
         let cs = f.iter().fold(0u8, |a, &b| a.wrapping_add(b));
         f.push(cs);
@@ -609,14 +596,9 @@ mod tests {
         assert!(parse_mode37_ack(&f).is_ok());
     }
 
-    // ── Write cal size guard ─────────────────────────────────────────────────
-
     #[test]
     fn write_calibration_rejects_wrong_size() {
-        // We can't test write_calibration directly without a port,
-        // but we can test the size check via guard_write_range logic.
         let short_data = vec![0u8; 1000];
-        // Simulate what write_calibration checks:
         let result = if short_data.len() != CAL_REGION_SIZE as usize {
             Err(format!("wrong size: {}", short_data.len()))
         } else {
