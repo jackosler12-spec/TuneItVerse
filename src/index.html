@@ -380,12 +380,58 @@
       </section>
 
       <section class="content content--hidden" id="view-dtc">
-        <div class="placeholder-view">
-          <h2>DTC Fault Codes</h2>
-          <p>Detailed DTC workflows, freeze-frame data, and clear-code confirmation will be added after the read/write
-            pipeline is stable.</p>
+      <div class="dtc-panel">
+        <!-- DTC toolbar -->
+        <div class="panel-header dtc-toolbar">
+          <div class="dtc-toolbar-left">
+            <span class="panel-title">Fault Codes</span>
+            <span id="dtc-summary" class="panel-meta">No data — connect ECU to read</span>
+          </div>
+          <div class="dtc-toolbar-right">
+            <button id="btn-refresh-dtc" class="chip" title="Re-read DTCs from PCM">Refresh</button>
+            <button id="btn-clear-dtc" class="btn-sm">Clear All</button>
+          </div>
         </div>
-      </section>
+
+        <!-- Stored DTCs -->
+        <div class="dtc-section">
+          <div class="dtc-section-header">
+            <span class="dtc-section-title">Stored (Confirmed)</span>
+            <span id="dtc-stored-count" class="nav-badge">0</span>
+          </div>
+          <ul id="dtc-list-stored" class="dtc-list">
+            <li class="dtc-item dtc-empty"><span class="dtc-desc">No stored DTCs</span></li>
+          </ul>
+        </div>
+
+        <!-- Pending DTCs -->
+        <div class="dtc-section">
+          <div class="dtc-section-header">
+            <span class="dtc-section-title">Pending (Test-Failed)</span>
+            <span id="dtc-pending-count" class="nav-badge" style="background:var(--warning)">0</span>
+          </div>
+          <ul id="dtc-list-pending" class="dtc-list">
+            <li class="dtc-item dtc-empty"><span class="dtc-desc">No pending DTCs</span></li>
+          </ul>
+        </div>
+
+        <!-- Permanent DTCs -->
+        <div class="dtc-section">
+          <div class="dtc-section-header">
+            <span class="dtc-section-title">Permanent (Non-Erasable)</span>
+            <span id="dtc-permanent-count" class="nav-badge" style="background:var(--text-faint)">0</span>
+          </div>
+          <ul id="dtc-list-permanent" class="dtc-list">
+            <li class="dtc-item dtc-empty"><span class="dtc-desc">No permanent DTCs</span></li>
+          </ul>
+        </div>
+
+        <!-- Clear confirmation banner (hidden until clear is triggered) -->
+        <div id="dtc-clear-banner" class="dtc-clear-banner dtc-clear-banner--hidden">
+          <span id="dtc-clear-msg"></span>
+        </div>
+      </div>
+    </section>
 
       <section class="content content--hidden" id="view-calibration">
         <div class="placeholder-view">
