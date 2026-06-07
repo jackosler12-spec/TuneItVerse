@@ -1,0 +1,87 @@
+<ADXFORMAT version="1.01">
+  <!-- Written 11/03/2013 21:44:46 -->
+  <ADXHEADER>
+    <guid>4948f148-506d-4384-b7b8-364330319c5f</guid>
+    <flags>0x10000</flags>
+    <objectcount>44</objectcount>
+    <userversion>0.0</userversion>
+    <author>Mark Mansur</author>
+    <desc>Test definition for ELM327 plug-in.</desc>
+    <baud>9600</baud>
+    <DEFAULTS datasizeinbits="8" sigdigits="2" outputtype="3" baud="0" signed="0" lsbfirst="0" float="0" />
+    <monitorcmd>MONITOR</monitorcmd>
+  </ADXHEADER>
+
+  <ADXHISTOGRAM id="FUELHISTO" idhash="0x931F314C" title="RPM vs. Load vs. TRIM">
+    <rows>20</rows>
+    <cols>10</cols>
+    <xmin>0.000000</xmin>
+    <xmax>0.000000</xmax>
+    <ymin>0.000000</ymin>
+    <ymax>0.000000</ymax>
+    <rowval index="0" val="500.000000" />
+    <rowval index="1" val="750.000000" />
+    <rowval index="2" val="1000.000000" />
+    <rowval index="3" val="1250.000000" />
+    <rowval index="4" val="1500.000000" />
+    <rowval index="5" val="1750.000000" />
+    <rowval index="6" val="2000.000000" />
+    <rowval index="7" val="2250.000000" />
+    <rowval index="8" val="2500.000000" />
+    <rowval index="9" val="2750.000000" />
+    <rowval index="10" val="3000.000000" />
+    <rowval index="11" val="3250.000000" />
+    <rowval index="12" val="3500.000000" />
+    <rowval index="13" val="3750.000000" />
+    <rowval index="14" val="4000.000000" />
+    <rowval index="15" val="4250.000000" />
+    <rowval index="16" val="4500.000000" />
+    <rowval index="17" val="4750.000000" />
+    <rowval index="18" val="5000.000000" />
+    <rowval index="19" val="5250.000000" />
+    <colval index="0" val="10.000000" />
+    <colval index="1" val="20.000000" />
+    <colval index="2" val="30.000000" />
+    <colval index="3" val="40.000000" />
+    <colval index="4" val="50.000000" />
+    <colval index="5" val="60.000000" />
+    <colval index="6" val="70.000000" />
+    <colval index="7" val="80.000000" />
+    <colval index="8" val="90.000000" />
+    <colval index="9" val="100.000000" />
+    <historysize>10</historysize>
+    <xidhash>0xAA726CF9</xidhash>
+    <yidhash>0xCD0CD1DB</yidhash>
+    <zidhash>0x07D85EE6</zidhash>
+  </ADXHISTOGRAM>
+
+  <ADXVALUE id="BATVVAL" idhash="0xE32A726C" title="Battery Voltage">
+    <flags>0x0000000C</flags>
+    <parentcmdidhash>0xDAA89AED</parentcmdidhash>
+    <units>Volts</units>
+    <packetoffset>0x00</packetoffset>
+    <sizeinbits>16</sizeinbits>
+    <range low="0.000000" high="65.535004" />
+    <alarms low="11.500000" high="14.200000" />
+    <digcount>2</digcount>
+    <outputtype>3</outputtype>
+    <datatype>66</datatype>
+    <unittype>32</unittype>
+    <MATH equation="X / 1000">
+      <VAR varID="X" type="native" />
+    </MATH>
+  </ADXVALUE>
+
+  <ADXMONITOR id="MONITOR1" idhash="0xF9C5B75D" title="Monitor">
+    <mainbkgcolor>0x00FFFFFF</mainbkgcolor>
+    <plotbkgcolor>0x00F0F0F0</plotbkgcolor>
+    <plotoutlinecolor>0x00000000</plotoutlinecolor>
+    <titlecolor>0x00000000</titlecolor>
+    <timeaxiscolor>0x00000000</timeaxiscolor>
+    <entrycount>4</entrycount>
+    <ADXMONSERIES linecolor="0x000000" axiscolor="0x000000" itemidhash="0x00B044A9" />
+    <ADXMONSERIES linecolor="0x0080FF" axiscolor="0x0080FF" itemidhash="0x1603609E" />
+    <ADXMONSERIES linecolor="0xFF0000" axiscolor="0xFF0000" itemidhash="0xE32A726C" />
+    <ADXMONSERIES linecolor="0xFF8080" axiscolor="0xFF8080" itemidhash="0x099B4369" />
+  </ADXMONITOR>
+</ADXFORMAT>
