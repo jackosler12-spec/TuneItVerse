@@ -1,0 +1,447 @@
+<ADXFORMAT version="1.01">
+  <!-- Written 11/03/2013 21:44:46 -->
+  <ADXHEADER>
+    <guid>4948f148-506d-4384-b7b8-364330319c5f</guid>
+    <flags>0x10000</flags>
+    <objectcount>44</objectcount>
+    <userversion>0.0</userversion>
+    <author>Mark Mansur</author>
+    <desc>Test definition for ELM327 plug-in.</desc>
+    <baud>9600</baud>
+    <DEFAULTS datasizeinbits="8" sigdigits="2" outputtype="3" baud="0" signed="0" lsbfirst="0" float="0" />
+    <monitorcmd>MONITOR</monitorcmd>
+  </ADXHEADER>
+
+  <ADXHISTOGRAM id="FUELHISTO" idhash="0x931F314C" title="RPM vs. Load vs. TRIM">
+    <rows>20</rows>
+    <cols>10</cols>
+    <xmin>0.000000</xmin>
+    <xmax>0.000000</xmax>
+    <ymin>0.000000</ymin>
+    <ymax>0.000000</ymax>
+    <rowval index="0" val="500.000000" />
+    <rowval index="1" val="750.000000" />
+    <rowval index="2" val="1000.000000" />
+    <rowval index="3" val="1250.000000" />
+    <rowval index="4" val="1500.000000" />
+    <rowval index="5" val="1750.000000" />
+    <rowval index="6" val="2000.000000" />
+    <rowval index="7" val="2250.000000" />
+    <rowval index="8" val="2500.000000" />
+    <rowval index="9" val="2750.000000" />
+    <rowval index="10" val="3000.000000" />
+    <rowval index="11" val="3250.000000" />
+    <rowval index="12" val="3500.000000" />
+    <rowval index="13" val="3750.000000" />
+    <rowval index="14" val="4000.000000" />
+    <rowval index="15" val="4250.000000" />
+    <rowval index="16" val="4500.000000" />
+    <rowval index="17" val="4750.000000" />
+    <rowval index="18" val="5000.000000" />
+    <rowval index="19" val="5250.000000" />
+    <colval index="0" val="10.000000" />
+    <colval index="1" val="20.000000" />
+    <colval index="2" val="30.000000" />
+    <colval index="3" val="40.000000" />
+    <colval index="4" val="50.000000" />
+    <colval index="5" val="60.000000" />
+    <colval index="6" val="70.000000" />
+    <colval index="7" val="80.000000" />
+    <colval index="8" val="90.000000" />
+    <colval index="9" val="100.000000" />
+    <historysize>10</historysize>
+    <xidhash>0xAA726CF9</xidhash>
+    <yidhash>0xCD0CD1DB</yidhash>
+    <zidhash>0x07D85EE6</zidhash>
+  </ADXHISTOGRAM>
+
+  <ADXVALUE id="BATVVAL" idhash="0xE32A726C" title="Battery Voltage">
+    <flags>0x0000000C</flags>
+    <parentcmdidhash>0xDAA89AED</parentcmdidhash>
+    <units>Volts</units>
+    <packetoffset>0x00</packetoffset>
+    <sizeinbits>16</sizeinbits>
+    <range low="0.000000" high="65.535004" />
+    <alarms low="11.500000" high="14.200000" />
+    <digcount>2</digcount>
+    <outputtype>3</outputtype>
+    <datatype>66</datatype>
+    <unittype>32</unittype>
+    <MATH equation="X / 1000">
+      <VAR varID="X" type="native" />
+    </MATH>
+  </ADXVALUE>
+
+  <ADXMONITOR id="MONITOR1" idhash="0xF9C5B75D" title="Monitor">
+    <mainbkgcolor>0x00FFFFFF</mainbkgcolor>
+    <plotbkgcolor>0x00F0F0F0</plotbkgcolor>
+    <plotoutlinecolor>0x00000000</plotoutlinecolor>
+    <titlecolor>0x00000000</titlecolor>
+    <timeaxiscolor>0x00000000</timeaxiscolor>
+    <entrycount>4</entrycount>
+    <ADXMONSERIES linecolor="0x000000" axiscolor="0x000000" itemidhash="0x00B044A9" />
+    <ADXMONSERIES linecolor="0x0080FF" axiscolor="0x0080FF" itemidhash="0x1603609E" />
+    <ADXMONSERIES linecolor="0xFF0000" axiscolor="0xFF0000" itemidhash="0xE32A726C" />
+    <ADXMONSERIES linecolor="0xFF8080" axiscolor="0xFF8080" itemidhash="0x099B4369" />
+  </ADXMONITOR>
+
+  <ADXMONITOR id="MON2" idhash="0xAF63C8B9" title="Monitor 2">
+    <mainbkgcolor>0x00000000</mainbkgcolor>
+    <plotbkgcolor>0x003F3F3F</plotbkgcolor>
+    <plotoutlinecolor>0x00B6B6B6</plotoutlinecolor>
+    <titlecolor>0x00FFFFFF</titlecolor>
+    <timeaxiscolor>0x0000FFFF</timeaxiscolor>
+    <entrycount>3</entrycount>
+    <ADXMONSERIES linecolor="0x0000FF" axiscolor="0x0000FF" itemidhash="0xAA726CF9" />
+    <ADXMONSERIES linecolor="0x009600" axiscolor="0x009600" itemidhash="0xCD0CD1DB" />
+    <ADXMONSERIES linecolor="0xFF0000" axiscolor="0xFF0000" itemidhash="0xCD445B5B" />
+  </ADXMONITOR>
+
+  <ADXDASHBOARD id="MAINDASH" idhash="0x7A2F048C" title="Main Dash">
+    <entrycount>9</entrycount>
+    <ADXDGENTRY gaugetype="0" itemidhash="0xCD0CD1DB" left="0" top="0" right="50" bottom="50" arcmax="300" />
+    <ADXDGENTRY gaugetype="1" itemidhash="0xCD445B5B" left="0" top="50" right="25" bottom="75" />
+    <ADXDGENTRY gaugetype="0" itemidhash="0x00B044A9" left="50" top="0" right="100" bottom="50" arcmax="300" />
+    <ADXDGENTRY gaugetype="1" itemidhash="0x099B4369" left="25" top="50" right="50" bottom="75" />
+    <ADXDGENTRY gaugetype="1" itemidhash="0xAA726CF9" left="50" top="50" right="75" bottom="75" />
+    <ADXDGENTRY gaugetype="1" itemidhash="0x1603609E" left="75" top="50" right="100" bottom="75" />
+    <ADXDGENTRY gaugetype="1" itemidhash="0xE32A726C" left="0" top="75" right="25" bottom="100" />
+    <ADXDGENTRY gaugetype="1" itemidhash="0x07D85EE6" left="25" top="75" right="50" bottom="100" />
+    <ADXDGENTRY gaugetype="1" itemidhash="0x07D2FEE6" left="50" top="75" right="75" bottom="100" />
+  </ADXDASHBOARD>
+
+  <ADXLISTVIEW id="MAINLIST" idhash="0x7F6896CC" title="Main List">
+    <entrycount>11</entrycount>
+    <ADXLVENTRY entrytype="0" itemidhash="0x00CCC4A9" />
+    <ADXLVENTRY entrytype="0" itemidhash="0x00B044A9" />
+    <ADXLVENTRY entrytype="0" itemidhash="0xCD0CD1DB" />
+    <ADXLVENTRY entrytype="0" itemidhash="0xAA726CF9" />
+    <ADXLVENTRY entrytype="0" itemidhash="0x1603609E" />
+    <ADXLVENTRY entrytype="0" itemidhash="0xF09B4356" />
+    <ADXLVENTRY entrytype="0" itemidhash="0xCD445B5B" />
+    <ADXLVENTRY entrytype="0" itemidhash="0x099B4369" />
+    <ADXLVENTRY entrytype="0" itemidhash="0xE32A726C" />
+    <ADXLVENTRY entrytype="0" itemidhash="0x07D85EE6" />
+    <ADXLVENTRY entrytype="0" itemidhash="0x07D2FEE6" />
+  </ADXLISTVIEW>
+
+  <ADXMACRO id="MONITOR" idhash="0xEFCE2DD1" title="Monitor Macro" basecmdflags="0x01" repeatcount="1">
+    <NODE commandID="LOADMACRO" repeatcount="1" />
+    <NODE commandID="RPMMACRO" repeatcount="1" />
+    <NODE commandID="TPM" repeatcount="1" />
+    <NODE commandID="CTSMACRO" repeatcount="1" />
+    <NODE commandID="VSSMACRO" repeatcount="1" />
+    <NODE commandID="ADVMACRO" repeatcount="1" />
+    <NODE commandID="BATVMACRO" repeatcount="1" />
+    <NODE commandID="STFTB1MACRO" repeatcount="1" />
+    <NODE commandID="LTFTB1MACRO" repeatcount="1" />
+  </ADXMACRO>
+
+  <ADXCSENDCOMMAND id="STFB1REQ" idhash="0xC3408AF8" title="Short Term Fuel Trim Bank 1 Req (MO1P06)">
+    <desc>&apos;M&apos; &apos;0&apos; &apos;1&apos; &apos;P&apos; &apos;0&apos; &apos;6&apos; &apos;S&apos; &apos;0&apos; &apos;1&apos; &apos;R&apos; &apos;1&apos;</desc>
+    <bytestring size="0xB">4D30315030365330315231</bytestring>
+  </ADXCSENDCOMMAND>
+
+  <ADXCLISTENPACKET id="STFTB1REPLY" idhash="0x121AB17E" title="Short Term Fuel Trim Bank 1 Reply" flags="0x00000005">
+    <listentimeout>400</listentimeout>
+    <packetbodylength>1</packetbodylength>
+    <packetoffsetinbody>0</packetoffsetinbody>
+    <packetsize>1</packetsize>
+  </ADXCLISTENPACKET>
+
+  <ADXMACRO id="STFTB1MACRO" idhash="0xC9444B1F" title="Short Term Fuel Trim Bank 1 Macro" basecmdflags="0x01" repeatcount="1">
+    <NODE commandID="STFB1REQ" repeatcount="1" />
+    <NODE commandID="STFTB1REPLY" repeatcount="1" />
+  </ADXMACRO>
+
+  <ADXCSENDCOMMAND id="LTFTB1REQ" idhash="0x078E2626" title="Long Term Fuel Trim Bank 1 Req (M01P07)">
+    <desc>&apos;M&apos; &apos;0&apos; &apos;1&apos; &apos;P&apos; &apos;0&apos; &apos;7&apos; &apos;S&apos; &apos;0&apos; &apos;1&apos; &apos;R&apos; &apos;1&apos;</desc>
+    <bytestring size="0xB">4D30315030375330315231</bytestring>
+  </ADXCSENDCOMMAND>
+
+  <ADXCLISTENPACKET id="LTFTB1REPLY" idhash="0x389AB17E" title="Long Term Fuel Trim Bank 1 Reply" flags="0x00000005">
+    <listentimeout>400</listentimeout>
+    <packetbodylength>1</packetbodylength>
+    <packetoffsetinbody>0</packetoffsetinbody>
+    <packetsize>1</packetsize>
+  </ADXCLISTENPACKET>
+
+  <ADXMACRO id="LTFTB1MACRO" idhash="0xE3C44B1F" title="Long Term Fuel Trim Bank 1 Macro" basecmdflags="0x01" repeatcount="1">
+    <NODE commandID="LTFTB1REQ" repeatcount="1" />
+    <NODE commandID="LTFTB1REPLY" repeatcount="1" />
+  </ADXMACRO>
+
+  <ADXCSENDCOMMAND id="BATVREQ" idhash="0xE376AAAC" title="Battery Voltage Request (M01P42)">
+    <desc>&apos;M&apos; &apos;0&apos; &apos;1&apos; &apos;P&apos; &apos;4&apos; &apos;2&apos; &apos;S&apos; &apos;0&apos; &apos;2&apos; &apos;R&apos; &apos;1&apos;</desc>
+    <bytestring size="0xB">4D30315034325330325231</bytestring>
+  </ADXCSENDCOMMAND>
+
+  <ADXCLISTENPACKET id="BATVREPLY" idhash="0xDAA89AED" title="Battery Voltage Reply" flags="0x00000005">
+    <listentimeout>400</listentimeout>
+    <packetbodylength>2</packetbodylength>
+    <packetoffsetinbody>0</packetoffsetinbody>
+    <packetsize>2</packetsize>
+  </ADXCLISTENPACKET>
+
+  <ADXMACRO id="BATVMACRO" idhash="0x01F6608C" title="Battery Voltage Macro" basecmdflags="0x01" repeatcount="1">
+    <NODE commandID="BATVREQ" repeatcount="1" />
+    <NODE commandID="BATVREPLY" repeatcount="1" />
+  </ADXMACRO>
+
+  <ADXCSENDCOMMAND id="ADVREQ" idhash="0x09C79BA9" title="Spark Advance Request (M01P0E)">
+    <desc>&apos;M&apos; &apos;0&apos; &apos;1&apos; &apos;P&apos; &apos;0&apos; &apos;E&apos; &apos;S&apos; &apos;0&apos; &apos;1&apos; &apos;R&apos; &apos;1&apos;</desc>
+    <bytestring size="0xB">4D30315030455330315231</bytestring>
+  </ADXCSENDCOMMAND>
+
+  <ADXCLISTENPACKET id="ADVREPLY" idhash="0x1E6C8D47" title="Spark Advance Reply" flags="0x00000005">
+    <listentimeout>400</listentimeout>
+    <packetbodylength>1</packetbodylength>
+    <packetoffsetinbody>0</packetoffsetinbody>
+    <packetsize>1</packetsize>
+  </ADXCLISTENPACKET>
+
+  <ADXMACRO id="ADVMACRO" idhash="0xC5327726" title="Spark Advance Macro" basecmdflags="0x01" repeatcount="1">
+    <NODE commandID="ADVREQ" repeatcount="1" />
+    <NODE commandID="ADVREPLY" repeatcount="1" />
+  </ADXMACRO>
+
+  <ADXMACRO id="CTSMACRO" idhash="0xC53288C2" title="Coolant Temp Macro" basecmdflags="0x01" repeatcount="1">
+    <NODE commandID="CTSREQ" repeatcount="1" />
+    <NODE commandID="CTSREPLY" repeatcount="1" />
+  </ADXMACRO>
+
+  <ADXCSENDCOMMAND id="CTSREQ" idhash="0xF0C79B96" title="Coolant Temp Request (M01P05)">
+    <desc>&apos;M&apos; &apos;0&apos; &apos;1&apos; &apos;P&apos; &apos;0&apos; &apos;5&apos; &apos;S&apos; &apos;0&apos; &apos;1&apos; &apos;R&apos; &apos;1&apos;</desc>
+    <bytestring size="0xB">4D30315030355330315231</bytestring>
+  </ADXCSENDCOMMAND>
+
+  <ADXCLISTENPACKET id="CTSREPLY" idhash="0x1E6C72A3" title="Coolant Temp Reply" flags="0x00000005">
+    <listentimeout>400</listentimeout>
+    <packetbodylength>1</packetbodylength>
+    <packetoffsetinbody>0</packetoffsetinbody>
+    <packetsize>1</packetsize>
+  </ADXCLISTENPACKET>
+
+  <ADXCLISTENPACKET id="VSSREPLY" idhash="0x1E6C0D63" title="Vehicle Speed Reply" flags="0x00000005">
+    <listentimeout>400</listentimeout>
+    <packetbodylength>1</packetbodylength>
+    <packetoffsetinbody>0</packetoffsetinbody>
+    <packetsize>1</packetsize>
+  </ADXCLISTENPACKET>
+
+  <ADXCSENDCOMMAND id="REQVSS" idhash="0xC9A809C6" title="Vehicle Speed Request (M01P0D)">
+    <desc>&apos;M&apos; &apos;0&apos; &apos;1&apos; &apos;P&apos; &apos;0&apos; &apos;D&apos; &apos;S&apos; &apos;0&apos; &apos;1&apos; &apos;R&apos; &apos;1&apos;</desc>
+    <bytestring size="0xB">4D30315030445330315231</bytestring>
+  </ADXCSENDCOMMAND>
+
+  <ADXMACRO id="VSSMACRO" idhash="0xC532F702" title="Vehicle Speed Macro" basecmdflags="0x01" repeatcount="1">
+    <NODE commandID="REQVSS" repeatcount="1" />
+    <NODE commandID="VSSREPLY" repeatcount="1" />
+  </ADXMACRO>
+
+  <ADXCLISTENPACKET id="LOADREPLY" idhash="0x5AA24DB8" title="Engine Load Reply" flags="0x00000005">
+    <listentimeout>100</listentimeout>
+    <packetbodylength>1</packetbodylength>
+    <packetoffsetinbody>0</packetoffsetinbody>
+    <packetsize>1</packetsize>
+  </ADXCLISTENPACKET>
+
+  <ADXVALUE id="LOAD" idhash="0xAA726CF9" title="Engine Load">
+    <flags>0x0000000C</flags>
+    <parentcmdidhash>0x5AA24DB8</parentcmdidhash>
+    <units>%</units>
+    <packetoffset>0x00</packetoffset>
+    <range low="0.000000" high="100.000000" />
+    <alarms low="10.000000" high="90.000000" />
+    <digcount>1</digcount>
+    <outputtype>3</outputtype>
+    <datatype>23</datatype>
+    <unittype>67</unittype>
+    <MATH equation="X * 100 / 255">
+      <VAR varID="X" type="native" />
+    </MATH>
+  </ADXVALUE>
+
+  <ADXVALUE id="CTSVAL" idhash="0xF09B4356" title="Coolant Temp (Deg C)">
+    <flags>0x0000000C</flags>
+    <parentcmdidhash>0x1E6C72A3</parentcmdidhash>
+    <units>Deg C</units>
+    <packetoffset>0x00</packetoffset>
+    <range low="-40.000000" high="215.000000" />
+    <alarms low="0.000000" high="100.000000" />
+    <digcount>2</digcount>
+    <outputtype>3</outputtype>
+    <datatype>13</datatype>
+    <unittype>15</unittype>
+    <MATH equation="X-40">
+      <VAR varID="X" type="native" />
+    </MATH>
+  </ADXVALUE>
+
+  <ADXVALUE id="CTSDEGF" idhash="0x1603609E" title="Coolant Temp (Deg F)">
+    <flags>0x0000000C</flags>
+    <parentcmdidhash>0x1E6C72A3</parentcmdidhash>
+    <units>Def F</units>
+    <packetoffset>0x00</packetoffset>
+    <range low="-40.000000" high="250.000000" />
+    <alarms low="32.000000" high="200.000000" />
+    <digcount>2</digcount>
+    <outputtype>3</outputtype>
+    <datatype>13</datatype>
+    <unittype>14</unittype>
+    <MATH equation="((X - 40) * 1.8) + 32">
+      <VAR varID="X" type="native" />
+    </MATH>
+  </ADXVALUE>
+
+  <ADXVALUE id="RPM" idhash="0xCD0CD1DB" title="Engine Speed">
+    <flags>0x0000000C</flags>
+    <parentcmdidhash>0x1E6CB0C2</parentcmdidhash>
+    <units>RPM</units>
+    <packetoffset>0x00</packetoffset>
+    <sizeinbits>16</sizeinbits>
+    <range low="0.000000" high="8000.000000" />
+    <alarms low="500.000000" high="7000.000000" />
+    <digcount>1</digcount>
+    <outputtype>3</outputtype>
+    <datatype>6</datatype>
+    <unittype>4</unittype>
+    <MATH equation="X / 4">
+      <VAR varID="X" type="native" />
+    </MATH>
+  </ADXVALUE>
+
+  <ADXVALUE id="TPV" idhash="0xCD445B5B" title="Throttle Position">
+    <flags>0x00000004</flags>
+    <parentcmdidhash>0xCD444C7B</parentcmdidhash>
+    <units>%</units>
+    <packetoffset>0x00</packetoffset>
+    <range low="0.000000" high="100.000000" />
+    <alarms low="0.000000" high="90.000000" />
+    <digcount>1</digcount>
+    <outputtype>3</outputtype>
+    <datatype>57</datatype>
+    <unittype>67</unittype>
+    <MATH equation="X * 100 / 255">
+      <VAR varID="X" type="native" />
+    </MATH>
+  </ADXVALUE>
+
+  <ADXVALUE id="VSSMPH" idhash="0x00B044A9" title="Vehicle Speed (MPH)">
+    <parentcmdidhash>0x1E6C0D63</parentcmdidhash>
+    <units>MPH</units>
+    <packetoffset>0x00</packetoffset>
+    <range low="0.000000" high="255.000000" />
+    <alarms low="0.000000" high="255.000000" />
+    <digcount>2</digcount>
+    <outputtype>3</outputtype>
+    <datatype>5</datatype>
+    <unittype>5</unittype>
+    <MATH equation="X * 0.621371">
+      <VAR varID="X" type="native" />
+    </MATH>
+  </ADXVALUE>
+
+  <ADXVALUE id="VSSKPH" idhash="0x00CCC4A9" title="Vehicle Speed (KPH)">
+    <parentcmdidhash>0x1E6C0D63</parentcmdidhash>
+    <packetoffset>0x00</packetoffset>
+    <range low="0.000000" high="255.000000" />
+    <alarms low="0.000000" high="255.000000" />
+    <digcount>2</digcount>
+    <outputtype>3</outputtype>
+    <datatype>5</datatype>
+    <unittype>6</unittype>
+    <MATH equation="X">
+      <VAR varID="X" type="native" />
+    </MATH>
+  </ADXVALUE>
+
+  <ADXVALUE id="ADVVAL" idhash="0x099B4369" title="Spark Advance">
+    <parentcmdidhash>0x1E6C8D47</parentcmdidhash>
+    <units>Deg Total</units>
+    <packetoffset>0x00</packetoffset>
+    <range low="0.000000" high="255.000000" />
+    <alarms low="0.000000" high="255.000000" />
+    <digcount>2</digcount>
+    <outputtype>3</outputtype>
+    <datatype>38</datatype>
+    <unittype>23</unittype>
+    <MATH equation="X / 2 - 64">
+      <VAR varID="X" type="native" />
+    </MATH>
+  </ADXVALUE>
+
+  <ADXVALUE id="STFTB1VAL" idhash="0x07D85EE6" title="Short Term Fuel Trim - Bank 1">
+    <flags>0x0000000C</flags>
+    <parentcmdidhash>0x121AB17E</parentcmdidhash>
+    <units>%</units>
+    <packetoffset>0x00</packetoffset>
+    <range low="-100.000000" high="100.000000" />
+    <alarms low="-25.000000" high="25.000000" />
+    <digcount>2</digcount>
+    <outputtype>3</outputtype>
+    <datatype>50</datatype>
+    <unittype>67</unittype>
+    <MATH equation="(X-128) * 0.78125">
+      <VAR varID="X" type="native" />
+    </MATH>
+  </ADXVALUE>
+
+  <ADXVALUE id="LTFTB1VAL" idhash="0x07D2FEE6" title="Long Term Fuel Trim - Bank 1">
+    <flags>0x0000000C</flags>
+    <parentcmdidhash>0x389AB17E</parentcmdidhash>
+    <units>%</units>
+    <packetoffset>0x00</packetoffset>
+    <range low="-100.000000" high="100.000000" />
+    <alarms low="-25.000000" high="25.000000" />
+    <digcount>2</digcount>
+    <outputtype>3</outputtype>
+    <datatype>49</datatype>
+    <unittype>67</unittype>
+    <MATH equation="(X-128) * 0.78125">
+      <VAR varID="X" type="native" />
+    </MATH>
+  </ADXVALUE>
+
+  <ADXCSENDCOMMAND id="M01P04" idhash="0x43EA887C" title="Request Engine Load (M01P04)">
+    <desc>&apos;M&apos; &apos;0&apos; &apos;1&apos; &apos;P&apos; &apos;0&apos; &apos;4&apos; &apos;S&apos; &apos;0&apos; &apos;1&apos; &apos;R&apos; &apos;1&apos;&#013;&#010;for Mode 1, PID 4, Expected Size 1, 1 reply.</desc>
+    <bytestring size="0xB">4D30315030345330315231</bytestring>
+  </ADXCSENDCOMMAND>
+
+  <ADXMACRO id="LOADMACRO" idhash="0x81FCB7D9" title="Engine Load Macro" repeatcount="1">
+    <NODE flags="0x00000001" commandID="M01P04" repeatcount="1" />
+    <NODE commandID="LOADREPLY" repeatcount="1" />
+  </ADXMACRO>
+
+  <ADXCSENDCOMMAND id="REQUESTRPM" idhash="0x9827A2F0" title="Request RPM (M01P0C)">
+    <bytestring size="0xB">4D30315030435330325231</bytestring>
+  </ADXCSENDCOMMAND>
+
+  <ADXCLISTENPACKET id="RPMREPLY" idhash="0x1E6CB0C2" title="RPM Reply" flags="0x00000005">
+    <listentimeout>400</listentimeout>
+    <packetbodylength>2</packetbodylength>
+    <packetoffsetinbody>0</packetoffsetinbody>
+    <packetsize>2</packetsize>
+  </ADXCLISTENPACKET>
+
+  <ADXMACRO id="RPMMACRO" idhash="0xC5324AA3" title="RPM Macro" basecmdflags="0x01" repeatcount="1">
+    <NODE flags="0x00000001" commandID="REQUESTRPM" repeatcount="1" />
+    <NODE commandID="RPMREPLY" repeatcount="1" />
+  </ADXMACRO>
+
+  <ADXCSENDCOMMAND id="RTP" idhash="0xCD0F73DB" title="Request Throttle Position (M01P11)">
+    <bytestring size="0xB">4D30315031315330315231</bytestring>
+  </ADXCSENDCOMMAND>
+
+  <ADXCLISTENPACKET id="TPR" idhash="0xCD444C7B" title="Throttle Position Reply" flags="0x00000005">
+    <listentimeout>400</listentimeout>
+    <packetbodylength>1</packetbodylength>
+    <packetoffsetinbody>0</packetoffsetinbody>
+    <packetsize>1</packetsize>
+  </ADXCLISTENPACKET>
+
+  <ADXMACRO id="TPM" idhash="0xCD4451DB" title="Throttle Position Macro" basecmdflags="0x01" repeatcount="1">
+    <NODE flags="0x00000001" commandID="RTP" repeatcount="1" />
+    <NODE commandID="TPR" repeatcount="1" />
+  </ADXMACRO>
+</ADXFORMAT>
