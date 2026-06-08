@@ -6,6 +6,7 @@
 //! Stage 3b: P01 calibration checksum correction via checksum.rs
 //! Stage 4:  DTC read / clear / freeze frame via dtc.rs
 //! Stage 5:  ECU identification, full PCM backup, BIN validation (real implementation)
+//! Stage 6:  write_calibration command alias; JS byte-passing fixes
 //! Protocol: J1850 VPW via USB-serial bridge @ 115200 baud
 
 pub mod checksum;
@@ -72,7 +73,6 @@ struct RawFrame {
 // Stage 5 wire types — identification, backup, BIN validation
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Returned by `read_properties` — ECU identity fields read via Mode 22 DIDs.
 #[derive(Serialize, Clone)]
 struct EcuProperties {
     os_id:    String,
@@ -83,7 +83,6 @@ struct EcuProperties {
     status:   String,
 }
 
-/// Returned by `read_entire_pcm` — full 512 KiB flash backup result.
 #[derive(Serialize, Clone)]
 struct PcmBackupResult {
     file_name:  String,
@@ -92,7 +91,6 @@ struct PcmBackupResult {
     message:    String,
 }
 
-/// Returned by `validate_bin` — pre-flash preflight checks.
 #[derive(Serialize, Clone)]
 struct BinValidationResult {
     detected_os_id: String,
@@ -101,7 +99,6 @@ struct BinValidationResult {
     message:        String,
 }
 
-/// Returned by `compare_bin_to_ecu` — diff summary.
 #[derive(Serialize, Clone)]
 struct BinCompareResult {
     compatibility: String,
@@ -109,7 +106,6 @@ struct BinCompareResult {
     summary:       String,
 }
 
-/// Returned by `write_os_calibration` and `verify_after_write`.
 #[derive(Serialize, Clone)]
 struct WriteResult {
     success: bool,
@@ -117,7 +113,7 @@ struct WriteResult {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// J1850 VPW frame helpers  (pub(crate) so security.rs + flash.rs + dtc.rs)
+// J1850 VPW frame helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
 pub(crate) fn build_pid_request(pid: u8) -> Vec<u8> {
@@ -175,7 +171,7 @@ fn parse_mode22_response(frame: &[u8], expected_pid: u16) -> Option<Vec<u8>> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Serial I/O  (pub(crate))
+// Serial I/O
 // ─────────────────────────────────────────────────────────────────────────────
 
 pub(crate) fn write_frame(port: &mut Box<dyn SerialPort>, frame: &[u8]) -> Result<(), String> {
@@ -554,7 +550,6 @@ fn read_ecu_data(state: tauri::State<AppState>) -> Result<EcuTelemetry, String> 
 // Stage 5: helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// SHA-256 hex string from a byte slice.
 fn sha256_hex(data: &[u8]) -> String {
     let mut hasher = Sha256::new();
     hasher.update(data);
@@ -562,26 +557,14 @@ fn sha256_hex(data: &[u8]) -> String {
     result.iter().map(|b| format!("{:02x}", b)).collect()
 }
 
-/// Attempt to read the OS/calibration part number from bytes in Cal A.
-///
-/// On P01 / 0411 images the calibration part number (8 ASCII digits or a
-/// big-endian u32) is stored at the last 4 bytes of the first 32 KB sub-block,
-/// i.e. relative offset 0x7FFC in Cal A (absolute offset 0x0002_7FFC).
-/// Falls back to inspecting 4 bytes and formatting as hex if not printable ASCII.
 fn detect_os_id_from_bytes(data: &[u8]) -> String {
-    // Support both a full 512 KiB image (Cal A starts at 0x20000)
-    // and a 128 KiB calibration-only image (Cal A at offset 0).
     let cal_a_offset: usize = if data.len() >= 0x28000 { 0x20000 } else { 0 };
     let id_off = cal_a_offset + 0x7FFC;
-    if id_off + 4 > data.len() {
-        return "unknown".to_string();
-    }
+    if id_off + 4 > data.len() { return "unknown".to_string(); }
     let raw = &data[id_off..id_off + 4];
-    // If all 4 bytes are printable ASCII digits, format as a string.
     if raw.iter().all(|&b| b.is_ascii_digit()) {
         return String::from_utf8_lossy(raw).to_string();
     }
-    // Otherwise format as big-endian hex part number.
     let num = u32::from_be_bytes([raw[0], raw[1], raw[2], raw[3]]);
     if num != 0 && num != 0xFFFF_FFFF {
         return format!("{:08X}", num);
@@ -590,68 +573,38 @@ fn detect_os_id_from_bytes(data: &[u8]) -> String {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Tauri commands — Stage 5: ECU identification, PCM backup, BIN validation
+// Tauri commands — Stage 5
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Read ECU identity properties via Mode 22 DIDs.
-///
-/// DIDs used on P01/P59:
-///   0x0100 — OS ID (calibration part number, 4 bytes big-endian)
-///   0x0090 — VIN (17-byte ASCII)
-///   0x0050 — Hardware part number (4 bytes big-endian)
-///
-/// Each DID is attempted independently; a failure on one DID does not abort
-/// the command — the field is set to "read error" so the others still display.
 #[tauri::command]
 fn read_properties(state: tauri::State<AppState>) -> Result<EcuProperties, String> {
     let mut port_guard = state.port.lock().map_err(|_| "Lock failed".to_string())?;
     let port = port_guard.as_mut().ok_or("No connection — connect to the ECU first.".to_string())?;
 
-    // DID 0x0100 — OS / calibration part number (4 bytes → decimal string)
     let os_id = match request_pid22(port, 0x0100) {
-        Ok(r) if r.len() >= 4 => {
-            let num = u32::from_be_bytes([r[0], r[1], r[2], r[3]]);
-            format!("{}", num)
-        }
+        Ok(r) if r.len() >= 4 => format!("{}", u32::from_be_bytes([r[0], r[1], r[2], r[3]])),
         Ok(r) => format!("short response ({} bytes)", r.len()),
         Err(e) => format!("read error: {}", e),
     };
-
-    // DID 0x0090 — VIN (17 ASCII bytes)
     let vin = match request_pid22(port, 0x0090) {
-        Ok(r) if r.len() >= 17 => {
-            String::from_utf8_lossy(&r[..17]).trim().to_string()
-        }
+        Ok(r) if r.len() >= 17 => String::from_utf8_lossy(&r[..17]).trim().to_string(),
         Ok(r) => format!("short response ({} bytes)", r.len()),
         Err(e) => format!("read error: {}", e),
     };
-
-    // DID 0x0050 — Hardware part number (4 bytes → decimal string)
     let hardware = match request_pid22(port, 0x0050) {
-        Ok(r) if r.len() >= 4 => {
-            let num = u32::from_be_bytes([r[0], r[1], r[2], r[3]]);
-            format!("{}", num)
-        }
+        Ok(r) if r.len() >= 4 => format!("{}", u32::from_be_bytes([r[0], r[1], r[2], r[3]])),
         Ok(r) => format!("short response ({} bytes)", r.len()),
         Err(e) => format!("read error: {}", e),
     };
 
     Ok(EcuProperties {
-        os_id,
-        vin,
-        hardware,
+        os_id, vin, hardware,
         ecu_type: "P01 / 0411".to_string(),
         protocol: "GM J1850 VPW @ 10.4 kbps".to_string(),
         status:   "Identified".to_string(),
     })
 }
 
-/// Read entire PCM flash (512 KiB = 0x80000 bytes) via Mode 23.
-///
-/// Reads address range 0x0000_0000–0x0007_FFFF using flash::flash_read
-/// in 240-byte chunks.  Emits flash-progress events throughout.
-/// SHA-256 hashes the result and saves to a timestamped .bin file in
-/// the Tauri app-local-data directory.
 #[tauri::command]
 fn read_entire_pcm(
     app: tauri::AppHandle,
@@ -661,19 +614,16 @@ fn read_entire_pcm(
     use tauri::Manager;
     use std::io::Write as _;
 
-    const FULL_SIZE: u32 = 0x0008_0000; // 512 KiB
+    const FULL_SIZE: u32 = 0x0008_0000;
 
     let mut port_guard = state.port.lock().map_err(|_| "Lock failed".to_string())?;
     let port = port_guard.as_mut().ok_or("No connection — connect to the ECU first.".to_string())?;
 
-    // Read all 512 KiB, emitting progress events
     let result = flash_read(port, 0x0000_0000, FULL_SIZE, |p: FlashProgress| {
         let _ = app.emit("flash-progress", &p);
     }).map_err(|e| format!("PCM read failed: {}", e))?;
 
     let hash = sha256_hex(&result.data);
-
-    // Build a timestamped filename and save to app-local-data dir
     let ts = chrono::Local::now().format("%Y%m%d_%H%M%S");
     let file_name = format!("pcm_backup_{}.bin", ts);
 
@@ -685,15 +635,9 @@ fn read_entire_pcm(
 
     let saved_name = match save_path {
         Ok(path) => {
-            if let Some(parent) = path.parent() {
-                let _ = std::fs::create_dir_all(parent);
-            }
+            if let Some(parent) = path.parent() { let _ = std::fs::create_dir_all(parent); }
             match std::fs::File::create(&path) {
-                Ok(mut f) => {
-                    f.write_all(&result.data)
-                        .map_err(|e| format!("Write failed: {}", e))?;
-                    path.to_string_lossy().to_string()
-                }
+                Ok(mut f) => { f.write_all(&result.data).map_err(|e| format!("Write failed: {}", e))?; path.to_string_lossy().to_string() }
                 Err(e) => format!("save failed ({}): {}", file_name, e),
             }
         }
@@ -704,59 +648,33 @@ fn read_entire_pcm(
         file_name:  saved_name,
         size_bytes: result.length,
         sha256:     hash,
-        message:    format!(
-            "Full PCM backup complete. {} bytes read, CRC-32: 0x{:08X}.",
-            result.length, result.crc32
-        ),
+        message:    format!("Full PCM backup complete. {} bytes read, CRC-32: 0x{:08X}.", result.length, result.crc32),
     })
 }
 
-/// Validate a BIN file before writing.
-///
-/// Accepts raw file bytes from the frontend (use JS FileReader to read
-/// the file as a Uint8Array and pass it here).
-///
-/// Checks:
-///   1. Size: must be exactly 131072 bytes (128 KiB cal image) or
-///      524288 bytes (512 KiB full image).
-///   2. OS ID detection from cal block A header bytes.
-///   3. Checksum validation via checksum::validate_checksums
-///      (cal images only; 512 KiB images are too large for cal checksum
-///      since only the cal region carries P01 cal checksums).
 #[tauri::command]
 fn validate_bin(file_bytes: Vec<u8>) -> Result<BinValidationResult, String> {
     let size = file_bytes.len();
-
     let (compat, checksum_ok, cs_msg) = match size {
-        131072 => {
-            // 128 KiB — calibration-only image; run full checksum validation
-            match validate_checksums(&file_bytes) {
-                Ok(report) => {
-                    let msg = if report.all_valid {
-                        format!("All {} checksum regions valid.", report.regions.len())
-                    } else {
-                        format!(
-                            "{} region(s) invalid (use correct_cal_checksum to fix).",
-                            report.failed_count
-                        )
-                    };
-                    ("Compatible — 128 KiB calibration image", report.all_valid, msg)
-                }
-                Err(e) => ("Incompatible", false, format!("Checksum error: {}", e)),
+        131072 => match validate_checksums(&file_bytes) {
+            Ok(report) => {
+                let msg = if report.all_valid {
+                    format!("All {} checksum regions valid.", report.regions.len())
+                } else {
+                    format!("{} region(s) invalid.", report.failed_count)
+                };
+                ("Compatible — 128 KiB calibration image", report.all_valid, msg)
             }
-        }
+            Err(e) => ("Incompatible", false, format!("Checksum error: {}", e)),
+        },
         524288 => {
-            // 512 KiB — full PCM image; validate cal region slice (offset 0x20000, 128 KiB)
             let cal_slice = &file_bytes[0x20000..0x20000 + CAL_IMAGE_SIZE];
             match validate_checksums(cal_slice) {
                 Ok(report) => {
                     let msg = if report.all_valid {
-                        "Calibration region checksums valid (512 KiB full image).".to_string()
+                        "Cal region checksums valid (512 KiB full image).".to_string()
                     } else {
-                        format!(
-                            "{} cal region(s) invalid in full image.",
-                            report.failed_count
-                        )
+                        format!("{} cal region(s) invalid in full image.", report.failed_count)
                     };
                     ("Compatible — 512 KiB full PCM image", report.all_valid, msg)
                 }
@@ -766,13 +684,11 @@ fn validate_bin(file_bytes: Vec<u8>) -> Result<BinValidationResult, String> {
         _ => (
             "Incompatible — unexpected file size",
             false,
-            format!("Expected 131072 (128 KiB) or 524288 (512 KiB) bytes, got {}.", size),
+            format!("Expected 131072 or 524288 bytes, got {}.", size),
         ),
     };
-
     let detected_os_id = detect_os_id_from_bytes(&file_bytes);
     let crc = flash_crc32(&file_bytes);
-
     Ok(BinValidationResult {
         detected_os_id,
         checksum_ok,
@@ -781,14 +697,6 @@ fn validate_bin(file_bytes: Vec<u8>) -> Result<BinValidationResult, String> {
     })
 }
 
-/// Compare a BIN file to the currently flashed ECU calibration region.
-///
-/// Reads the live 128 KiB calibration from the ECU via Mode 23, then
-/// diffs the supplied file bytes against it in 256-byte blocks.
-/// Reports the number of differing blocks and a mismatch percentage.
-///
-/// `file_bytes` must be exactly CAL_IMAGE_SIZE (131072) bytes — this
-/// command compares calibration regions only.
 #[tauri::command]
 fn compare_bin_to_ecu(
     file_bytes: Vec<u8>,
@@ -796,75 +704,77 @@ fn compare_bin_to_ecu(
     state: tauri::State<AppState>,
 ) -> Result<BinCompareResult, String> {
     use tauri::Emitter;
-
     if file_bytes.len() != CAL_IMAGE_SIZE {
-        return Err(format!(
-            "compare_bin_to_ecu expects a 128 KiB calibration image ({} bytes), got {}.",
-            CAL_IMAGE_SIZE, file_bytes.len()
-        ));
+        return Err(format!("Expected {} bytes (128 KiB), got {}.", CAL_IMAGE_SIZE, file_bytes.len()));
     }
-
     let mut port_guard = state.port.lock().map_err(|_| "Lock failed".to_string())?;
     let port = port_guard.as_mut().ok_or("No connection — connect to the ECU first.".to_string())?;
-
-    // Read live cal from ECU
-    let ecu_cal = read_calibration(port, |p: FlashProgress| {
-        let _ = app.emit("flash-progress", &p);
-    }).map_err(|e| format!("ECU cal read failed: {}", e))?;
-
+    let ecu_cal = read_calibration(port, |p: FlashProgress| { let _ = app.emit("flash-progress", &p); })
+        .map_err(|e| format!("ECU cal read failed: {}", e))?;
     if ecu_cal.data.len() != CAL_IMAGE_SIZE {
-        return Err(format!(
-            "ECU returned {} bytes, expected {} (128 KiB).",
-            ecu_cal.data.len(), CAL_IMAGE_SIZE
-        ));
+        return Err(format!("ECU returned {} bytes, expected {}.", ecu_cal.data.len(), CAL_IMAGE_SIZE));
     }
-
-    // Diff in 256-byte blocks
     const BLOCK: usize = 256;
     let total_blocks = CAL_IMAGE_SIZE / BLOCK;
     let mut diff_blocks: u32 = 0;
-
     for i in 0..total_blocks {
         let start = i * BLOCK;
         let end   = start + BLOCK;
-        if file_bytes[start..end] != ecu_cal.data[start..end] {
-            diff_blocks += 1;
-        }
+        if file_bytes[start..end] != ecu_cal.data[start..end] { diff_blocks += 1; }
     }
-
     let pct = (diff_blocks as f32 / total_blocks as f32) * 100.0;
-    let compat = if diff_blocks == 0 {
-        "Identical"
-    } else if pct < 25.0 {
-        "Compatible — minor calibration differences"
-    } else {
-        "Different — significant divergence from ECU"
-    };
-
+    let compat = if diff_blocks == 0 { "Identical" }
+        else if pct < 25.0 { "Compatible — minor calibration differences" }
+        else { "Different — significant divergence from ECU" };
     Ok(BinCompareResult {
         compatibility: compat.to_string(),
         diff_regions:  diff_blocks,
         summary: format!(
-            "{} of {} blocks differ ({:.1}% mismatch). \
-             File CRC-32: 0x{:08X}, ECU CRC-32: 0x{:08X}.",
-            diff_blocks, total_blocks, pct,
-            flash_crc32(&file_bytes), ecu_cal.crc32
+            "{} of {} blocks differ ({:.1}% mismatch). File CRC-32: 0x{:08X}, ECU CRC-32: 0x{:08X}.",
+            diff_blocks, total_blocks, pct, flash_crc32(&file_bytes), ecu_cal.crc32
         ),
     })
 }
 
-/// Write a calibration image to the ECU (Cal A + Cal B, 128 KiB).
-///
-/// Requires Level 2 security.  Accepts raw calibration bytes from the
-/// frontend (JS FileReader → Uint8Array).  Steps:
-///   1. Level 2 security gate.
-///   2. Reject 512 KiB full images — OS region writes are not supported
-///      (call flash_write_region directly if you need OS-level access).
-///   3. Checksum correction via correct_and_validate_checksums.
-///   4. Flash write via flash::write_calibration (Mode 34/36/37).
-///   5. Emit flash-progress events throughout.
-///
-/// ⚠️  BRICKING RISK — ensure stable 12 V supply before calling.
+/// write_calibration — calibration-only write path (128 KiB, Cal A+B).
+/// Same security gate and checksum correction as write_os_calibration.
+/// Called by the frontend "Calibration Only" write mode button.
+#[tauri::command]
+fn write_calibration_cmd(
+    file_bytes: Vec<u8>,
+    app: tauri::AppHandle,
+    state: tauri::State<AppState>,
+) -> Result<WriteResult, String> {
+    use tauri::Emitter;
+    {
+        let sec = state.security.lock().map_err(|_| "Lock failed".to_string())?;
+        if sec.locked || sec.level != Some(SecurityLevel::Level2) {
+            return Err("Calibration write requires Level 2 security. Call security_unlock_l2 first.".to_string());
+        }
+    }
+    if file_bytes.len() != CAL_IMAGE_SIZE {
+        return Err(format!("Expected 128 KiB calibration image ({} bytes), got {}.", CAL_IMAGE_SIZE, file_bytes.len()));
+    }
+    let corrected = correct_and_validate_checksums(&file_bytes)
+        .map_err(|e| format!("Checksum correction failed: {}", e))?;
+    if !corrected.report.all_valid {
+        return Err(format!("Checksum correction produced {} invalid region(s). Aborting.", corrected.report.failed_count));
+    }
+    let fixed = corrected.report.fixed_count;
+    let mut port_guard = state.port.lock().map_err(|_| "Lock failed".to_string())?;
+    let port = port_guard.as_mut().ok_or("No connection — connect to the ECU first.".to_string())?;
+    let write_result = write_calibration(port, &corrected.data, |p: FlashProgress| {
+        let _ = app.emit("flash-progress", &p);
+    }).map_err(|e| format!("Flash write failed: {}", e))?;
+    Ok(WriteResult {
+        success: true,
+        message: format!(
+            "Calibration written successfully. {} bytes, {} blocks. {} region(s) checksum-corrected. CRC-32: 0x{:08X}.",
+            write_result.bytes_written, write_result.blocks_written, fixed, write_result.crc32_written,
+        ),
+    })
+}
+
 #[tauri::command]
 fn write_os_calibration(
     file_bytes: Vec<u8>,
@@ -872,112 +782,68 @@ fn write_os_calibration(
     state: tauri::State<AppState>,
 ) -> Result<WriteResult, String> {
     use tauri::Emitter;
-
-    // Level 2 gate
     {
         let sec = state.security.lock().map_err(|_| "Lock failed".to_string())?;
         if sec.locked || sec.level != Some(SecurityLevel::Level2) {
-            return Err(
-                "Calibration write requires Level 2 security. \
-                 Call security_unlock_l2 first.".to_string()
-            );
+            return Err("Calibration write requires Level 2 security. Call security_unlock_l2 first.".to_string());
         }
     }
-
-    // Size guard — only accept 128 KiB cal images; reject full 512 KiB images
     if file_bytes.len() == 524288 {
         return Err(
             "Full 512 KiB OS+Cal images are not supported by write_os_calibration. \
-             Use flash_write_region for OS-level access (advanced, high-risk)."
-            .to_string()
+             Use flash_write_region for OS-level access.".to_string()
         );
     }
     if file_bytes.len() != CAL_IMAGE_SIZE {
-        return Err(format!(
-            "Expected a 128 KiB calibration image ({} bytes), got {}.",
-            CAL_IMAGE_SIZE, file_bytes.len()
-        ));
+        return Err(format!("Expected 128 KiB calibration image ({} bytes), got {}.", CAL_IMAGE_SIZE, file_bytes.len()));
     }
-
-    // Checksum correction pre-flight
     let corrected = correct_and_validate_checksums(&file_bytes)
         .map_err(|e| format!("Checksum correction failed: {}", e))?;
     if !corrected.report.all_valid {
-        return Err(format!(
-            "Checksum correction produced {} invalid region(s). Aborting flash write.",
-            corrected.report.failed_count
-        ));
+        return Err(format!("Checksum correction produced {} invalid region(s). Aborting flash write.", corrected.report.failed_count));
     }
-
     let fixed = corrected.report.fixed_count;
-
     let mut port_guard = state.port.lock().map_err(|_| "Lock failed".to_string())?;
     let port = port_guard.as_mut().ok_or("No connection — connect to the ECU first.".to_string())?;
-
     let write_result = write_calibration(port, &corrected.data, |p: FlashProgress| {
         let _ = app.emit("flash-progress", &p);
     }).map_err(|e| format!("Flash write failed: {}", e))?;
-
     Ok(WriteResult {
         success: true,
         message: format!(
-            "Calibration written successfully. \
-             {} bytes in {} blocks. \
-             {} checksum region(s) corrected pre-write. \
-             CRC-32: 0x{:08X}.",
-            write_result.bytes_written,
-            write_result.blocks_written,
-            fixed,
-            write_result.crc32_written,
+            "Calibration written successfully. {} bytes in {} blocks. {} checksum region(s) corrected pre-write. CRC-32: 0x{:08X}.",
+            write_result.bytes_written, write_result.blocks_written, fixed, write_result.crc32_written,
         ),
     })
 }
 
-/// Verify the written calibration by reading it back from the ECU and
-/// comparing checksums.
-///
-/// Reads Cal A+B (128 KiB) via Mode 23, validates all 16 P01 checksum
-/// regions, and SHA-256 hashes the result.  Returns pass/fail with
-/// a detailed region summary.
 #[tauri::command]
 fn verify_after_write(
     app: tauri::AppHandle,
     state: tauri::State<AppState>,
 ) -> Result<WriteResult, String> {
     use tauri::Emitter;
-
     let mut port_guard = state.port.lock().map_err(|_| "Lock failed".to_string())?;
     let port = port_guard.as_mut().ok_or("No connection — connect to the ECU first.".to_string())?;
-
-    let readback = read_calibration(port, |p: FlashProgress| {
-        let _ = app.emit("flash-progress", &p);
-    }).map_err(|e| format!("Readback failed: {}", e))?;
-
+    let readback = read_calibration(port, |p: FlashProgress| { let _ = app.emit("flash-progress", &p); })
+        .map_err(|e| format!("Readback failed: {}", e))?;
     let hash = sha256_hex(&readback.data);
-
     let report = validate_checksums(&readback.data)
         .map_err(|e| format!("Checksum validation failed: {}", e))?;
-
     if report.all_valid {
         Ok(WriteResult {
             success: true,
             message: format!(
-                "Verification passed. All {} checksum regions valid. \
-                 {} bytes read back. SHA-256: {}.",
-                report.regions.len(),
-                readback.length,
-                hash,
+                "Verification passed. All {} checksum regions valid. {} bytes read back. SHA-256: {}.",
+                report.regions.len(), readback.length, hash,
             ),
         })
     } else {
         Ok(WriteResult {
             success: false,
             message: format!(
-                "Verification FAILED. {} of {} checksum regions invalid. \
-                 SHA-256: {}. Consider re-flashing.",
-                report.failed_count,
-                report.regions.len(),
-                hash,
+                "Verification FAILED. {} of {} checksum regions invalid. SHA-256: {}. Consider re-flashing.",
+                report.failed_count, report.regions.len(), hash,
             ),
         })
     }
@@ -995,38 +861,30 @@ pub fn run() {
             security: Mutex::new(SecurityState::default()),
         })
         .invoke_handler(tauri::generate_handler![
-            // Connection
             list_serial_ports,
             connect_ecu,
             disconnect_ecu,
             connection_status,
-            // Security
             security_unlock_l1,
             security_unlock_l2,
             security_status,
-            // DTC
             read_dtcs_cmd,
             clear_dtcs_cmd,
             read_freeze_frame_cmd,
-            // Checksum (offline)
             validate_cal_checksum,
             correct_cal_checksum,
-            // Flash read
             flash_read_region,
             flash_read_cal,
-            // Flash write
             flash_write_region,
             flash_write_cal,
-            // Raw I/O
             write_ecu_frame,
             read_ecu_frame,
-            // Telemetry
             read_ecu_data,
-            // Stage 5 — identification, backup, BIN validation, write, verify
             read_properties,
             read_entire_pcm,
             validate_bin,
             compare_bin_to_ecu,
+            write_calibration_cmd,   // calibration-only write (frontend: write_calibration)
             write_os_calibration,
             verify_after_write,
         ])
