@@ -320,24 +320,104 @@ async function connectEcu() {
     return;
   }
 
+  // Not connected — open the in-app device selector instead of prompt()/alert().
+  openConnectModal();
+}
+
+// ── In-app serial device selector ─────────────────────────────────────────
+const connectModal = {
+  overlay: $("#connect-modal"),
+  list: $("#connect-port-list"),
+  empty: $("#connect-port-empty"),
+  baud: $("#connect-baud"),
+  error: $("#connect-modal-error"),
+  confirm: $("#connect-confirm"),
+  cancel: $("#connect-cancel"),
+  close: $("#connect-modal-close"),
+  rescan: $("#connect-rescan"),
+  selectedPort: null,
+};
+
+function showConnectError(msg) {
+  if (!connectModal.error) return;
+  connectModal.error.textContent = msg;
+  connectModal.error.classList.remove("modal__error--hidden");
+}
+
+function clearConnectError() {
+  connectModal.error?.classList.add("modal__error--hidden");
+}
+
+function renderPortList(ports) {
+  const list = connectModal.list;
+  if (!list) return;
+  list.innerHTML = "";
+  connectModal.selectedPort = null;
+  if (connectModal.confirm) connectModal.confirm.disabled = true;
+
+  if (!ports || ports.length === 0) {
+    connectModal.empty?.classList.remove("modal__empty--hidden");
+    return;
+  }
+  connectModal.empty?.classList.add("modal__empty--hidden");
+
+  ports.forEach((p) => {
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = "port-row";
+    row.setAttribute("role", "option");
+    row.dataset.port = p.port_name;
+
+    const name = document.createElement("span");
+    name.className = "port-row__name";
+    name.textContent = p.port_name;
+
+    const type = document.createElement("span");
+    type.className = "port-row__type";
+    type.textContent = p.port_type || "Unknown";
+
+    row.append(name, type);
+    row.addEventListener("click", () => {
+      list.querySelectorAll(".port-row").forEach((r) => r.classList.remove("port-row--selected"));
+      row.classList.add("port-row--selected");
+      connectModal.selectedPort = p.port_name;
+      if (connectModal.confirm) connectModal.confirm.disabled = false;
+    });
+    list.appendChild(row);
+  });
+}
+
+async function scanPorts() {
+  clearConnectError();
   try {
     const ports = await invokeCmd("list_serial_ports");
-    if (!ports || ports.length === 0) { alert("No serial ports found."); return; }
+    renderPortList(ports || []);
+  } catch (err) {
+    renderPortList([]);
+    showConnectError(`Could not list serial ports: ${err}`);
+  }
+}
 
-    const portList = ports.map((p, i) => `${i + 1}: ${p.port_name} (${p.port_type})`).join("\n");
-    const selection = prompt(`Select serial port:\n${portList}\n\nEnter port number:`);
-    if (!selection) return;
+function openConnectModal() {
+  if (!connectModal.overlay) return;
+  clearConnectError();
+  connectModal.overlay.classList.remove("modal-overlay--hidden");
+  scanPorts();
+}
 
-    const index = Number(selection) - 1;
-    if (Number.isNaN(index) || index < 0 || index >= ports.length) { alert("Invalid port selection."); return; }
+function closeConnectModal() {
+  connectModal.overlay?.classList.add("modal-overlay--hidden");
+}
 
-    const selectedPort = ports[index].port_name;
-    const baudInput = prompt("Enter baud rate:", "115200");
-    if (!baudInput) return;
+async function performConnect() {
+  const selectedPort = connectModal.selectedPort;
+  if (!selectedPort) { showConnectError("Select a serial port first."); return; }
 
-    const baud = Number(baudInput);
-    if (Number.isNaN(baud)) { alert("Invalid baud rate."); return; }
+  const baud = Number(connectModal.baud?.value);
+  if (Number.isNaN(baud) || baud <= 0) { showConnectError("Invalid baud rate."); return; }
 
+  if (connectModal.confirm) connectModal.confirm.disabled = true;
+  try {
     await invokeCmd("connect_ecu", { port: selectedPort, baud });
     state.connected = true;
     connDot.classList.add("connected");
@@ -347,12 +427,29 @@ async function connectEcu() {
     lastUpdate.textContent = `Connected to ${selectedPort}`;
     updateChecklist();
     logJob(`Connected to ${selectedPort} at ${baud} baud.`);
+    closeConnectModal();
     state.pollInterval = setInterval(pollEcuData, 250);
     await pollEcuData();
   } catch (err) {
-    alert(`Connect failed: ${err}`);
+    showConnectError(`Connect failed: ${err}`);
     logJob(`Connect failed: ${err}`);
+    if (connectModal.confirm) connectModal.confirm.disabled = false;
   }
+}
+
+function initConnectModal() {
+  connectModal.confirm?.addEventListener("click", performConnect);
+  connectModal.cancel?.addEventListener("click", closeConnectModal);
+  connectModal.close?.addEventListener("click", closeConnectModal);
+  connectModal.rescan?.addEventListener("click", scanPorts);
+  connectModal.overlay?.addEventListener("click", (e) => {
+    if (e.target === connectModal.overlay) closeConnectModal();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !connectModal.overlay?.classList.contains("modal-overlay--hidden")) {
+      closeConnectModal();
+    }
+  });
 }
 
 function switchView(viewName) {
@@ -706,6 +803,7 @@ window.addEventListener("DOMContentLoaded", () => {
   initNav();
   initBinFile();
   initReadWriteActions();
+  initConnectModal();
   btnConnect?.addEventListener("click", connectEcu);
 
   updateChecklist();

@@ -427,6 +427,44 @@
     </main>
   </div>
 
+  <!-- Device connection modal: in-app serial port selector (replaces prompt/alert) -->
+  <div id="connect-modal" class="modal-overlay modal-overlay--hidden" role="dialog" aria-modal="true"
+    aria-labelledby="connect-modal-title">
+    <div class="modal">
+      <div class="modal__header">
+        <h2 id="connect-modal-title" class="modal__title">Connect to ECU</h2>
+        <button type="button" class="btn-icon" id="connect-modal-close" aria-label="Close">×</button>
+      </div>
+      <div class="modal__body">
+        <p class="modal__hint">Select the serial interface for your VPW/J2534 cable, then choose a baud rate.</p>
+
+        <label class="modal__label" for="connect-port-list">Serial port</label>
+        <div id="connect-port-list" class="port-list" role="listbox" aria-label="Available serial ports">
+          <!-- port rows injected by JS -->
+        </div>
+        <p id="connect-port-empty" class="modal__empty modal__empty--hidden">No serial ports detected. Plug in your
+          cable and click Rescan.</p>
+
+        <label class="modal__label" for="connect-baud">Baud rate</label>
+        <select id="connect-baud" class="modal__select">
+          <option value="10400">10400 (VPW / class 2)</option>
+          <option value="115200" selected>115200</option>
+          <option value="57600">57600</option>
+          <option value="38400">38400</option>
+          <option value="9600">9600</option>
+        </select>
+
+        <p id="connect-modal-error" class="modal__error modal__error--hidden"></p>
+      </div>
+      <div class="modal__footer">
+        <button type="button" class="btn-secondary" id="connect-rescan">Rescan</button>
+        <span class="modal__footer-spacer"></span>
+        <button type="button" class="btn-secondary" id="connect-cancel">Cancel</button>
+        <button type="button" class="btn-primary" id="connect-confirm" disabled>Connect</button>
+      </div>
+    </div>
+  </div>
+
   <script type="module" src="./main.js"></script>
 </body>
 

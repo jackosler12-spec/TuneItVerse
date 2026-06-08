@@ -6,22 +6,20 @@
 //! expects the result to equal 0x0000 (sum-to-zero convention).  If any
 //! region fails the check the PCM enters reduced / limp-home mode.
 //!
-//! ─── Checksum algorithm ───────────────────────────────────────────────────
+//! Checksum algorithm
 //!
-//!   For a region [start..=end] with a 16-bit checksum word at `cs_addr`:
+//! For a region `[start..=end]` with a 16-bit checksum word at `cs_addr`:
 //!
-//!     1. Read all 16-bit big-endian words in [start..=end] INCLUDING the
-//!        current checksum word.
-//!     2. Sum them all as u16 (wrapping).
-//!     3. If sum == 0x0000 → valid.  Done.
-//!     4. Otherwise:
-//!           correction = 0u16.wrapping_sub(sum - cs_word) - cs_word
-//!                      = 0u16.wrapping_sub(sum_excl_cs)
-//!        where sum_excl_cs is the sum of all words EXCEPT cs_word.
-//!     5. Write `correction` as big-endian at `cs_addr`.
-//!     6. Re-verify: sum including new cs_word must == 0x0000.
+//! - Read all 16-bit big-endian words in `[start..=end]` INCLUDING the
+//!   current checksum word.
+//! - Sum them all as u16 (wrapping).
+//! - If the sum equals `0x0000` the region is valid; nothing to do.
+//! - Otherwise compute `correction = 0u16.wrapping_sub(sum_excl_cs)`, where
+//!   `sum_excl_cs` is the sum of all words EXCEPT the checksum word.
+//! - Write `correction` as big-endian at `cs_addr`.
+//! - Re-verify: the sum including the new checksum word must equal `0x0000`.
 //!
-//! ─── P01 / 0411 checksum regions (Cal A block, relative offsets) ──────────
+//! P01 / 0411 checksum regions (Cal A block, relative offsets)
 //!
 //!  All offsets are relative to the start of the 64 KB calibration block
 //!  (i.e. subtract 0x0002_0000 to get an offset into a 65536-byte slice).
