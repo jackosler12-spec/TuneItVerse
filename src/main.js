@@ -15,6 +15,7 @@ const state = {
   binValidated: false,
   binCompatible: false,
   selectedFile: null,
+  selectedFileBytes: null,   // Uint8Array — populated on file select
   identified: false,
 };
 
@@ -177,12 +178,7 @@ function drawLiveChart() {
 
   if (data.length < 2) return;
 
-  const ranges = {
-    rpm: [0, 7000],
-    map: [20, 105],
-    iat: [-10, 80],
-  };
-
+  const ranges = { rpm: [0, 7000], map: [20, 105], iat: [-10, 80] };
   const colors = {
     rpm: isDark ? "#00c4b4" : "#008c80",
     map: "#6cb8e0",
@@ -260,7 +256,6 @@ function applyData(d) {
   const setSensor = (name, value) => {
     const s = sensors[name];
     if (!s?.bar || !s?.val) return;
-
     let pct;
     if (s.isTrim) {
       const clamped = Math.max(-s.max, Math.min(s.max, value));
@@ -268,7 +263,6 @@ function applyData(d) {
     } else {
       pct = Math.min(Math.max((value / s.max) * 100, 0), 100);
     }
-
     s.bar.style.width = `${pct}%`;
     s.val.textContent = Number.isInteger(value) ? String(value) : value.toFixed(1);
   };
@@ -286,12 +280,8 @@ function applyData(d) {
 async function pollEcuData() {
   try {
     const data = await invokeCmd("read_ecu_data");
-    if (data) {
-      applyData(data);
-      return;
-    }
-  } catch (_) { }
-
+    if (data) { applyData(data); return; }
+  } catch (_) {}
   applyData(simulateEcuData());
 }
 
@@ -299,11 +289,7 @@ async function connectEcu() {
   if (state.connected) {
     clearInterval(state.pollInterval);
     state.pollInterval = null;
-
-    try {
-      await invokeCmd("disconnect_ecu");
-    } catch (_) { }
-
+    try { await invokeCmd("disconnect_ecu"); } catch (_) {}
     state.connected = false;
     state.identified = false;
     connDot.classList.remove("connected");
@@ -318,30 +304,21 @@ async function connectEcu() {
 
   try {
     const ports = await invokeCmd("list_serial_ports");
-    if (!ports || ports.length === 0) {
-      alert("No serial ports found.");
-      return;
-    }
+    if (!ports || ports.length === 0) { alert("No serial ports found."); return; }
 
     const portList = ports.map((p, i) => `${i + 1}: ${p.port_name} (${p.port_type})`).join("\n");
     const selection = prompt(`Select serial port:\n${portList}\n\nEnter port number:`);
     if (!selection) return;
 
     const index = Number(selection) - 1;
-    if (Number.isNaN(index) || index < 0 || index >= ports.length) {
-      alert("Invalid port selection.");
-      return;
-    }
+    if (Number.isNaN(index) || index < 0 || index >= ports.length) { alert("Invalid port selection."); return; }
 
     const selectedPort = ports[index].port_name;
     const baudInput = prompt("Enter baud rate:", "115200");
     if (!baudInput) return;
 
     const baud = Number(baudInput);
-    if (Number.isNaN(baud)) {
-      alert("Invalid baud rate.");
-      return;
-    }
+    if (Number.isNaN(baud)) { alert("Invalid baud rate."); return; }
 
     await invokeCmd("connect_ecu", { port: selectedPort, baud });
     state.connected = true;
@@ -352,7 +329,6 @@ async function connectEcu() {
     lastUpdate.textContent = `Connected to ${selectedPort}`;
     updateChecklist();
     logJob(`Connected to ${selectedPort} at ${baud} baud.`);
-
     state.pollInterval = setInterval(pollEcuData, 250);
     await pollEcuData();
   } catch (err) {
@@ -364,10 +340,8 @@ async function connectEcu() {
 function switchView(viewName) {
   document.querySelectorAll(".content").forEach((el) => el.classList.add("content--hidden"));
   document.querySelectorAll(".nav-item").forEach((el) => el.classList.remove("active"));
-
   const target = document.getElementById(`view-${viewName}`);
   if (target) target.classList.remove("content--hidden");
-
   const navItem = document.querySelector(`[data-view="${viewName}"]`);
   if (navItem) navItem.classList.add("active");
 
@@ -390,7 +364,6 @@ function initTheme() {
   const btn = document.querySelector("[data-theme-toggle]");
   let theme = "dark";
   html.setAttribute("data-theme", theme);
-
   btn?.addEventListener("click", () => {
     theme = theme === "dark" ? "light" : "dark";
     html.setAttribute("data-theme", theme);
@@ -416,8 +389,9 @@ function initChartControls() {
   });
 }
 
-function initDtcClear() {
-  $("#btn-clear-dtc")?.addEventListener("click", () => {
+function initDtcClearDashboard() {
+  // Dashboard panel clear button (different from the DTC view clear button)
+  $("#btn-clear-dtc-dashboard")?.addEventListener("click", () => {
     document.querySelectorAll(".dtc-item--active").forEach((el) => el.classList.remove("dtc-item--active"));
     document.querySelectorAll(".sev--high, .sev--med").forEach((el) => {
       el.textContent = "Cleared";
@@ -439,25 +413,18 @@ function initNav() {
 }
 
 async function readProperties() {
-  if (!state.connected) {
-    alert("Connect to the ECU first.");
-    return;
-  }
-
+  if (!state.connected) { alert("Connect to the ECU first."); return; }
   setJobPhase("Identifying");
   logJob("Reading ECU properties...");
-
   try {
     const result = await invokeCmd("read_properties");
     if (!result) throw new Error("No property data returned.");
-
     $("#rw-osid").textContent = result.os_id || "Unknown";
     $("#rw-vin").textContent = result.vin || "Unknown";
     $("#rw-hardware").textContent = result.hardware || "Unknown";
     $("#rw-status").textContent = result.status || "Identified";
     $("#rw-pcm-type").textContent = result.ecu_type || "P01 / 0411";
     $("#rw-protocol").textContent = result.protocol || "GM J1850 VPW";
-
     state.identified = true;
     updateChecklist();
     logJob(`ECU identified. OSID=${result.os_id}, VIN=${result.vin}`);
@@ -470,23 +437,16 @@ async function readProperties() {
 }
 
 async function readEntirePcm() {
-  if (!state.connected || !state.identified) {
-    alert("Connect and identify the ECU first.");
-    return;
-  }
-
+  if (!state.connected || !state.identified) { alert("Connect and identify the ECU first."); return; }
   setJobPhase("Reading");
   logJob("Starting full PCM backup...");
-
   try {
     const result = await invokeCmd("read_entire_pcm");
     if (!result) throw new Error("No backup result returned.");
-
     $("#backup-file").textContent = result.file_name || "backup.bin";
     $("#backup-size").textContent = result.size_bytes ? `${result.size_bytes} bytes` : "Unknown";
     $("#backup-hash").textContent = result.sha256 || "Unavailable";
     $("#backup-required").textContent = "Completed";
-
     state.backupDone = true;
     updateChecklist();
     logJob(`Backup complete: ${result.file_name}`);
@@ -498,10 +458,21 @@ async function readEntirePcm() {
   }
 }
 
+// ─── BIN file selection: read bytes immediately so they're ready for Tauri ───
+function readFileBytes(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => resolve(new Uint8Array(e.target.result));
+    reader.onerror = () => reject(new Error("FileReader error"));
+    reader.readAsArrayBuffer(file);
+  });
+}
+
 function initBinFile() {
-  $("#bin-file")?.addEventListener("change", (e) => {
+  $("#bin-file")?.addEventListener("change", async (e) => {
     const file = e.target.files?.[0] || null;
     state.selectedFile = file;
+    state.selectedFileBytes = null;
     state.binValidated = false;
     state.binCompatible = false;
     $("#bin-name").textContent = file ? file.name : "None";
@@ -509,37 +480,37 @@ function initBinFile() {
     $("#bin-checksum").textContent = "Not validated";
     $("#bin-compat").textContent = "Unchecked";
     updateChecklist();
-    logJob(file ? `Selected BIN: ${file.name}` : "BIN selection cleared.");
+
+    if (file) {
+      try {
+        state.selectedFileBytes = await readFileBytes(file);
+        logJob(`Selected BIN: ${file.name} (${state.selectedFileBytes.length} bytes loaded into memory)`);
+      } catch (err) {
+        logJob(`Failed to read BIN bytes: ${err}`);
+      }
+    } else {
+      logJob("BIN selection cleared.");
+    }
   });
 }
 
 async function validateBin() {
-  if (!state.selectedFile) {
-    alert("Select a BIN file first.");
-    return;
-  }
-
+  if (!state.selectedFileBytes) { alert("Select a BIN file first."); return; }
   setJobPhase("Preflight");
   logJob(`Validating BIN ${state.selectedFile.name}...`);
-
   try {
+    // Pass raw bytes — Rust: validate_bin(file_bytes: Vec<u8>)
     const result = await invokeCmd("validate_bin", {
-      fileName: state.selectedFile.name,
-      fileSize: state.selectedFile.size,
+      fileBytes: Array.from(state.selectedFileBytes),
     });
     if (!result) throw new Error("No validation result returned.");
-
     $("#bin-osid").textContent = result.detected_os_id || "Unknown";
     $("#bin-checksum").textContent = result.checksum_ok ? "OK" : "Failed";
     $("#bin-compat").textContent = result.compatibility || "Unknown";
-
     state.binValidated = !!result.checksum_ok;
     state.binCompatible = result.compatibility === "Compatible";
     updateChecklist();
-
-    logJob(
-      `BIN validated. OSID=${result.detected_os_id}, checksum=${result.checksum_ok}, compatibility=${result.compatibility}`
-    );
+    logJob(`BIN validated. OSID=${result.detected_os_id}, checksum=${result.checksum_ok}, compat=${result.compatibility}`);
     setJobPhase("Idle");
   } catch (err) {
     setJobPhase("Failed");
@@ -549,29 +520,19 @@ async function validateBin() {
 }
 
 async function compareBinToEcu() {
-  if (!state.selectedFile) {
-    alert("Select a BIN file first.");
-    return;
-  }
-  if (!state.connected || !state.identified) {
-    alert("Connect and identify the ECU first.");
-    return;
-  }
-
+  if (!state.selectedFileBytes) { alert("Select a BIN file first."); return; }
+  if (!state.connected || !state.identified) { alert("Connect and identify the ECU first."); return; }
   setJobPhase("Compare");
   logJob("Comparing selected BIN to ECU...");
-
   try {
+    // Pass raw bytes — Rust: compare_bin_to_ecu(file_bytes: Vec<u8>)
     const result = await invokeCmd("compare_bin_to_ecu", {
-      fileName: state.selectedFile.name,
-      fileSize: state.selectedFile.size,
+      fileBytes: Array.from(state.selectedFileBytes),
     });
     if (!result) throw new Error("No compare result returned.");
-
     $("#bin-compat").textContent = result.compatibility || "Unknown";
     state.binCompatible = result.compatibility === "Compatible";
     updateChecklist();
-
     logJob(`Compare complete: ${result.summary}`);
     setJobPhase("Idle");
   } catch (err) {
@@ -589,6 +550,7 @@ async function startWrite() {
     alert("Preflight checklist not complete.");
     return;
   }
+  if (!state.selectedFileBytes) { alert("BIN file bytes not loaded."); return; }
 
   const proceed = confirm(`Start ${mode} write? Do not interrupt vehicle power.`);
   if (!proceed) return;
@@ -596,11 +558,17 @@ async function startWrite() {
   setJobPhase("Writing");
   logJob(`Starting write job: ${mode}`);
 
+  const bytesArg = Array.from(state.selectedFileBytes);
+
   try {
-    const result =
-      mode === "calibration_only"
-        ? await invokeCmd("write_calibration", { fileName: state.selectedFile?.name || "unknown.bin" })
-        : await invokeCmd("write_os_calibration", { fileName: state.selectedFile?.name || "unknown.bin" });
+    let result;
+    if (mode === "calibration_only") {
+      // write_calibration also takes file_bytes — same pattern
+      result = await invokeCmd("write_calibration", { fileBytes: bytesArg });
+    } else {
+      // write_os_calibration(file_bytes: Vec<u8>)
+      result = await invokeCmd("write_os_calibration", { fileBytes: bytesArg });
+    }
 
     logJob(result?.message || "Write completed.");
     setJobPhase("Verifying");
@@ -627,14 +595,14 @@ window.addEventListener("DOMContentLoaded", () => {
   initTheme();
   initSidebar();
   initChartControls();
-  initDtcClear();
+  initDtcClearDashboard();
   initNav();
   initBinFile();
   initReadWriteActions();
   btnConnect?.addEventListener("click", connectEcu);
 
   updateChecklist();
-  logJob("TuneItVerse read/write scaffold ready.");
+  logJob("TuneItVerse ready.");
 
   drawGauge(gaugeRpmCanvas, 0, 0, 7000, { start: 0.78, end: 1.0 });
   drawGauge(gaugeMapCanvas, 20, 20, 105, null, "#6cb8e0");
