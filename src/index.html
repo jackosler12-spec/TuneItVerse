@@ -27,7 +27,7 @@
       </a>
       <a href="#" class="nav-item" data-view="dtc">
         <span>DTC</span>
-        <span class="nav-badge" id="dtc-count-badge">3</span>
+        <span class="nav-badge" id="dtc-count-badge">0</span>
       </a>
       <a href="#" class="nav-item" data-view="calibration">
         <span>Calibration</span>
@@ -52,12 +52,12 @@
         <button id="sidebar-toggle" class="btn-icon" aria-label="Toggle sidebar">☰</button>
         <div>
           <h1 id="page-title" class="page-title">ECU Diagnostics</h1>
-          <div id="page-sub" class="page-sub">2001 LS1 Nissan Patrol GU</div>
+          <div id="page-sub" class="page-sub">No vehicle loaded</div>
         </div>
       </div>
 
       <div class="topbar-right">
-        <div class="vehicle-chip">P01 / OS 12225074</div>
+        <div class="vehicle-chip" id="vehicle-osid-chip">No ECU identified</div>
         <div class="vehicle-chip" id="last-update">Disconnected</div>
         <button class="btn-icon" data-theme-toggle aria-label="Toggle theme">◐</button>
       </div>
@@ -84,9 +84,9 @@
             <div class="kpi-unit">V</div>
           </article>
 
-          <article class="kpi-card kpi-card--alert" id="kpi-dtc-card">
+          <article class="kpi-card" id="kpi-dtc-card">
             <div class="kpi-label">Active DTCs</div>
-            <div class="kpi-value" id="kpi-dtc">3</div>
+            <div class="kpi-value" id="kpi-dtc">0</div>
             <div class="kpi-unit">faults</div>
           </article>
         </div>
@@ -153,33 +153,10 @@
           <article class="panel">
             <div class="panel-header">
               <div class="panel-title">Fault Codes</div>
-              <button class="btn-sm" id="btn-clear-dtc">Clear</button>
+              <button class="btn-sm" id="btn-refresh-dtc-dashboard">Refresh</button>
             </div>
-            <ul class="dtc-list">
-              <li class="dtc-item dtc-item--active">
-                <span class="dtc-code">P0300</span>
-                <div>
-                  <span class="dtc-desc">Random / Multiple Cylinder Misfire</span>
-                  <span class="dtc-meta">Stored / Pending</span>
-                </div>
-                <span class="dtc-sev sev--high">High</span>
-              </li>
-              <li class="dtc-item dtc-item--active">
-                <span class="dtc-code">P0131</span>
-                <div>
-                  <span class="dtc-desc">O2 Sensor Low Voltage Bank 1 S1</span>
-                  <span class="dtc-meta">Stored</span>
-                </div>
-                <span class="dtc-sev sev--med">Med</span>
-              </li>
-              <li class="dtc-item">
-                <span class="dtc-code">P0171</span>
-                <div>
-                  <span class="dtc-desc">System Too Lean Bank 1</span>
-                  <span class="dtc-meta">History</span>
-                </div>
-                <span class="dtc-sev sev--low">Low</span>
-              </li>
+            <ul class="dtc-list" id="dash-dtc-list">
+              <li class="dtc-item dtc-empty"><span class="dtc-desc">No DTCs — connect and read the ECU</span></li>
             </ul>
           </article>
         </div>
@@ -334,8 +311,8 @@
               <label class="radio-card">
                 <input type="radio" name="write-mode" value="os_calibration" />
                 <div>
-                  <strong>OS + Calibration</strong>
-                  <span>Advanced, larger flash region.</span>
+                  <strong>Calibration (checksum-corrected)</strong>
+                  <span>128 KiB cal write with pre-write checksum correction.</span>
                 </div>
               </label>
             </div>

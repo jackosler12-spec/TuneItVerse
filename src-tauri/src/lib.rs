@@ -95,12 +95,17 @@ struct PcmBackupResult {
 struct BinValidationResult {
     detected_os_id: String,
     checksum_ok:    bool,
+    /// Machine-readable gate the frontend keys on. `compatibility` is the
+    /// human-readable label; `compatible` is the authoritative boolean.
+    compatible:     bool,
     compatibility:  String,
     message:        String,
 }
 
 #[derive(Serialize, Clone)]
 struct BinCompareResult {
+    /// Authoritative boolean gate; `compatibility` is the display label.
+    compatible:    bool,
     compatibility: String,
     diff_regions:  u32,
     summary:       String,
@@ -655,7 +660,7 @@ fn read_entire_pcm(
 #[tauri::command]
 fn validate_bin(file_bytes: Vec<u8>) -> Result<BinValidationResult, String> {
     let size = file_bytes.len();
-    let (compat, checksum_ok, cs_msg) = match size {
+    let (compatible, compat, checksum_ok, cs_msg) = match size {
         131072 => match validate_checksums(&file_bytes) {
             Ok(report) => {
                 let msg = if report.all_valid {
@@ -663,9 +668,9 @@ fn validate_bin(file_bytes: Vec<u8>) -> Result<BinValidationResult, String> {
                 } else {
                     format!("{} region(s) invalid.", report.failed_count)
                 };
-                ("Compatible — 128 KiB calibration image", report.all_valid, msg)
+                (true, "Compatible — 128 KiB calibration image", report.all_valid, msg)
             }
-            Err(e) => ("Incompatible", false, format!("Checksum error: {}", e)),
+            Err(e) => (false, "Incompatible", false, format!("Checksum error: {}", e)),
         },
         524288 => {
             let cal_slice = &file_bytes[0x20000..0x20000 + CAL_IMAGE_SIZE];
@@ -676,12 +681,13 @@ fn validate_bin(file_bytes: Vec<u8>) -> Result<BinValidationResult, String> {
                     } else {
                         format!("{} cal region(s) invalid in full image.", report.failed_count)
                     };
-                    ("Compatible — 512 KiB full PCM image", report.all_valid, msg)
+                    (true, "Compatible — 512 KiB full PCM image", report.all_valid, msg)
                 }
-                Err(e) => ("Incompatible", false, format!("Checksum error: {}", e)),
+                Err(e) => (false, "Incompatible", false, format!("Checksum error: {}", e)),
             }
         }
         _ => (
+            false,
             "Incompatible — unexpected file size",
             false,
             format!("Expected 131072 or 524288 bytes, got {}.", size),
@@ -692,6 +698,7 @@ fn validate_bin(file_bytes: Vec<u8>) -> Result<BinValidationResult, String> {
     Ok(BinValidationResult {
         detected_os_id,
         checksum_ok,
+        compatible,
         compatibility: compat.to_string(),
         message: format!("{} CRC-32: 0x{:08X}.", cs_msg, crc),
     })
@@ -723,10 +730,15 @@ fn compare_bin_to_ecu(
         if file_bytes[start..end] != ecu_cal.data[start..end] { diff_blocks += 1; }
     }
     let pct = (diff_blocks as f32 / total_blocks as f32) * 100.0;
-    let compat = if diff_blocks == 0 { "Identical" }
-        else if pct < 25.0 { "Compatible — minor calibration differences" }
-        else { "Different — significant divergence from ECU" };
+    let (compatible, compat) = if diff_blocks == 0 {
+        (true, "Identical")
+    } else if pct < 25.0 {
+        (true, "Compatible — minor calibration differences")
+    } else {
+        (false, "Different — significant divergence from ECU")
+    };
     Ok(BinCompareResult {
+        compatible,
         compatibility: compat.to_string(),
         diff_regions:  diff_blocks,
         summary: format!(
@@ -890,4 +902,93 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("Tauri runtime error");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tests — command contracts for the offline (no-hardware) code paths
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── VPW frame builders & checksum ──────────────────────────────────────
+
+    #[test]
+    fn pid_request_has_valid_checksum() {
+        let frame = build_pid_request(0x0C);
+        assert_eq!(&frame[..5], &[0x68, 0x6A, 0xF1, 0x01, 0x0C]);
+        assert!(validate_checksum(&frame));
+    }
+
+    #[test]
+    fn mode22_request_has_valid_checksum() {
+        let frame = build_mode22_request(0x1141);
+        assert_eq!(&frame[..6], &[0x68, 0x6A, 0xF1, 0x22, 0x11, 0x41]);
+        assert!(validate_checksum(&frame));
+    }
+
+    #[test]
+    fn checksum_rejects_corrupt_frame() {
+        let mut frame = build_pid_request(0x05);
+        *frame.last_mut().unwrap() ^= 0xFF;
+        assert!(!validate_checksum(&frame));
+    }
+
+    // ── OS-ID detection ────────────────────────────────────────────────────
+
+    #[test]
+    fn os_id_unknown_for_blank_image() {
+        let img = vec![0u8; 131072];
+        assert_eq!(detect_os_id_from_bytes(&img), "unknown");
+    }
+
+    #[test]
+    fn os_id_decodes_ascii_digits() {
+        let mut img = vec![0u8; 131072];
+        img[0x7FFC..0x8000].copy_from_slice(b"1234");
+        assert_eq!(detect_os_id_from_bytes(&img), "1234");
+    }
+
+    #[test]
+    fn os_id_handles_full_image_offset() {
+        // 512 KiB image: cal A starts at 0x20000, id at +0x7FFC.
+        let mut img = vec![0u8; 524288];
+        img[0x20000 + 0x7FFC..0x20000 + 0x8000].copy_from_slice(b"9876");
+        assert_eq!(detect_os_id_from_bytes(&img), "9876");
+    }
+
+    // ── validate_bin contract: size gating + `compatible` boolean ───────────
+
+    #[test]
+    fn validate_bin_rejects_bad_size() {
+        let r = validate_bin(vec![0u8; 1000]).unwrap();
+        assert!(!r.compatible);
+        assert!(!r.checksum_ok);
+        assert!(r.compatibility.contains("unexpected file size"));
+    }
+
+    #[test]
+    fn validate_bin_accepts_128k_size() {
+        // A blank 128 KiB image is size-compatible even if checksums fail.
+        let r = validate_bin(vec![0u8; 131072]).unwrap();
+        assert!(r.compatible, "128 KiB image must be size-compatible");
+        assert!(r.compatibility.starts_with("Compatible"));
+    }
+
+    #[test]
+    fn validate_bin_accepts_512k_size() {
+        let r = validate_bin(vec![0u8; 524288]).unwrap();
+        assert!(r.compatible, "512 KiB full image must be size-compatible");
+        assert!(r.compatibility.contains("512 KiB"));
+    }
+
+    #[test]
+    fn validate_bin_surfaces_detected_os_id() {
+        let mut img = vec![0u8; 131072];
+        img[0x7FFC..0x8000].copy_from_slice(b"5566");
+        let r = validate_bin(img).unwrap();
+        assert_eq!(r.detected_os_id, "5566");
+        assert!(r.compatible);
+    }
 }

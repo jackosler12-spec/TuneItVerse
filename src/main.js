@@ -203,22 +203,33 @@ function drawLiveChart() {
   ctx.stroke();
 }
 
-function simulateEcuData() {
-  const t = Date.now() / 1000;
+// Zeroed telemetry frame — shown when no live ECU data is available.
+// TuneItVerse never displays synthetic/simulated engine values as if real.
+function emptyEcuData() {
   return {
-    rpm: 2400 + Math.sin(t * 0.8) * 600 + Math.random() * 80,
-    map: 65 + Math.sin(t * 1.2) * 18 + Math.random() * 4,
-    iat: 38 + Math.sin(t * 0.2) * 5 + Math.random() * 2,
-    ect: 88 + Math.sin(t * 0.1) * 4 + Math.random(),
-    afr: 14.5 + Math.sin(t * 1.5) * 0.8 + Math.random() * 0.2,
-    batt_volt: 13.8 + Math.sin(t * 0.3) * 0.3 + Math.random() * 0.1,
-    tps: 28 + Math.sin(t * 0.9) * 22 + Math.random() * 3,
-    o2_b1s1: 0.45 + Math.sin(t * 2.0) * 0.35 + Math.random() * 0.05,
-    stft_b1: 2.3 + Math.sin(t * 1.1) * 4 + Math.random(),
-    spark_adv: 18 + Math.sin(t * 0.7) * 6 + Math.random() * 2,
-    inj_pw: 4.2 + Math.sin(t * 0.9) * 1.5 + Math.random() * 0.3,
-    vss: 0,
-    dtc_count: Number($("#kpi-dtc")?.textContent || 0),
+    rpm: 0, map: 0, iat: 0, ect: 0, afr: 14.7, batt_volt: 0,
+    tps: 0, o2_b1s1: 0, stft_b1: 0, spark_adv: 0, inj_pw: 0,
+    vss: 0, dtc_count: 0,
+  };
+}
+
+// Normalize the Rust EcuTelemetry struct (snake_case, unit-suffixed fields)
+// into the flat shape applyData/updateGauges expect.
+function normalizeTelemetry(d) {
+  return {
+    rpm:       d.rpm ?? 0,
+    map:       d.map_kpa ?? 0,
+    iat:       d.iat_c ?? 0,
+    ect:       d.ect_c ?? 0,
+    afr:       d.target_afr ?? d.wb_afr ?? 14.7,
+    batt_volt: d.batt_volt ?? 0,
+    tps:       d.tps_pct ?? 0,
+    o2_b1s1:   d.o2_left_up_v ?? 0,
+    stft_b1:   d.stft_b1_pct ?? 0,
+    spark_adv: d.spark_adv_deg ?? 0,
+    inj_pw:    d.inj_pw_b1_ms ?? 0,
+    vss:       d.vss_kph ?? 0,
+    dtc_count: d.dtc_count ?? 0,
   };
 }
 
@@ -278,11 +289,15 @@ function applyData(d) {
 }
 
 async function pollEcuData() {
+  if (!state.connected) { applyData(emptyEcuData()); return; }
   try {
     const data = await invokeCmd("read_ecu_data");
-    if (data) { applyData(data); return; }
-  } catch (_) {}
-  applyData(simulateEcuData());
+    if (data) { applyData(normalizeTelemetry(data)); return; }
+  } catch (err) {
+    logJob(`Telemetry read error: ${err}`);
+  }
+  // Connected but no valid frame — show zeros, never synthetic values.
+  applyData(emptyEcuData());
 }
 
 async function connectEcu() {
@@ -297,6 +312,9 @@ async function connectEcu() {
     btnConnect.textContent = "Connect ECU";
     btnConnect.classList.remove("connected");
     lastUpdate.textContent = "Disconnected";
+    $("#vehicle-osid-chip") && ($("#vehicle-osid-chip").textContent = "No ECU identified");
+    $("#page-sub") && ($("#page-sub").textContent = "No vehicle loaded");
+    applyData(emptyEcuData());
     updateChecklist();
     logJob("Disconnected from ECU.");
     return;
@@ -368,7 +386,7 @@ function initTheme() {
     theme = theme === "dark" ? "light" : "dark";
     html.setAttribute("data-theme", theme);
     drawLiveChart();
-    updateGauges(simulateEcuData());
+    updateGauges({ rpm: 0, map: 0, iat: 0, afr: 14.7 });
   });
 }
 
@@ -389,18 +407,99 @@ function initChartControls() {
   });
 }
 
-function initDtcClearDashboard() {
-  // Dashboard panel clear button (different from the DTC view clear button)
-  $("#btn-clear-dtc-dashboard")?.addEventListener("click", () => {
-    document.querySelectorAll(".dtc-item--active").forEach((el) => el.classList.remove("dtc-item--active"));
-    document.querySelectorAll(".sev--high, .sev--med").forEach((el) => {
-      el.textContent = "Cleared";
-      el.className = "dtc-sev sev--low";
-    });
-    $("#kpi-dtc").textContent = "0";
-    $("#kpi-dtc-card").classList.remove("kpi-card--alert");
-    $("#dtc-count-badge").textContent = "0";
-  });
+// ─── DTC subsystem — backed by real Tauri commands (read_dtcs_cmd / clear_dtcs_cmd) ───
+
+function dtcItemHtml(rec) {
+  const sev = rec.is_permanent ? "sev--high" : rec.is_pending ? "sev--med" : "sev--low";
+  const sevLabel = rec.is_permanent ? "Permanent" : rec.is_pending ? "Pending" : "Stored";
+  const desc = rec.description || "Unknown code";
+  return `<li class="dtc-item dtc-item--active">
+      <span class="dtc-code">${rec.code}</span>
+      <div><span class="dtc-desc">${desc}</span><span class="dtc-meta">${sevLabel}</span></div>
+      <span class="dtc-sev ${sev}">${sevLabel}</span>
+    </li>`;
+}
+
+function renderDtcList(ulId, records, emptyText) {
+  const ul = document.getElementById(ulId);
+  if (!ul) return;
+  if (!records || records.length === 0) {
+    ul.innerHTML = `<li class="dtc-item dtc-empty"><span class="dtc-desc">${emptyText}</span></li>`;
+    return;
+  }
+  ul.innerHTML = records.map(dtcItemHtml).join("");
+}
+
+function applyDtcResult(result) {
+  const stored = result?.stored ?? [];
+  const pending = result?.pending ?? [];
+  const permanent = result?.permanent ?? [];
+  const total = result?.total ?? stored.length + pending.length + permanent.length;
+
+  renderDtcList("dtc-list-stored", stored, "No stored DTCs");
+  renderDtcList("dtc-list-pending", pending, "No pending DTCs");
+  renderDtcList("dtc-list-permanent", permanent, "No permanent DTCs");
+
+  $("#dtc-stored-count") && ($("#dtc-stored-count").textContent = String(stored.length));
+  $("#dtc-pending-count") && ($("#dtc-pending-count").textContent = String(pending.length));
+  $("#dtc-permanent-count") && ($("#dtc-permanent-count").textContent = String(permanent.length));
+  $("#dtc-summary") && ($("#dtc-summary").textContent = `${total} code(s) read from PCM`);
+
+  // Dashboard mirror
+  const dash = stored.concat(pending, permanent);
+  renderDtcList("dash-dtc-list", dash, "No DTCs — connect and read the ECU");
+
+  $("#kpi-dtc") && ($("#kpi-dtc").textContent = String(total));
+  $("#dtc-count-badge") && ($("#dtc-count-badge").textContent = String(total));
+  $("#kpi-dtc-card")?.classList.toggle("kpi-card--alert", total > 0);
+}
+
+async function refreshDtcs() {
+  if (!state.connected) { alert("Connect to the ECU first."); return; }
+  $("#dtc-summary") && ($("#dtc-summary").textContent = "Reading…");
+  logJob("Reading DTCs from PCM…");
+  try {
+    const result = await invokeCmd("read_dtcs_cmd");
+    if (!result) throw new Error("No DTC data returned.");
+    applyDtcResult(result);
+    logJob(`DTC read complete: ${result.total} code(s).`);
+  } catch (err) {
+    $("#dtc-summary") && ($("#dtc-summary").textContent = "Read failed");
+    logJob(`DTC read failed: ${err}`);
+    alert(`DTC read failed: ${err}`);
+  }
+}
+
+function showDtcClearBanner(message, ok) {
+  const banner = $("#dtc-clear-banner");
+  const msg = $("#dtc-clear-msg");
+  if (!banner || !msg) return;
+  msg.textContent = message;
+  banner.classList.remove("dtc-clear-banner--hidden");
+  banner.style.borderColor = ok ? "" : "var(--danger, #e05555)";
+  setTimeout(() => banner.classList.add("dtc-clear-banner--hidden"), 6000);
+}
+
+async function clearDtcs() {
+  if (!state.connected) { alert("Connect to the ECU first."); return; }
+  if (!confirm("Clear all stored and pending DTCs? Permanent codes are not erasable.")) return;
+  logJob("Clearing DTCs (Mode 04)…");
+  try {
+    const result = await invokeCmd("clear_dtcs_cmd");
+    if (!result) throw new Error("No clear result returned.");
+    showDtcClearBanner(result.message || "DTCs cleared.", !!result.success);
+    logJob(result.message || `Cleared ${result.cleared_count} DTC(s).`);
+    await refreshDtcs();
+  } catch (err) {
+    showDtcClearBanner(`Clear failed: ${err}`, false);
+    logJob(`DTC clear failed: ${err}`);
+  }
+}
+
+function initDtcView() {
+  $("#btn-refresh-dtc")?.addEventListener("click", refreshDtcs);
+  $("#btn-refresh-dtc-dashboard")?.addEventListener("click", refreshDtcs);
+  $("#btn-clear-dtc")?.addEventListener("click", clearDtcs);
 }
 
 function initNav() {
@@ -425,6 +524,9 @@ async function readProperties() {
     $("#rw-status").textContent = result.status || "Identified";
     $("#rw-pcm-type").textContent = result.ecu_type || "P01 / 0411";
     $("#rw-protocol").textContent = result.protocol || "GM J1850 VPW";
+    const osid = result.os_id || "Unknown";
+    $("#vehicle-osid-chip") && ($("#vehicle-osid-chip").textContent = `${result.ecu_type || "P01"} / OS ${osid}`);
+    $("#page-sub") && ($("#page-sub").textContent = `OSID ${osid}`);
     state.identified = true;
     updateChecklist();
     logJob(`ECU identified. OSID=${result.os_id}, VIN=${result.vin}`);
@@ -508,7 +610,7 @@ async function validateBin() {
     $("#bin-checksum").textContent = result.checksum_ok ? "OK" : "Failed";
     $("#bin-compat").textContent = result.compatibility || "Unknown";
     state.binValidated = !!result.checksum_ok;
-    state.binCompatible = result.compatibility === "Compatible";
+    state.binCompatible = !!result.compatible;
     updateChecklist();
     logJob(`BIN validated. OSID=${result.detected_os_id}, checksum=${result.checksum_ok}, compat=${result.compatibility}`);
     setJobPhase("Idle");
@@ -531,7 +633,7 @@ async function compareBinToEcu() {
     });
     if (!result) throw new Error("No compare result returned.");
     $("#bin-compat").textContent = result.compatibility || "Unknown";
-    state.binCompatible = result.compatibility === "Compatible";
+    state.binCompatible = !!result.compatible;
     updateChecklist();
     logJob(`Compare complete: ${result.summary}`);
     setJobPhase("Idle");
@@ -552,21 +654,26 @@ async function startWrite() {
   }
   if (!state.selectedFileBytes) { alert("BIN file bytes not loaded."); return; }
 
+  const CAL_SIZE = 131072; // 128 KiB calibration image
+  if (state.selectedFileBytes.length !== CAL_SIZE) {
+    alert(`Both write modes flash the 128 KiB calibration region. Loaded file is ${state.selectedFileBytes.length} bytes.`);
+    return;
+  }
+
   const proceed = confirm(`Start ${mode} write? Do not interrupt vehicle power.`);
   if (!proceed) return;
 
   setJobPhase("Writing");
   logJob(`Starting write job: ${mode}`);
 
+  // Single conversion reused for the write call.
   const bytesArg = Array.from(state.selectedFileBytes);
 
   try {
     let result;
     if (mode === "calibration_only") {
-      // write_calibration also takes file_bytes — same pattern
-      result = await invokeCmd("write_calibration", { fileBytes: bytesArg });
+      result = await invokeCmd("write_calibration_cmd", { fileBytes: bytesArg });
     } else {
-      // write_os_calibration(file_bytes: Vec<u8>)
       result = await invokeCmd("write_os_calibration", { fileBytes: bytesArg });
     }
 
@@ -595,7 +702,7 @@ window.addEventListener("DOMContentLoaded", () => {
   initTheme();
   initSidebar();
   initChartControls();
-  initDtcClearDashboard();
+  initDtcView();
   initNav();
   initBinFile();
   initReadWriteActions();
