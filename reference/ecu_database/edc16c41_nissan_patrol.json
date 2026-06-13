@@ -1,0 +1,26 @@
+{
+  "ecu_family": "EDC16C41",
+  "display_name": "Bosch EDC16C41 Nissan Patrol GU V Wagon (23710-VS43B / ZD30CRD variants)",
+  "part_numbers_or_os_ids": ["23710-VS43B", "392203", "VS43D and similar"],
+  "vehicles": ["Nissan Patrol GU V Wagon 3.0 TDI / ZD30CRD", "Nissan Patrol diesel applications ~2010"],
+  "hardware": "Bosch EDC16C41",
+  "protocol": "CAN 500kbps + KWP2000 / UDS (ISO 15765)",
+  "bin_size_bytes": 2097152,
+  "checksum": {
+    "type": "bosch_edc16_multi_region_correction",
+    "description": "Bosch EDC16 family typically uses multiple checksum regions + correction values. After modifications (e.g. maps, IQ, boost), recalculate and patch so all regions validate. Community tools (WinOLS, ECM Titanium) have routines; port public logic to Rust.",
+    "reference_files": ["NissanPatrol_2010_EDC16C41_392203.bin", "EDC16C41 working flash"],
+    "notes": "No native XDF in reference yet - requires manual mapping or WinOLS export. Focus on diesel maps: Driver Wish (torque request), Injection Quantity (IQ), Boost setpoint, Rail pressure, EGR, VGT."
+  },
+  "security_access": {
+    "type": "UDS 0x27 seed-key",
+    "reference": "Code for Device.md or edc16_seedkey.rs port",
+    "levels": ["standard diagnostic", "extended for calibration read/write", "flash access"]
+  },
+  "maps_and_xdf": {
+    "has_xdf": false,
+    "notes": "Manual or WinOLS generated maps needed. Common diesel tables: fuel quantity vs torque/speed, boost vs IQ, timing, smoke limit, etc. Generate base XDF or app-native defs from known addresses in the working bin.",
+    "eeprom": "EDC16C41 working eeprom (2KB) for adaptations/immobiliser"
+  },
+  "notes": "Matches REFERENCE_INDEX.md entry for Nissan Patrol EDC16C41. 23710-VS43B is the specific part for GU V Wagon variant. Build DB entry to enable auto-identification on connect and checksum correction before flashing modified bins. Safe OBD or bench read recommended for personal ECU."
+}
