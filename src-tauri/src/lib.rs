@@ -1,37 +1,3 @@
-//! TuneItVerse — LS1 P01 PCM backend (Tauri)
-//!
-//! Stage 2:  Full VPW PID decode via pid_decode.rs
-//! Stage 2b: GM P01 seed-key security unlock via security.rs
-//! Stage 3:  Mode 23/34/36/37 flash read/write via flash.rs
-//! Stage 3b: P01 calibration checksum correction via checksum.rs
-//! Stage 4:  DTC read / clear / freeze frame via dtc.rs
-//! Stage 5:  ECU identification, full PCM backup, BIN validation (real implementation)
-//! Stage 6:  write_calibration command alias; JS byte-passing fixes
-//! Protocol: J1850 VPW via USB-serial bridge @ 115200 baud
-
-pub mod checksum;
-pub mod dtc;
-pub mod ecu_database;
-pub mod flash;
-pub mod pid_decode;
-pub mod security;
-pub mod vpw;
-
-use checksum::{
-    ChecksumReport, CorrectedCal,
-    validate_checksums, correct_and_validate_checksums,
-    CAL_IMAGE_SIZE,
-};
-use dtc::{
-    DtcReadResult, DtcClearResult, FreezeFrameResult,
-    read_dtcs, clear_dtcs, read_freeze_frame,
-};
-use flash::{
-    FlashProgress, FlashReadResult, FlashWriteResult,
-    flash_read, flash_write, read_calibration, write_calibration,
-    guard_write_range, CAL_A_START, CAL_REGION_SIZE,
-    crc32 as flash_crc32,
-};
 use pid_decode::*;
 use security::{SecurityLevel, SecurityState, unlock_level1, unlock_level2};
 
@@ -218,6 +184,11 @@ fn list_serial_ports() -> Result<Vec<SerialPortInfo>, String> {
 }
 
 #[tauri::command]
+fn list_supported_ecus() -> Result<Vec<String>, String> {
+    Ok(ecu_database::list_supported_ecu_families())
+}
+
+#[tauri::command]
 fn connect_ecu(port: String, baud: u32, state: tauri::State<AppState>) -> Result<String, String> {
     let serial = serialport::new(&port, baud)
         .timeout(Duration::from_millis(100))
@@ -388,8 +359,7 @@ fn flash_write_cal(
         let sec = state.security.lock().map_err(|_| "Lock failed".to_string())?;
         if sec.locked || sec.level != Some(SecurityLevel::Level2) {
             return Err(
-                "Flash write requires Level 2 security. \
-                 Call security_unlock_l2 first.".to_string()
+                "Flash write requires Level 2 security. Call security_unlock_l2 first.".to_string()
             );
         }
     }
@@ -608,7 +578,7 @@ fn read_properties(state: tauri::State<AppState>) -> Result<EcuProperties, Strin
         ecu_type: "P01 / 0411".to_string(),
         protocol: "GM J1850 VPW @ 10.4 kbps".to_string(),
         status:   "Identified".to_string(),
-    })
+    });
 }
 
 #[tauri::command]
@@ -702,7 +672,7 @@ fn validate_bin(file_bytes: Vec<u8>) -> Result<BinValidationResult, String> {
         compatible,
         compatibility: compat.to_string(),
         message: format!("{} CRC-32: 0x{:08X}.", cs_msg, crc),
-    })
+    });
 }
 
 #[tauri::command]
@@ -746,7 +716,7 @@ fn compare_bin_to_ecu(
             "{} of {} blocks differ ({:.1}% mismatch). File CRC-32: 0x{:08X}, ECU CRC-32: 0x{:08X}.",
             diff_blocks, total_blocks, pct, flash_crc32(&file_bytes), ecu_cal.crc32
         ),
-    })
+    });
 }
 
 /// write_calibration — calibration-only write path (128 KiB, Cal A+B).
@@ -785,7 +755,7 @@ fn write_calibration_cmd(
             "Calibration written successfully. {} bytes, {} blocks. {} region(s) checksum-corrected. CRC-32: 0x{:08X}.",
             write_result.bytes_written, write_result.blocks_written, fixed, write_result.crc32_written,
         ),
-    })
+    });
 }
 
 #[tauri::command]
@@ -827,7 +797,7 @@ fn write_os_calibration(
             "Calibration written successfully. {} bytes in {} blocks. {} checksum region(s) corrected pre-write. CRC-32: 0x{:08X}.",
             write_result.bytes_written, write_result.blocks_written, fixed, write_result.crc32_written,
         ),
-    })
+    });
 }
 
 #[tauri::command]
@@ -850,7 +820,7 @@ fn verify_after_write(
                 "Verification passed. All {} checksum regions valid. {} bytes read back. SHA-256: {}.",
                 report.regions.len(), readback.length, hash,
             ),
-        })
+        });
     } else {
         Ok(WriteResult {
             success: false,
@@ -858,7 +828,7 @@ fn verify_after_write(
                 "Verification FAILED. {} of {} checksum regions invalid. SHA-256: {}.",
                 report.failed_count, report.regions.len(), hash,
             ),
-        })
+        });
     }
 }
 
@@ -875,6 +845,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             list_serial_ports,
+            list_supported_ecus,
             connect_ecu,
             disconnect_ecu,
             connection_status,
