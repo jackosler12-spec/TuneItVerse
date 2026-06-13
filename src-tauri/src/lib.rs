@@ -11,6 +11,7 @@
 
 pub mod checksum;
 pub mod dtc;
+pub mod ecu_database;
 pub mod flash;
 pub mod pid_decode;
 pub mod security;
@@ -459,7 +460,7 @@ fn read_ecu_data(state: tauri::State<AppState>) -> Result<EcuTelemetry, String> 
     poll01!(0x06, stft_b1_pct,   decode_stft_b1);
     poll01!(0x07, ltft_b1_pct,   decode_ltft_b1);
     poll01!(0x08, stft_b2_pct,   decode_stft_b2);
-    poll01!(0x09, ltft_b2_pct,   decode_ltft_b2);
+    poll01!(0x09, ltft_b1_pct,   decode_ltft_b1);
     poll01!(0x0B, map_kpa,       decode_map);
     poll01!(0x0C, rpm,           decode_rpm);
     poll01!(0x0D, vss_kph,       decode_vss);
@@ -629,7 +630,7 @@ fn read_entire_pcm(
     }).map_err(|e| format!("PCM read failed: {}", e))?;
 
     let hash = sha256_hex(&result.data);
-    let ts = chrono::Local::now().format("%Y%m%d_%H%M%S");
+    let ts = chrono::Local::now().format!("%Y%m%d_%H%M%S");
     let file_name = format!("pcm_backup_{}.bin", ts);
 
     let save_path = app
@@ -719,7 +720,7 @@ fn compare_bin_to_ecu(
     let ecu_cal = read_calibration(port, |p: FlashProgress| { let _ = app.emit("flash-progress", &p); })
         .map_err(|e| format!("ECU cal read failed: {}", e))?;
     if ecu_cal.data.len() != CAL_IMAGE_SIZE {
-        return Err(format!("ECU returned {} bytes, expected {}.", ecu_cal.data.len(), CAL_IMAGE_SIZE));
+        return Err(format!("ECU returned {} bytes, expected {}. ", ecu_cal.data.len(), CAL_IMAGE_SIZE));
     }
     const BLOCK: usize = 256;
     let total_blocks = CAL_IMAGE_SIZE / BLOCK;
@@ -854,7 +855,7 @@ fn verify_after_write(
         Ok(WriteResult {
             success: false,
             message: format!(
-                "Verification FAILED. {} of {} checksum regions invalid. SHA-256: {}. Consider re-flashing.",
+                "Verification FAILED. {} of {} checksum regions invalid. SHA-256: {}.",
                 report.failed_count, report.regions.len(), hash,
             ),
         })

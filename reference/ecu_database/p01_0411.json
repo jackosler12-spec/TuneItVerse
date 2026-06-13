@@ -1,0 +1,34 @@
+{
+  "ecu_family": "P01_0411",
+  "display_name": "Holden LS1 / GM P01 0411 PCM",
+  "part_numbers_or_os_ids": ["12225074", "other common OS IDs for Holden/GM LS1 2001-2004"],
+  "vehicles": ["Holden Commodore VY LS1", "GM LS1 engine swaps", "2001-2004 LS1 F-body/Corvette applications"],
+  "hardware": "P01 (0411 family) - Motorola based",
+  "protocol": "J1850 VPW @ 10.4 kbps (primary), some CAN variants",
+  "bin_size_bytes": 524288,
+  "flash_memory_map": {
+    "full_flash": "0x00000 - 0x7FFFF (512 KB)",
+    "cal_a": "Calibration block A",
+    "cal_b": "Calibration block B (64 KB blocks typical)"
+  },
+  "checksum": {
+    "type": "gm_p01_sum_to_zero_16bit",
+    "description": "Each 64KB cal block summed as 16-bit big-endian words must total 0x0000. Correction value patched in designated location after modifications. Existing Rust implementation in src-tauri/src/checksum.rs (validate_checksums / correct_and_validate_checksums). GM-P01-P59-checksum-plugin.dll is the reference plugin.",
+    "reference_files": ["GM-P01-P59-checksum-plugin.dll", "Kernel-P01.bin"],
+    "routine": "Ported and active in checksum.rs - uses CAL_IMAGE_SIZE, CorrectedCal struct"
+  },
+  "security_access": {
+    "type": "GM P01 seed-key (two levels)",
+    "reference": "GmKeys.cs + security.rs (Level 1 for read/DTC, Level 2 for flash programming)",
+    "levels": ["Level 1: Mode 27/3B read/clear DTC", "Level 2: Mode 34/36/37 flash"]
+  },
+  "maps_and_xdf": {
+    "has_xdf": true,
+    "xdf_file": "OS-12225074-512Kb-2001-2004.xdf",
+    "description": "Full TunerPro XDF with tables for spark advance, fuel VE, idle, etc. Addresses and scalings defined. Can be imported or manually ported to app map catalogue.",
+    "kernel_for_flash": "Kernel-P01.bin (7.7 KB) - uploaded to RAM for flash ops",
+    "additional_defs": ["16263425.xml", "9365085.xml", "9365095.xml (P01/P59 OS variants)", "PidParameters-VPW.XML for PID decode"]
+  },
+  "communication_kernels": ["Kernel-P01.bin", "Kernel-P10.bin", "Kernel-P12.bin (variants)"],
+  "notes": "Already heavily integrated in Rust backend (vpw.rs, security.rs, checksum.rs, flash.rs, pid_decode.rs, dtc.rs). This DB entry centralizes metadata so frontend/app can auto-detect P01 on connect, load correct checksum routine, and reference XDF/maps. Supports Holden specific + GM variants. Use with PCM Hammer style workflows for affordable flashing."
+}

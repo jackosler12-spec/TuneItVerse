@@ -1,0 +1,30 @@
+{
+  "ecu_family": "EDC16C41",
+  "display_name": "Bosch EDC16C41 Nissan Patrol GU V Wagon (23710-VS43B / ZD30CRD variants)",
+  "part_numbers_or_os_ids": ["23710-VS43B", "392203", "VS43D and similar calibrations"],
+  "vehicles": ["Nissan Patrol GU V Wagon 3.0 TDI / ZD30CRD", "Nissan Patrol diesel ~2010 era"],
+  "hardware": "Bosch EDC16C41 diesel ECU",
+  "protocol": "CAN @ 500 kbps + KWP2000 / UDS (ISO 15765)",
+  "bin_size_bytes": 2097152,
+  "flash_memory_map": {
+    "full_flash": "~2 MB total (approx 1 MB flash + 2 KB EEPROM for adaptations/immobiliser)",
+    "calibration_region": "Separate working calibration file available in reference"
+  },
+  "checksum": {
+    "type": "bosch_edc16_multi_region_correction",
+    "description": "Multiple checksum regions across flash. After map changes (IQ, boost, timing, EGR etc.) recalculate and patch correction values so all regions validate. Reference working flash files for testing. No native Rust implementation yet - add in future (similar to P01 checksum.rs).",
+    "reference_files": ["NissanPatrol_2010_EDC16C41_392203.bin", "EDC16C41 working flash", "EDC16C41 working file complete (cal region)"],
+    "notes": "WinOLS or manual mapping typically used for checksum locations. Port public EDC16 correction logic when implementing full support."
+  },
+  "security_access": {
+    "type": "UDS Service 0x27 seed-key",
+    "reference": "Code for Device.md + planned edc16_seedkey.rs (similar to security.rs for P01)",
+    "levels": ["Standard diagnostic access", "Extended for calibration read/write", "Flash programming access"]
+  },
+  "maps_and_xdf": {
+    "has_xdf": false,
+    "description": "No ready XDF in reference. Requires WinOLS export or manual reverse engineering of diesel maps from the working bin. Key maps: Driver Wish (torque request map), Injection Quantity (IQ) vs speed/torque, Boost setpoint, Rail pressure, VGT duty, EGR maps, Smoke limit, Timing.",
+    "eeprom": "EDC16C41 working eeprom (2 KB) - immobiliser, adaptations, coding data"
+  },
+  "notes": "Matches and expands the REFERENCE_INDEX.md entry. 23710-VS43B is the specific hardware/part for GU V Wagon variant. DB entry enables future auto-identification on CAN/UDS connect, checksum correction before flashing modified bins, and map loading. Recommend safe personal OBD or bench read of your own ECU. Full Rust EDC16 support (vpw-style but for CAN/UDS + checksum) to be added in follow-up."
+}
