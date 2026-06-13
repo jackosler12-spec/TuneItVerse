@@ -1,80 +1,98 @@
-function drawLiveChart() {
-  const canvas = $("#live-chart");
-  if (!canvas) return;
+function initChartControls() {
+  // Legacy - kept for compatibility but dashboard chart removed; live data uses dynamic below
+}
 
-  const ctx = canvas.getContext("2d");
-  const W = canvas.offsetWidth || 800;
-  const H = canvas.height || 300;
-  canvas.width = W;
-  canvas.height = H;
+// Sensor metadata for Live Data view charting and legend
+const sensorMeta = {
+  rpm: { label: "Engine RPM", unit: "rpm", color: "#00c4b4" },
+  map: { label: "Manifold Pressure", unit: "kPa", color: "#6cb8e0" },
+  iat: { label: "Intake Air Temp", unit: "°C", color: "#e0a030" },
+  afr: { label: "Air / Fuel Ratio", unit: "", color: "#4ac990" },
+  tps: { label: "Throttle Position", unit: "%", color: "#00c4b4" },
+  ect: { label: "Coolant Temp", unit: "°C", color: "#e05555" },
+};
 
-  const isDark = document.documentElement.getAttribute("data-theme") !== "light";
-
-  ctx.clearRect(0, 0, W, H);
-
-  // Grid
-  ctx.strokeStyle = isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.05)";
-  ctx.lineWidth = 1;
-  for (let i = 0; i <= 4; i++) {
-    const y = (i / 4) * H;
-    ctx.beginPath();
-    ctx.moveTo(0, y);
-    ctx.lineTo(W, y);
-    ctx.stroke();
-  }
-
-  const ranges = { 
-    rpm: [0, 7000], 
-    map: [20, 105], 
-    iat: [-10, 80], 
-    afr: [10, 18],
-    tps: [0, 100],
-    ect: [-20, 120]
-  };
-  const colors = {
-    rpm: isDark ? "#00c4b4" : "#008c80",
-    map: "#6cb8e0",
-    iat: "#e0a030",
-    afr: "#4ac990",
-    tps: "#00c4b4",
-    ect: "#e05555"
-  };
-
-  const stepX = W / Math.max(state.maxPoints - 1, 1);
+function updateLegend() {
+  const legendEl = $("#chart-legend");
+  if (!legendEl) return;
+  legendEl.innerHTML = "";
 
   if (state.visibleCharts.size === 0) {
-    ctx.fillStyle = isDark ? "#3a5050" : "#9bb6b6";
-    ctx.font = "14px Inter, system-ui, sans-serif";
-    ctx.textAlign = "center";
-    ctx.fillText("Select sensors from the panel to display live traces", W / 2, H / 2 + 10);
+    const hint = document.createElement("span");
+    hint.textContent = "No sensors selected";
+    hint.style.color = "var(--text-faint)";
+    hint.style.fontSize = "var(--text-xs)";
+    legendEl.appendChild(hint);
     return;
   }
 
-  // Draw each visible trace
   state.visibleCharts.forEach((key) => {
-    const data = state.chartData[key] || [];
-    if (data.length < 2) return;
-
-    const [minV, maxV] = ranges[key] || [0, 100];
-    const range = maxV - minV;
-
-    ctx.beginPath();
-    data.forEach((v, i) => {
-      const x = i * stepX;
-      const y = H - ((v - minV) / range) * H * 0.85 - H * 0.05;
-      if (i === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
-    });
-    ctx.strokeStyle = colors[key] || "#00c4b4";
-    ctx.lineWidth = 2.5;
-    ctx.lineJoin = "round";
-    ctx.lineCap = "round";
-    ctx.stroke();
-
-    // subtle glow
-    ctx.shadowColor = colors[key] || "#00c4b4";
-    ctx.shadowBlur = 6;
-    ctx.stroke();
-    ctx.shadowBlur = 0;
+    const meta = sensorMeta[key] || { label: key.toUpperCase(), unit: "", color: "#00c4b4" };
+    const item = document.createElement("div");
+    item.className = "legend-item";
+    item.innerHTML = `
+      <span class="legend-color" style="background: ${meta.color}"></span>
+      <span>${meta.label}${meta.unit ? " (« + meta.unit + ")" : ""}</span>
+    `;
+    legendEl.appendChild(item);
   });
+}
+
+function populateSensorGrid() {
+  const grid = $("#sensor-select-grid");
+  if (!grid) return;
+  grid.innerHTML = "";
+
+  Object.keys(sensorMeta).forEach((key) => {
+    const meta = sensorMeta[key];
+    const btn = document.createElement("button");
+    btn.className = "chip sensor-toggle";
+    btn.dataset.key = key;
+    btn.innerHTML = `
+      <span class="sensor-label">${meta.label}</span>
+      <span class="sensor-unit">${meta.unit}</span>
+    `;
+
+    // Initial state
+    if (state.visibleCharts.has(key)) {
+      btn.classList.add("chip--active");
+    }
+
+    btn.addEventListener("click", () => {
+      if (state.visibleCharts.has(key)) {
+        state.visibleCharts.delete(key);
+        btn.classList.remove("chip--active");
+      } else {
+        state.visibleCharts.add(key);
+        btn.classList.add("chip--active");
+      }
+      drawLiveChart();
+      updateLegend();
+    });
+
+    grid.appendChild(btn);
+  });
+}
+
+function initLiveDataControls() {
+  populateSensorGrid();
+
+  // Select All
+  $("#btn-select-all")?.addEventListener("click", () => {
+    Object.keys(sensorMeta).forEach((key) => state.visibleCharts.add(key));
+    document.querySelectorAll("#sensor-select-grid .chip").forEach((b) => b.classList.add("chip--active"));
+    drawLiveChart();
+    updateLegend();
+  });
+
+  // Clear
+  $("#btn-clear-selection")?.addEventListener("click", () => {
+    state.visibleCharts.clear();
+    document.querySelectorAll("#sensor-select-grid .chip").forEach((b) => b.classList.remove("chip--active"));
+    drawLiveChart();
+    updateLegend();
+  });
+
+  // Initial legend
+  updateLegend();
 }
