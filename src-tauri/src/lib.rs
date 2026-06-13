@@ -10,6 +10,9 @@ use std::{
     time::Duration,
 };
 
+// Bring checksum types into scope for validation results
+use crate::checksum::{ChecksumReport, validate_checksums, CAL_IMAGE_SIZE};
+
 // ─────────────────────────────────────────────────────────────────────────────
 // App state
 // ─────────────────────────────────────────────────────────────────────────────
@@ -67,6 +70,8 @@ struct BinValidationResult {
     compatible:     bool,
     compatibility:  String,
     message:        String,
+    // Added for detailed checksum verification of ECU dumps / BINs
+    checksum_report: Option<ChecksumReport>,
 }
 
 #[derive(Serialize, Clone)]
@@ -379,7 +384,7 @@ fn write_ecu_frame(data: Vec<u8>, state: tauri::State<AppState>) -> Result<Strin
     let mut guard = state.port.lock().map_err(|_| "Lock failed".to_string())?;
     let port = guard.as_mut().ok_or("No connection".to_string())?;
     write_frame(port, &data)?;
-    Ok(format!("Wrote {} bytes", data.len()))
+    Ok(format!("Wrote {} bytes", data.len()));
 }
 
 #[tauri::command]
@@ -398,7 +403,7 @@ fn read_ecu_frame(state: tauri::State<AppState>) -> Result<RawFrame, String> {
 #[tauri::command]
 fn read_ecu_data(state: tauri::State<AppState>) -> Result<EcuTelemetry, String> {
     let mut guard = state.port.lock().map_err(|_| "Lock failed".to_string())?;
-    let port = guard.as_mut().ok_or("No connection".to_string())?;
+    let port = port_guard.as_mut().ok_or("No connection".to_string())?;
 
     let mut d = EcuTelemetry::default();
     d.batt_volt = 12.0;
@@ -631,30 +636,30 @@ fn read_entire_pcm(
 #[tauri::command]
 fn validate_bin(file_bytes: Vec<u8>) -> Result<BinValidationResult, String> {
     let size = file_bytes.len();
-    let (compatible, compat, checksum_ok, cs_msg) = match size {
+    let (compatible, compat, checksum_ok, cs_msg, report) = match size {
         131072 => match validate_checksums(&file_bytes) {
-            Ok(report) => {
-                let msg = if report.all_valid {
-                    format!("All {} checksum regions valid.", report.regions.len())
+            Ok(r) => {
+                let msg = if r.all_valid {
+                    format!("All {} checksum regions valid.", r.regions.len())
                 } else {
-                    format!("{} region(s) invalid.", report.failed_count)
+                    format!("{} region(s) invalid.", r.failed_count)
                 };
-                (true, "Compatible — 128 KiB calibration image", report.all_valid, msg)
+                (true, "Compatible — 128 KiB calibration image", r.all_valid, msg, Some(r))
             }
-            Err(e) => (false, "Incompatible", false, format!("Checksum error: {}", e)),
+            Err(e) => (false, "Incompatible", false, format!("Checksum error: {}", e), None),
         },
         524288 => {
             let cal_slice = &file_bytes[0x20000..0x20000 + CAL_IMAGE_SIZE];
             match validate_checksums(cal_slice) {
-                Ok(report) => {
-                    let msg = if report.all_valid {
+                Ok(r) => {
+                    let msg = if r.all_valid {
                         "Cal region checksums valid (512 KiB full image).".to_string()
                     } else {
-                        format!("{} cal region(s) invalid in full image.", report.failed_count)
+                        format!("{} cal region(s) invalid in full image.", r.failed_count)
                     };
-                    (true, "Compatible — 512 KiB full PCM image", report.all_valid, msg)
+                    (true, "Compatible — 512 KiB full PCM image", r.all_valid, msg, Some(r))
                 }
-                Err(e) => (false, "Incompatible", false, format!("Checksum error: {}", e)),
+                Err(e) => (false, "Incompatible", false, format!("Checksum error: {}", e), None),
             }
         }
         _ => (
@@ -662,6 +667,7 @@ fn validate_bin(file_bytes: Vec<u8>) -> Result<BinValidationResult, String> {
             "Incompatible — unexpected file size",
             false,
             format!("Expected 131072 or 524288 bytes, got {}.", size),
+            None,
         ),
     };
     let detected_os_id = detect_os_id_from_bytes(&file_bytes);
@@ -672,7 +678,8 @@ fn validate_bin(file_bytes: Vec<u8>) -> Result<BinValidationResult, String> {
         compatible,
         compatibility: compat.to_string(),
         message: format!("{} CRC-32: 0x{:08X}.", cs_msg, crc),
-    });
+        checksum_report: report,
+    })
 }
 
 #[tauri::command]
