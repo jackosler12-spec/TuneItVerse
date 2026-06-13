@@ -854,6 +854,8 @@ pub fn run() {
             port:     Mutex::new(None),
             security: Mutex::new(SecurityState::default()),
         })
+        .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             list_serial_ports,
             list_supported_ecus,
