@@ -14,6 +14,9 @@ use std::{
 mod checksum;
 use checksum::{ChecksumReport, validate_checksums, CAL_IMAGE_SIZE, correct_and_validate_checksums};
 
+mod xdf;
+use xdf::{TableDef, ExtractedTable, PatchRequest, PatchResult, parse_xdf_definitions, extract_table_from_bin, patch_table_into_bin};
+
 // ─────────────────────────────────────────────────────────────────────────────
 // App state
 // ─────────────────────────────────────────────────────────────────────────────
@@ -879,6 +882,10 @@ pub fn run() {
             write_calibration_cmd,   // calibration-only write (frontend: write_calibration)
             write_os_calibration,
             verify_after_write,
+            // XDF / real table extraction + patch (exact P01 offsets + byte mapping support)
+            parse_xdf_definitions,
+            extract_table_from_bin,
+            patch_table_into_bin,
         ])
         .run(tauri::generate_context!())
         .expect("Tauri runtime error");
