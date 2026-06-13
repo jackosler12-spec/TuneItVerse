@@ -8,7 +8,7 @@ async function invokeCmd(cmd, args = {}) {
 const state = {
   connected: false,
   pollInterval: null,
-  chartData: { rpm: [], map: [], iat: [] },
+  chartData: { rpm: [], map: [], iat: [], afr: [] },
   maxPoints: 60,
   activeChart: "rpm",
   backupDone: false,
@@ -178,11 +178,12 @@ function drawLiveChart() {
 
   if (data.length < 2) return;
 
-  const ranges = { rpm: [0, 7000], map: [20, 105], iat: [-10, 80] };
+  const ranges = { rpm: [0, 7000], map: [20, 105], iat: [-10, 80], afr: [10, 18] };
   const colors = {
     rpm: isDark ? "#00c4b4" : "#008c80",
     map: "#6cb8e0",
     iat: "#e0a030",
+    afr: "#4ac990",
   };
 
   const [minV, maxV] = ranges[state.activeChart];
