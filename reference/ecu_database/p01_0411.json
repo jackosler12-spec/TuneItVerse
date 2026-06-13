@@ -1,0 +1,27 @@
+{
+  "ecu_family": "P01_0411",
+  "display_name": "Holden LS1 / GM P01 0411 PCM",
+  "part_numbers_or_os_ids": ["12225074", "other common OS IDs for Holden/GM LS1"],
+  "vehicles": ["Holden Commodore VY LS1", "GM LS1 engine swaps", "2001-2004 LS1 applications"],
+  "hardware": "P01 (0411 family)",
+  "protocol": "J1850 VPW @ 10.4 kbps",
+  "bin_size_bytes": 524288,
+  "checksum": {
+    "type": "gm_p01_additive_with_correction",
+    "description": "Checksum must be corrected after any modification using community plugin logic (GM-P01-P59-checksum-plugin.dll equivalent). Locate checksum area and patch correction value so total validates. Port to Rust for native support.",
+    "reference_files": ["GM-P01-P59-checksum-plugin.dll", "Kernel-P01.bin"],
+    "notes": "Already referenced in REFERENCE_INDEX.md. Formalize correction routine here for Tauri backend."
+  },
+  "security_access": {
+    "type": "GM seed-key",
+    "reference": "GmKeys.cs or 2byte-keys.txt style",
+    "levels": ["standard read/write", "tuner lock bypass if needed"]
+  },
+  "maps_and_xdf": {
+    "has_xdf": true,
+    "xdf_file": "OS-12225074-512Kb-2001-2004.xdf",
+    "description": "TunerPro XDF with full table definitions for spark, fuel, idle, etc. Import or port maps to app DB.",
+    "kernel_for_flash": "Kernel-P01.bin"
+  },
+  "notes": "Already partially integrated per REFERENCE_INDEX.md. This DB entry makes it queryable on ECU connect. Support Holden specific calibrations and GM variants. Use PCM Hammer style flashing where possible for affordable workflow."
+}
