@@ -29,8 +29,8 @@
         <span>DTC</span>
         <span class="nav-badge" id="dtc-count-badge">0</span>
       </a>
-      <a href="#" class="nav-item" data-view="calibration">
-        <span>Calibration</span>
+      <a href="#" class="nav-item" data-view="tables">
+        <span>Tables</span>
       </a>
       <a href="#" class="nav-item" data-view="logs">
         <span>Logs</span>
@@ -439,11 +439,124 @@
       </div>
     </section>
 
-      <section class="content content--hidden" id="view-calibration">
-        <div class="placeholder-view">
-          <h2>Calibration</h2>
-          <p>Definition-backed table editing comes after BIN validation, compare, and safe write verification are in
-            place.</p>
+      <section class="content content--hidden" id="view-tables">
+        <div class="tables-header">
+          <div>
+            <h2 style="margin:0; font-size:var(--text-lg); font-weight:700; letter-spacing:-0.02em;">Tables / Maps</h2>
+            <div class="page-sub" style="margin-top:2px;">XDF-backed definitions • Select table to edit • Loaded from recognized BIN</div>
+          </div>
+          <div class="tables-header-actions">
+            <div id="tables-osid-chip" class="vehicle-chip">No BIN loaded — tables locked</div>
+            <button id="btn-reload-xdf" class="btn-sm" disabled>Reload from XDF</button>
+            <button id="btn-export-all-tables" class="btn-sm">Export All (CSV)</button>
+          </div>
+        </div>
+
+        <div class="tables-layout">
+          <!-- List of selectable tables (1D / 2D / 3D) -->
+          <aside class="tables-list-panel panel">
+            <div class="panel-header" style="padding: var(--space-3) var(--space-4);">
+              <div class="panel-title">Table List</div>
+              <div class="panel-actions">
+                <input id="table-search" type="search" placeholder="Filter..." style="width:120px; font-size:11px; padding:2px 6px; border:1px solid var(--border-subtle); border-radius:4px; background:var(--surface-2); color:var(--text);" />
+              </div>
+            </div>
+            <div class="table-filters">
+              <button class="chip chip-filter active" data-filter="all">All</button>
+              <button class="chip chip-filter" data-filter="1d">1D</button>
+              <button class="chip chip-filter" data-filter="2d">2D</button>
+              <button class="chip chip-filter" data-filter="3d">3D</button>
+            </div>
+            <div class="tables-list" id="tables-list">
+              <!-- Populated by JS: table items with type badge, name, short desc -->
+            </div>
+            <div class="tables-list-footer">
+              <span id="tables-count">0 tables</span>
+              <span class="panel-meta">Click to load editor</span>
+            </div>
+          </aside>
+
+          <!-- Editor / Visualizer -->
+          <div class="tables-editor-panel">
+            <article class="panel" id="table-editor-empty-state">
+              <div class="placeholder-view" style="min-height:280px; padding:var(--space-8);">
+                <h2 style="font-size:var(--text-base);">No table selected</h2>
+                <p>Recognize a .bin in the Read/Write tab to load XDF definitions, then choose a table from the list.</p>
+                <button class="btn-secondary" id="btn-go-to-rw">Go to Read / Write</button>
+              </div>
+            </article>
+
+            <article class="panel tables-editor-pane hidden" id="table-editor-pane">
+              <div class="panel-header">
+                <div>
+                  <div class="panel-title" id="editor-table-name">Table Name</div>
+                  <div class="editor-meta-row">
+                    <span class="tbl-badge" id="editor-table-type">2D</span>
+                    <span id="editor-table-units">units</span>
+                    <span id="editor-table-size"></span>
+                    <span id="editor-table-addr" class="panel-meta"></span>
+                  </div>
+                </div>
+                <div class="panel-actions">
+                  <button class="btn-sm" id="btn-revert-table">Revert</button>
+                  <button class="btn-sm" id="btn-export-table">Export CSV</button>
+                  <button class="btn-primary btn-sm" id="btn-apply-to-bin">Apply to BIN Image</button>
+                </div>
+              </div>
+
+              <!-- Description (mandatory per spec) -->
+              <div class="table-description" id="editor-table-desc">
+                Description of what the table represents...
+              </div>
+
+              <!-- Typical tuning software toolbar -->
+              <div class="tuning-toolbar">
+                <div class="toolbar-group">
+                  <label class="small-label">Batch:</label>
+                  <input type="number" id="batch-value" value="1" step="0.1" style="width:70px;" />
+                  <button class="btn-sm" data-batch-op="add">+ Add</button>
+                  <button class="btn-sm" data-batch-op="sub">− Sub</button>
+                  <button class="btn-sm" data-batch-op="mul">× Mul</button>
+                  <button class="btn-sm" data-batch-op="div">÷ Div</button>
+                  <button class="btn-sm" id="btn-interpolate">Interpolate</button>
+                  <button class="btn-sm" id="btn-smooth">Smooth</button>
+                  <button class="btn-sm" id="btn-clamp">Clamp</button>
+                </div>
+                <div class="toolbar-group">
+                  <label><input type="checkbox" id="show-diff" /> Show diff</label>
+                  <button class="btn-sm" id="btn-undo">Undo</button>
+                  <button class="btn-sm" id="btn-select-all-cells">Select All</button>
+                  <button class="btn-sm" id="btn-clear-selection">Clear Sel</button>
+                </div>
+                <div class="toolbar-group toolbar-right">
+                  <span id="edit-stats" class="panel-meta"></span>
+                </div>
+              </div>
+
+              <!-- Data visualization + editable grid (1D/2D/3D aware) -->
+              <div class="table-visual-area" id="table-visual-area">
+                <!-- 3D specific visual -->
+                <div id="viz-3d-container" class="viz-container hidden">
+                  <canvas id="viz-3d-canvas" width="420" height="280"></canvas>
+                  <div class="viz-legend">Z-value color map (blue=low → red=high). Click to select cells.</div>
+                </div>
+                <!-- Main editable data area (grid or 1d controls) -->
+                <div id="table-data-grid" class="table-data-grid">
+                  <!-- JS injects <table class="map-table"> or 1D row or 3D slices -->
+                </div>
+              </div>
+
+              <div class="table-editor-footer">
+                <div>
+                  <span class="panel-meta">Edits are in-memory only until "Apply to BIN Image". Use in Read/Write to write to ECU.</span>
+                </div>
+                <div class="footer-actions">
+                  <button class="btn-secondary btn-sm" id="btn-reset-table">Reset to Original</button>
+                  <button class="btn-secondary btn-sm" id="btn-import-csv">Import CSV</button>
+                </div>
+              </div>
+            </article>
+          </div>
         </div>
       </section>
 
