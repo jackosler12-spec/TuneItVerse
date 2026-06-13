@@ -1,14 +1,17 @@
-  setSensor("vss", d.vss ?? 0);
+  updateChecklist();
+  logJob("TuneItVerse ready.");
 
-  // CSV logging: capture normalized snapshot with timestamp
-  if (state.isLogging) {
-    state.sessionData.push({
-      _ts: Date.now(),
-      ...d, // includes all normalized fields
-    });
-    if (state.sessionData.length % 20 === 0) { // update status occasionally
-      $("#log-status").textContent = `Session: recording... (${state.sessionData.length} samples)`;
+  // Auto-open Connect & Backup wizard as the default starting window
+  setTimeout(() => {
+    const modal = $("#connect-modal");
+    if (modal && !state.connected) {
+      modal.classList.remove("hidden");
+      // Optionally populate ports here if needed
     }
-  }
+  }, 800);
 
-  lastUpdate.textContent = `Updated ${new Date().toLocaleTimeString()}`;
+  drawGauge(gaugeRpmCanvas, 0, 0, 7000, { start: 0.78, end: 1.0 });
+  drawGauge(gaugeMapCanvas, 20, 20, 105, null, "#6cb8e0");
+  drawGauge(gaugeIatCanvas, 0, -10, 80, { start: 0.85, end: 1.0 }, "#e0a030");
+  drawGauge(gaugeAfrCanvas, 14.7, 10, 18, { start: 0.0, end: 0.35 }, "#4ac990");
+  drawLiveChart();
