@@ -49,7 +49,7 @@
   <div class="main-wrapper">
     <header class="topbar">
       <div class="topbar-left">
-        <button id="sidebar-toggle" class="btn-icon" aria-label="Toggle sidebar">☰</button>
+        <button id="sidebar-toggle" class="btn-icon" aria-label="Toggle sidebar">≡</button>
         <div>
           <h1 id="page-title" class="page-title">ECU Diagnostics</h1>
           <div id="page-sub" class="page-sub">No vehicle loaded</div>
@@ -59,7 +59,7 @@
       <div class="topbar-right">
         <div class="vehicle-chip" id="vehicle-osid-chip">No ECU identified</div>
         <div class="vehicle-chip" id="last-update">Disconnected</div>
-        <button class="btn-icon" data-theme-toggle aria-label="Toggle theme">◐</button>
+        <button class="btn-icon" data-theme-toggle aria-label="Toggle theme">Theme</button>
       </div>
     </header>
 
@@ -138,19 +138,7 @@
         </div>
 
         <div class="bottom-grid">
-          <article class="panel chart-panel">
-            <div class="panel-header">
-              <div class="panel-title">Live Parameter Trace</div>
-              <div class="chart-controls">
-                <button class="chip chip--active" data-chart="rpm">RPM</button>
-                <button class="chip" data-chart="map">MAP</button>
-                <button class="chip" data-chart="iat">IAT</button>
-                <button class="chip" data-chart="afr">AFR</button>
-              </div>
-            </div>
-            <canvas id="live-chart"></canvas>
-          </article>
-
+          <!-- Chart moved to dedicated Live Data tab for focused multi-line experience -->
           <article class="panel">
             <div class="panel-header">
               <div class="panel-title">Fault Codes</div>
@@ -349,16 +337,51 @@
         </article>
       </section>
 
+      <!-- Dedicated Live Data View with sensor selection, multi-line chart, and legend -->
       <section class="content content--hidden" id="view-live-data">
-        <div class="placeholder-view">
-          <h2>Live Data Stream</h2>
-          <p>Use the dashboard trace and gauges for now. This view is reserved for higher-rate logging and record
-            controls.</p>
+        <div class="live-data-header">
+          <div>
+            <h2 style="margin:0; font-size:var(--text-lg); font-weight:700; letter-spacing:-0.02em;">Live Data Stream</h2>
+            <div class="page-sub" style="margin-top:4px;">Real-time multi-parameter charting from your ECU • Select sensors to plot</div>
+          </div>
           <div class="live-data-expansions">
             <button id="btn-start-log" class="btn-secondary">Start Session Log</button>
             <button id="btn-download-log" class="btn-secondary" disabled>Download CSV Log</button>
-            <p id="log-status">Session log: idle</p>
+            <span id="log-status" class="panel-meta">Session: idle</span>
           </div>
+        </div>
+
+        <div class="live-data-grid">
+          <!-- Sensor Selection Panel -->
+          <article class="panel sensor-panel">
+            <div class="panel-header">
+              <div class="panel-title">Available Sensors</div>
+              <div class="panel-actions">
+                <button id="btn-select-all" class="btn-sm">All</button>
+                <button id="btn-clear-selection" class="btn-sm">Clear</button>
+              </div>
+            </div>
+            <div class="sensor-select-grid" id="sensor-select-grid">
+              <!-- Populated dynamically by JS with toggleable chips -->
+            </div>
+            <div style="padding: var(--space-2) var(--space-4); font-size: var(--text-xs); color: var(--text-faint); border-top: 1px solid var(--border-subtle);">
+              Click to toggle traces. Default is empty — choose your sensors for a custom live view.
+            </div>
+          </article>
+
+          <!-- Main Chart with Legend -->
+          <article class="panel chart-main-panel">
+            <div class="panel-header">
+              <div class="panel-title">Multi-Line Live Trace</div>
+              <div class="chart-legend" id="chart-legend"></div>
+            </div>
+            <div class="chart-container">
+              <canvas id="live-chart"></canvas>
+            </div>
+            <div class="chart-footer">
+              <span class="panel-meta">Real ECU data only • Independent Y-scaling • 60-point history</span>
+            </div>
+          </article>
         </div>
       </section>
 
