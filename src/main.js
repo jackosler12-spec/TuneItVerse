@@ -1,15 +1,25 @@
-  updateGauges({
-    rpm: d.rpm ?? 0,
-    map: d.map ?? 0,
-    iat: d.iat ?? 0,
-    afr: d.afr ?? 14.7,
+function initChartControls() {
+  document.querySelectorAll("[data-chart]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const key = btn.dataset.chart;
+      if (state.visibleCharts.has(key)) {
+        // Toggle off (but keep at least one visible)
+        if (state.visibleCharts.size > 1) {
+          state.visibleCharts.delete(key);
+          btn.classList.remove("chip--active");
+        }
+      } else {
+        state.visibleCharts.add(key);
+        btn.classList.add("chip--active");
+      }
+      drawLiveChart();
+    });
   });
 
-  // Always push latest values to ALL series so history is ready when toggled visible
-  Object.keys(state.chartData).forEach((key) => {
-    if (typeof d[key] === "number") {
-      state.chartData[key].push(d[key]);
-      if (state.chartData[key].length > state.maxPoints) state.chartData[key].shift();
+  // Initialize chip active states from visibleCharts
+  document.querySelectorAll("[data-chart]").forEach((btn) => {
+    if (state.visibleCharts.has(btn.dataset.chart)) {
+      btn.classList.add("chip--active");
     }
   });
-  drawLiveChart();
+}
