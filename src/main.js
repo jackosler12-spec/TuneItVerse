@@ -364,7 +364,7 @@ function switchView(viewName) {
   if (navItem) navItem.classList.add("active");
 
   const titles = {
-    dashboard: ["ECU Diagnostics", "2001 LS1 Nissan Patrol GU"],
+    dashboard: ["ECU Diagnostics", "Connect to load live vehicle data"],
     "read-write": ["Read / Write Pipeline", "Identify, backup, validate, write, verify"],
     "live-data": ["Live Data Stream", "Real-time parameter feed"],
     dtc: ["DTC Fault Codes", "Diagnostic trouble codes"],
