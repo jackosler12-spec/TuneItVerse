@@ -10,6 +10,7 @@
     "withGlobalTauri": true,
     "windows": [
       {
+        "label": "main",
         "title": "TuneItVerse",
         "width": 1440,
         "height": 900,
@@ -18,11 +19,23 @@
         "transparent": false,
         "minWidth": 1100,
         "minHeight": 720
+      },
+      {
+        "label": "connect-backup",
+        "title": "TuneItVerse - Connect & Backup",
+        "width": 900,
+        "height": 700,
+        "resizable": true,
+        "fullscreen": false,
+        "transparent": false,
+        "minWidth": 700,
+        "minHeight": 550,
+        "url": "index.html#connect"
       }
     ],
     "security": {
-      "csp": null
-    }
+        "csp": null
+      }
   },
   "bundle": {
     "active": true,
