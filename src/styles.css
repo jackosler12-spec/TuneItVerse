@@ -311,6 +311,7 @@ a {
   color: var(--accent);
   border-color: var(--accent);
   background: var(--accent-dim);
+  box-shadow: 0 0 0 1px var(--accent);
 }
 
 .main-wrapper {
@@ -392,6 +393,14 @@ a {
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
+  transition: box-shadow var(--transition), transform var(--transition);
+}
+
+.kpi-card:hover,
+.gauge-card:hover,
+.panel:hover {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
 }
 
 .kpi-card {
@@ -473,7 +482,7 @@ a {
 
 .bottom-grid {
   display: grid;
-  grid-template-columns: 1fr 340px;
+  grid-template-columns: 1fr;
   gap: var(--space-4);
 }
 
@@ -495,12 +504,6 @@ a {
   display: flex;
   gap: var(--space-2);
   flex-wrap: wrap;
-}
-
-.chart-panel canvas {
-  padding: var(--space-4);
-  width: 100%;
-  height: 180px;
 }
 
 .dtc-list {
@@ -755,73 +758,198 @@ a {
   max-width: 44ch;
 }
 
-@media (max-width: 1100px) {
+/* ─── Enhanced Visual Appeal & Live Data View ───────────────────────────────── */
 
-  .kpi-row,
-  .gauge-row,
-  .rw-grid,
-  .detail-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
+.live-data-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-bottom: var(--space-2);
+}
 
-  .bottom-grid {
+.live-data-grid {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  gap: var(--space-5);
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .live-data-grid {
     grid-template-columns: 1fr;
   }
 }
 
-@media (max-width: 720px) {
-  :root {
-    --sidebar-w: 60px;
-  }
-
-  .sidebar .sidebar-logo-text,
-  .sidebar .nav-item span:not(.nav-badge),
-  .sidebar .btn-connect,
-  .sidebar .connection-status span:last-child {
-    display: none;
-  }
-
-  .sidebar .nav-item,
-  .sidebar .sidebar-logo {
-    justify-content: center;
-  }
-
-  .content {
-    padding: var(--space-4);
-  }
-
-  .sensor-row {
-    grid-template-columns: 120px 1fr 48px 44px;
-  }
-
-  .topbar {
-    padding: 0 var(--space-4);
-  }
-
-  .topbar-right .vehicle-chip:first-child {
-    display: none;
-  }
+.sensor-panel {
+  height: fit-content;
 }
 
-@media (max-width: 520px) {
-
-  .kpi-row,
-  .gauge-row,
-  .rw-grid,
-  .detail-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .sensor-row {
-    grid-template-columns: 1fr;
-  }
-
-  .sensor-val,
-  .sensor-unit {
-    text-align: left;
-  }
+.sensor-select-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(105px, 1fr));
+  gap: var(--space-2);
+  padding: var(--space-4);
 }
-/* ─── DTC view ─────────────────────────────────────────────────────────── */
+
+.sensor-toggle {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: var(--space-2) var(--space-3);
+  min-height: 56px;
+  text-align: center;
+  border-radius: var(--radius-md);
+}
+
+.sensor-toggle .sensor-label {
+  font-weight: 600;
+  font-size: var(--text-xs);
+  line-height: 1.1;
+}
+
+.sensor-toggle .sensor-unit {
+  font-size: 10px;
+  color: var(--text-faint);
+  font-weight: 500;
+}
+
+.chart-main-panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.chart-container {
+  padding: var(--space-3);
+  background: var(--surface-2);
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+}
+
+.chart-main-panel canvas {
+  width: 100%;
+  height: 320px;
+  display: block;
+  border-radius: var(--radius-md);
+}
+
+.chart-footer {
+  padding: var(--space-2) var(--space-4);
+  border-top: 1px solid var(--border-subtle);
+  font-size: var(--text-xs);
+}
+
+.chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+  min-height: 24px;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-xs);
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.legend-color {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  box-shadow: 0 0 0 2px rgba(255,255,255,0.1);
+}
+
+/* Modal polish for connect window */
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  backdrop-filter: blur(4px);
+}
+
+.modal.hidden {
+  display: none;
+}
+
+.modal-content {
+  background: var(--surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xl);
+  width: 92%;
+  max-width: 420px;
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+}
+
+.modal-content h2 {
+  margin: 0;
+  padding: var(--space-5) var(--space-6);
+  font-size: var(--text-lg);
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--surface-2);
+}
+
+.modal-body {
+  padding: var(--space-5) var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.modal-body label {
+  font-size: var(--text-xs);
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.modal-body input,
+.modal-body select {
+  background: var(--surface-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+
+.modal-hint {
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+  margin: 0;
+}
+
+.modal-actions {
+  display: flex;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  background: var(--surface-2);
+  border-top: 1px solid var(--border-subtle);
+}
+
+/* Subtle polish on existing elements */
+.chip {
+  font-weight: 600;
+}
+
+.btn-sm {
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--text-xs);
+  font-weight: 600;
+}
+
+/* DTC and other refinements */
 .dtc-panel {
   display: flex;
   flex-direction: column;
