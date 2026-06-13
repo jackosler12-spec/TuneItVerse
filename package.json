@@ -1,10 +1,14 @@
 {
-  "name": "npm",
+  "name": "tuneitverse",
   "private": true,
   "version": "0.1.0",
+  "description": "TuneItVerse - Industry-standard open ECU tuning platform (Tauri + Rust)",
   "type": "module",
   "scripts": {
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "check": "tauri info"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2"
