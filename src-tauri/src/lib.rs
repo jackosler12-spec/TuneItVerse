@@ -10,8 +10,9 @@ use std::{
     time::Duration,
 };
 
-// Bring checksum types into scope for validation results
-use crate::checksum::{ChecksumReport, validate_checksums, CAL_IMAGE_SIZE};
+// Bring checksum types into scope for detailed ECU dump verification
+mod checksum;
+use checksum::{ChecksumReport, validate_checksums, CAL_IMAGE_SIZE, correct_and_validate_checksums};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // App state
@@ -70,7 +71,7 @@ struct BinValidationResult {
     compatible:     bool,
     compatibility:  String,
     message:        String,
-    // Added for detailed checksum verification of ECU dumps / BINs
+    // Detailed checksum verification report for ECU dumps / BIN files
     checksum_report: Option<ChecksumReport>,
 }
 
@@ -403,7 +404,7 @@ fn read_ecu_frame(state: tauri::State<AppState>) -> Result<RawFrame, String> {
 #[tauri::command]
 fn read_ecu_data(state: tauri::State<AppState>) -> Result<EcuTelemetry, String> {
     let mut guard = state.port.lock().map_err(|_| "Lock failed".to_string())?;
-    let port = port_guard.as_mut().ok_or("No connection".to_string())?;
+    let port = guard.as_mut().ok_or("No connection".to_string())?;
 
     let mut d = EcuTelemetry::default();
     d.batt_volt = 12.0;
