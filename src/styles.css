@@ -1377,3 +1377,11 @@ a {
   box-shadow: 0 0 0 2px #fff inset;
   z-index: 2;
 }
+
+/* Calibration byte map (every byte mapped & selectable) + live CS panel */
+#cal-map-canvas {
+  image-rendering: pixelated;
+}
+.cal-map-panel, .checksum-live {
+  font-size: var(--text-xs);
+}

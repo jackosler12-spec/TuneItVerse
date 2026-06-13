@@ -546,6 +546,33 @@
                 </div>
               </div>
 
+              <!-- EVERY BYTE MAPPED + SELECTABLE: Calibration Map (canvas) -->
+              <div class="cal-map-panel" style="margin-top:8px; border-top:1px solid var(--border-subtle); padding-top:8px;">
+                <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
+                  <strong style="font-size:11px;">Calibration Memory Map (every byte selectable)</strong>
+                  <span id="map-stats" class="panel-meta"></span>
+                  <button class="btn-sm" id="btn-map-refresh">Refresh Map</button>
+                  <input id="map-jump-addr" placeholder="0x2D65E" style="width:90px; font-size:10px;" />
+                  <button class="btn-sm" id="btn-map-jump">Jump</button>
+                </div>
+                <canvas id="cal-map-canvas" width="512" height="200" style="border:1px solid var(--border-subtle); border-radius:4px; background:#0c1212; cursor:crosshair; width:100%; max-width:560px;"></canvas>
+                <div class="panel-meta" style="font-size:10px;">Hover/click byte → loads owning table + highlights cell. Color = table category. Gray = unmapped/free. Click grid cell to highlight bytes here.</div>
+              </div>
+
+              <!-- Live checksum + pro panel (industry standard) -->
+              <div class="checksum-live" style="margin-top:8px; background:var(--surface-2); border:1px solid var(--border-subtle); border-radius:4px; padding:6px 10px; font-size:11px;">
+                <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+                  <span><strong>Checksums:</strong> <span id="cs-status">—</span></span>
+                  <button class="btn-sm" id="btn-correct-cs">Correct Now (auto)</button>
+                  <button class="btn-sm" id="btn-validate-cs">Validate</button>
+                  <span id="cs-detail" class="panel-meta"></span>
+                  <button class="btn-sm" id="btn-load-compare">Compare 2nd BIN (diff)</button>
+                  <button class="btn-sm" id="btn-export-patched">Export Patched BIN</button>
+                  <input type="file" id="custom-xdf-xml" accept=".xml,.xdf" style="font-size:10px;" />
+                  <button class="btn-sm" id="btn-load-custom-xdf">Load custom defs XML</button>
+                </div>
+              </div>
+
               <div class="table-editor-footer">
                 <div>
                   <span class="panel-meta">Edits are in-memory only until "Apply to BIN Image". Use in Read/Write to write to ECU.</span>
