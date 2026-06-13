@@ -1690,8 +1690,251 @@ function init() {
   }, 800);
 
   // Expose a couple things for debugging in console
-  window.TuneItVerse = { state, loadTablesForOs, invokeCmd };
+  window.TuneItVerse = { state, loadTablesForOs, invokeCmd, extractRealTableData, patchRealTableIntoBin, buildByteOwnershipMap };
   console.log("%c[TuneItVerse] App initialized. Tables/Map section ready.", "color:#0aa");
 }
+
+// --- Calibration Map (every byte) + Live CS + Pro buttons (wired here for Phase 2/3) ---
+function setupByteMapAndProFeatures() {
+  const canvas = $("#cal-map-canvas");
+  const ctx = canvas ? canvas.getContext("2d", { alpha: true }) : null;
+
+  function drawMap() {
+    if (!canvas || !ctx || !state.byteOwners || !state.selectedFileBytes) {
+      if (canvas && ctx) {
+        ctx.fillStyle = "#112";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = "#9ab";
+        ctx.fillText("Load BIN + tables to see byte map (exact P01 offsets)", 10, 20);
+      }
+      return;
+    }
+    const owners = state.byteOwners;
+    const W = canvas.width;
+    const H = canvas.height;
+    const calLen = owners.length;
+    ctx.fillStyle = "#0a1010";
+    ctx.fillRect(0, 0, W, H);
+
+    const cols = 256; // 256 wide => nice for 128k (512 tall)
+    const scaleX = W / cols;
+    const scaleY = H / Math.ceil(calLen / cols);
+    const cellW = Math.max(1, Math.floor(scaleX));
+    const cellH = Math.max(1, Math.floor(scaleY));
+
+    // Simple category colors (extend as needed)
+    const catColor = (id) => {
+      if (!id) return "#334";
+      if (id.includes("ve") || id.includes("air") || id.includes("maf")) return "#2a7";
+      if (id.includes("spark") || id.includes("knock") || id.includes("timing")) return "#26a";
+      if (id.includes("trans") || id.includes("shift") || id.includes("press")) return "#a62";
+      if (id.includes("idle") || id.includes("iac")) return "#6a6";
+      return "#6aa";
+    };
+
+    for (let i = 0; i < calLen; i++) {
+      const x = (i % cols) * scaleX;
+      const y = Math.floor(i / cols) * scaleY;
+      const own = owners[i];
+      let col = "#334";
+      if (own && own.length) {
+        col = catColor(own[0]);
+      }
+      ctx.fillStyle = col;
+      ctx.fillRect(Math.floor(x), Math.floor(y), cellW, cellH);
+    }
+
+    // Overlay checksum region hints (very rough using known rel offsets)
+    ctx.strokeStyle = "rgba(255,200,0,0.6)";
+    ctx.lineWidth = 1;
+    // Example: mark first few regions roughly
+    const marks = [0x0000, 0x4000, 0x8000, 0xC000, 0xF000, 0xF400];
+    marks.forEach(m => {
+      const idx = m;
+      const x = (idx % cols) * scaleX;
+      const y = Math.floor(idx / cols) * scaleY;
+      ctx.strokeRect(x, y, 40 * scaleX, 8 * scaleY);
+    });
+
+    const stats = $("#map-stats");
+    if (stats) {
+      const mapped = owners.filter(o => o && o.length).length;
+      stats.textContent = `${mapped}/${calLen} bytes mapped • click to select`;
+    }
+  }
+
+  // Mouse interaction: map byte -> table + cell
+  if (canvas) {
+    canvas.addEventListener("mousemove", (e) => {
+      if (!state.byteOwners || !state.currentTables.length) return;
+      const rect = canvas.getBoundingClientRect();
+      const px = e.clientX - rect.left;
+      const py = e.clientY - rect.top;
+      const cols = 256;
+      const calLen = state.byteOwners.length;
+      const scaleX = canvas.width / cols;
+      const scaleY = canvas.height / Math.ceil(calLen / cols);
+      const byteIdx = Math.floor(py / scaleY) * cols + Math.floor(px / scaleX);
+      if (byteIdx < 0 || byteIdx >= calLen) return;
+      const owners = state.byteOwners[byteIdx] || [];
+      if (owners.length) {
+        // auto select first owning table (demo)
+        const first = owners[0];
+        const tbl = state.currentTables.find(t => t.id === first);
+        if (tbl && state.activeTableId !== first) {
+          selectTable(first);
+        }
+        canvas.title = `Byte cal+0x${byteIdx.toString(16).toUpperCase()} → ${owners.join(", ")}`;
+      } else {
+        canvas.title = `Byte cal+0x${byteIdx.toString(16).toUpperCase()} (unmapped / checksum / OS)`;
+      }
+    });
+
+    canvas.addEventListener("click", (e) => {
+      // same as mousemove but force highlight in current grid if possible
+      drawMap();
+    });
+  }
+
+  $("#btn-map-refresh")?.addEventListener("click", () => {
+    if (state.selectedFileBytes) buildByteOwnershipMap(state.selectedFileBytes);
+    drawMap();
+  });
+
+  $("#btn-map-jump")?.addEventListener("click", () => {
+    const v = ($("#map-jump-addr")?.value || "").trim();
+    if (!v || !state.byteOwners) return;
+    const addr = parseInt(v.replace(/^0x/i, ""), 16);
+    const base = state.calBaseForMap || 0;
+    const rel = addr - base;
+    if (rel >= 0 && rel < state.byteOwners.length) {
+      const own = state.byteOwners[rel] || [];
+      if (own[0]) selectTable(own[0]);
+    }
+    drawMap();
+  });
+
+  // Live checksum panel (uses existing Rust correct/validate)
+  $("#btn-correct-cs")?.addEventListener("click", async () => {
+    const b = state.selectedFileBytes;
+    if (!b) return alert("No BIN loaded");
+    try {
+      const res = await invokeCmd("correct_cal_checksum", { data: Array.from(b) });
+      if (res && res.data) {
+        const nb = new Uint8Array(res.data);
+        state.selectedFileBytes = nb;
+        state.currentBinPatched = nb;
+        if (state.activeTableId) {
+          const tbl = state.currentTables.find(t => t.id === state.activeTableId);
+          if (tbl) {
+            const ex = extractRealTableData(nb, tbl);
+            const ed = getActiveEdit();
+            if (ed && ex.values) ed.data = tbl.data = ex.values;
+          }
+        }
+        buildByteOwnershipMap(nb);
+        logJob("Checksums corrected (Rust engine).");
+        drawMap();
+        updateCsStatus();
+      }
+    } catch (e) { logJob("Correct checksums: " + e); }
+  });
+
+  $("#btn-validate-cs")?.addEventListener("click", async () => {
+    const b = state.selectedFileBytes;
+    if (!b) return;
+    try {
+      const r = await invokeCmd("validate_cal_checksum", { data: Array.from(b) });
+      const st = $("#cs-status");
+      const dt = $("#cs-detail");
+      if (st) st.textContent = r && r.all_valid ? "ALL VALID ✓" : `${r?.failed_count || "?"} regions invalid`;
+      if (dt) dt.textContent = r ? `${r.valid_count} valid / ${r.failed_count} bad` : "";
+    } catch (e) { logJob("Validate: " + e); }
+  });
+
+  function updateCsStatus() {
+    // lightweight: just call validate on demand from buttons; could poll dirty state
+    const st = $("#cs-status");
+    if (st) st.textContent = state.selectedFileBytes ? "dirty after edits (use Correct)" : "—";
+  }
+
+  $("#btn-export-patched")?.addEventListener("click", () => {
+    const b = state.selectedFileBytes || state.currentBinPatched;
+    if (!b) return alert("No patched BIN");
+    const blob = new Blob([b], { type: "application/octet-stream" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `tuneitverse_patched_${Date.now()}.bin`;
+    a.click();
+    logJob("Exported current patched BIN image (real table edits + any corrections).");
+  });
+
+  $("#btn-load-compare")?.addEventListener("click", () => {
+    const inp = document.createElement("input");
+    inp.type = "file";
+    inp.accept = ".bin,.cal";
+    inp.onchange = async () => {
+      const f = inp.files[0];
+      if (!f) return;
+      const buf = await f.arrayBuffer();
+      state.compareBin = new Uint8Array(buf);
+      logJob(`Compare BIN loaded: ${f.name}. Diff view will highlight in table editor (enable "Show diff").`);
+      alert("Second BIN loaded for diff. Open a table and toggle 'Show diff' to see deltas.");
+    };
+    inp.click();
+  });
+
+  $("#btn-load-custom-xdf")?.addEventListener("click", async () => {
+    const inp = $("#custom-xdf-xml");
+    if (!inp || !inp.files || !inp.files[0]) {
+      alert("Choose an XML (tableseek or TableData) via the file input next to the button.");
+      return;
+    }
+    const txt = await inp.files[0].text();
+    const extra = parseXdfOrTableDataXml(txt);
+    if (extra.length) {
+      // merge into current (or replace for the family)
+      const merged = [...state.currentTables];
+      extra.forEach(t => {
+        if (!merged.find(m => m.id === t.id)) merged.push(t);
+      });
+      state.currentTables = merged;
+      renderTablesList();
+      logJob(`Loaded ${extra.length} additional tables from custom XML (real addr/data will extract on next select if BIN present).`);
+      if (state.selectedFileBytes) buildByteOwnershipMap(state.selectedFileBytes);
+    }
+  });
+
+  // Wire map draw after table changes (call drawMap from a few places via monkey or direct)
+  const _oldRender = window.renderActiveTableGrid || (() => {});
+  // crude: expose draw
+  window.drawCalMap = drawMap;
+
+  // Initial draw hook (called from loadTablesForOs after map build)
+  const origLoad = loadTablesForOs;
+  window.loadTablesForOs = function(osid) {
+    origLoad(osid);
+    setTimeout(drawMap, 120);
+    setTimeout(updateCsStatus, 150);
+  };
+
+  // Keyboard pro touches (industry standard)
+  document.addEventListener("keydown", (e) => {
+    if ($("#view-tables").classList.contains("content--hidden")) return;
+    if (e.key === "+" || e.key === "=") { e.preventDefault(); applyBatchOp("add", 1); }
+    if (e.key === "-") { e.preventDefault(); applyBatchOp("sub", 1); }
+    if (e.key.toLowerCase() === "s" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); applyActiveTableToBin(); }
+  });
+
+  // Auto draw on first tables load
+  setTimeout(() => { if (state.byteOwners) drawMap(); }, 800);
+}
+
+// Call the pro setup from init (safe)
+const _origInit = window.init || (() => {});
+window.init = function() {
+  _origInit();
+  try { setupByteMapAndProFeatures(); } catch (e) { console.warn("pro setup", e); }
+};
 
 init();
