@@ -353,6 +353,11 @@
           <h2>Live Data Stream</h2>
           <p>Use the dashboard trace and gauges for now. This view is reserved for higher-rate logging and record
             controls.</p>
+          <div class="live-data-expansions">
+            <button id="btn-start-log" class="btn-secondary">Start Session Log</button>
+            <button id="btn-download-log" class="btn-secondary" disabled>Download CSV Log</button>
+            <p id="log-status">Session log: idle</p>
+          </div>
         </div>
       </section>
 
@@ -425,6 +430,27 @@
         </div>
       </section>
     </main>
+  </div>
+
+  <!-- Connect Modal (better than prompt) -->
+  <div id="connect-modal" class="modal hidden">
+    <div class="modal-content">
+      <h2>Connect to ECU</h2>
+      <div class="modal-body">
+        <label for="port-select">Serial Port</label>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <select id="port-select" style="flex: 1;"></select>
+          <button id="refresh-ports" class="btn-sm">Refresh</button>
+        </div>
+        <label for="baud-input">Baud Rate</label>
+        <input type="number" id="baud-input" value="115200" style="width: 100%;">
+        <p class="modal-hint">For P01 VPW use 10400 or 115200 (adapter dependent). Default 115200 for modern adapters.</p>
+      </div>
+      <div class="modal-actions">
+        <button id="btn-modal-connect" class="btn-primary">Connect</button>
+        <button id="btn-modal-cancel" class="btn-secondary">Cancel</button>
+      </div>
+    </div>
   </div>
 
   <script type="module" src="./main.js"></script>

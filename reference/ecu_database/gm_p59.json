@@ -1,0 +1,36 @@
+{
+  "ecu_family": "GM_P59",
+  "display_name": "GM P59 PCM (Truck/SUV 2003-2007)",
+  "part_numbers_or_os_ids": ["12225074", "12586243", "12602801", "P59 variants"],
+  "vehicles": ["Chevrolet Silverado", "GMC Sierra", "Chevrolet Tahoe", "GM Truck LS swaps"],
+  "hardware": "P59 (E67/E38 variants)",
+  "protocol": "J1850 VPW / CAN (some)",
+  "bin_size_bytes": 524288,
+  "flash_memory_map": {
+    "os_region": "0x00000-0x1FFFF",
+    "cal_a": "0x20000-0x3FFFF",
+    "cal_b": "0x40000-0x7FFFF"
+  },
+  "checksum": {
+    "type": "gm_p59_additive_correction",
+    "description": "P59 uses additive checksum with correction word(s) near end of cal region. Similar to P01 but different locations.",
+    "reference_files": ["Kernel-P59.bin (future)", "P59 checksum notes"],
+    "routine": "Port from P01 checksum.rs with adjusted offsets",
+    "notes": "Verify with known-good bin before write. Correction often at 0x7FFC in cal blocks."
+  },
+  "security_access": {
+    "type": "GM seed-key (2-byte or 4-byte variants)",
+    "reference": "GmKeys.cs and 2byte-keys.txt",
+    "levels": ["Level 1 (read)", "Level 2 (write/flash)"]
+  },
+  "maps_and_xdf": {
+    "has_xdf": true,
+    "xdf_file": "OS-P59-xxx.xdf (community)",
+    "description": "Spark, fuel, VE, timing, trans, torque management tables for P59",
+    "kernel_for_flash": "Kernel-P59.bin (to be added)",
+    "additional_defs": ["Parameters.Standard.xml subset"],
+    "eeprom": "Possible on some variants"
+  },
+  "communication_kernels": ["Kernel-P59.bin"],
+  "notes": "P59 is evolution of P01 for trucks/SUVs. Very similar VPW protocol and security. Checksum locations differ slightly — use dedicated routine. Good candidate for next full integration after P01."
+}
