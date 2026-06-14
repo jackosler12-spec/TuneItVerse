@@ -227,6 +227,13 @@
             <div class="step" data-step="7"><span class="step-num">7</span> <span class="step-label">Verify + Audit Trail</span> <span class="step-status" id="step7-status">Pending</span></div>
           </div>
           <div class="pipeline-note">One-click guided flow with mandatory confirms at risky steps. Full audit trail exported as JSON. Leverages existing backup/compare/validate/write + checksum correction.</div>
+          <!-- Kernel Auto-Upload UI (refinement for recovery in #15) -->
+          <div style="padding: var(--space-2) var(--space-4); border-top:1px solid var(--border-subtle); display:flex; gap:8px; align-items:center; font-size:11px;">
+            <label>Recovery Kernel:</label>
+            <input type="file" id="kernel-file" accept=".bin" style="font-size:10px;" />
+            <button class="btn-sm" id="btn-upload-kernel">Upload Kernel (for recovery/low-level reflash)</button>
+            <span id="kernel-status" class="panel-meta">Optional - auto-prompted on P01 failure per DB</span>
+          </div>
         </div>
 
         <div class="rw-grid">
@@ -615,6 +622,30 @@
         </div>
       </section>
     </main>
+  </div>
+
+  <!-- Custom Risk Confirmation Modal for Pipeline (refinement for #15) -->
+  <div id="risk-modal" class="modal hidden">
+    <div class="modal-content" style="max-width:520px;">
+      <h2>⚠️ Critical Risk Acknowledgment - Safe Flash Pipeline</h2>
+      <div class="modal-body">
+        <p><strong>Flashing ECU firmware/calibration carries permanent brick risk.</strong> Interruption, wrong image, power loss, or incompatible hardware can destroy the PCM. Only proceed if:</p>
+        <ul style="font-size:12px; margin:8px 0;">
+          <li>You have a verified full backup from this exact ECU.</li>
+          <li>The BIN has passed all checksum/compat/validation steps.</li>
+          <li>You are on stable power (bench supply recommended for P01).</li>
+          <li>You understand recovery may require soldering/grounding hacks (see DB notes for P01).</li>
+        </ul>
+        <label><input type="checkbox" id="risk-ack1" /> I have a recent full backup and understand it is required for recovery.</label>
+        <label><input type="checkbox" id="risk-ack2" /> I have verified the target BIN matches my ECU family/OSID and checksums are valid.</label>
+        <label><input type="checkbox" id="risk-ack3" /> I accept full responsibility; I will not interrupt the process and have read all prompts.</label>
+        <label style="margin-top:8px;">Type <strong>PROCEED</strong> to confirm: <input type="text" id="risk-confirm-text" style="width:120px;" placeholder="PROCEED" /></label>
+      </div>
+      <div class="modal-actions">
+        <button id="btn-risk-confirm" class="btn-danger">Confirm & Proceed with Flash</button>
+        <button id="btn-risk-cancel" class="btn-secondary">Cancel Pipeline</button>
+      </div>
+    </div>
   </div>
 
   <!-- Connect Modal (better than prompt) -->

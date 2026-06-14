@@ -22,6 +22,18 @@ use serialport::SerialPort;
 pub struct AppState {
     pub port: Mutex<Option<Box<dyn SerialPort + Send>>>,
     pub current_ecu: Mutex<Option<EcuDbEntry>>,
+    pub health: Mutex<ConnectionHealth>,  // For roadmap #16 health monitor
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub enum ConnectionHealth {
+    #[default]
+    Disconnected,
+    Connected,
+    Logging,
+    FlashSafe,
+    FlashUnsafe,
+    Error(String),
 }
 
 impl Default for AppState {
@@ -29,6 +41,7 @@ impl Default for AppState {
         Self {
             port: Mutex::new(None),
             current_ecu: Mutex::new(None),
+            health: Mutex::new(ConnectionHealth::Disconnected),
         }
     }
 }
@@ -107,6 +120,35 @@ fn get_recovery_prompt(ecu_family: String, error_context: String) -> Result<Stri
     flash::get_recovery_prompt(ecu_family, error_context)
 }
 
+// Roadmap #16: Protocol abstraction + health monitor stubs (foundation)
+#[tauri::command]
+fn get_connection_health(state: State<AppState>) -> Result<String, String> {
+    let h = state.health.lock().map_err(|e| e.to_string())?;
+    Ok(format!("{:?}", *h))
+}
+
+#[tauri::command]
+fn auto_detect_protocol(state: State<AppState>, port_name: String) -> Result<String, String> {
+    // Stub: in full, try VPW/CAN/K-Line/J2534 shims from reference/, update health
+    let mut h = state.health.lock().map_err(|e| e.to_string())?;
+    *h = ConnectionHealth::Connected; // Simplified
+    Ok(format!("Auto-detected protocol on {} (stub - full shims in vpw.rs + future CAN etc.)", port_name))
+}
+
+// Roadmap #17 stub: ingest def / discovery (ties to xdf + ecu_database)
+#[tauri::command]
+fn discover_maps_from_bin(bin_bytes: Vec<u8>, family: String) -> Result<String, String> {
+    // Simple pattern match using reference tableseek ideas; full corpus analysis in future
+    let suggestions = format!("Discovered {} potential maps for {} (stub using reference/ tableseek patterns + XDF ingest). Use tables UI to confirm.", bin_bytes.len() / 100, family);
+    Ok(suggestions)
+}
+
+// Roadmap #18 stub exposure (logging templates from DB)
+#[tauri::command]
+fn get_logging_templates() -> Result<Vec<String>, String> {
+    Ok(vec!["P01 HighRate VE/Spark".into(), "General OBD PIDs".into(), "Dyno Pull (RPM/MAP/TPS)".into()])
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -119,6 +161,11 @@ pub fn run() {
             validate_bin,
             guided_flash_pipeline,
             get_recovery_prompt,
+            // Roadmap foundations (16 protocols/health, 17 defs/discovery, 18 logging)
+            get_connection_health,
+            auto_detect_protocol,
+            discover_maps_from_bin,
+            get_logging_templates,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -419,6 +419,10 @@ async function autoDetectAndCheck() {
     $("#rw-status").textContent = props.status || "Identified";
     state.detectedOsid = props.os_id || state.detectedOsid;
     logJob(`Auto-detected: OSID=${props.os_id}, VIN=${props.vin}`);
+    // #16 protocol integration
+    if (props && state.connected) {
+      invokeCmd("auto_detect_protocol", { port_name: "current", /* or from state */ }).then(r => logJob("Protocol: " + r)).catch(()=>{});
+    }
 
     // Compatibility via DB
     let compat = true;
@@ -500,48 +504,67 @@ async function runGuidedPipeline() {
   state.pipeline.activeStep = 5;
   updatePipelineSteps();
 
-  // Step 5: Pre-write validation + risk
+  // Step 5: Pre-write validation + risk (using custom modal - refinement)
   logJob("Step 5: Pre-write validations...");
-  // Re-validate checksum on working bin
   try {
     const v = await invokeCmd("validate_cal_checksum", { data: Array.from(workingBin) });
     logJob("Working BIN checksums: " + (v.all_valid ? "ALL VALID" : `${v.failed_count} bad regions`));
     logAudit(5, "Checksum validation", { all_valid: v.all_valid, failed: v.failed_count });
   } catch {}
-  // Security reminder
-  if (!confirm("RISK WARNING: Flashing requires Security Level 2 unlock. This can permanently brick the ECU if interrupted or wrong image used. Have you verified everything? Type 'YES' in next prompt to continue.")) return;
-  const ack = prompt("Type YES to acknowledge risks and proceed to flash:");
-  if (ack !== "YES") { logJob("User aborted at risk ack."); return; }
-  // Ensure L2? (user must have unlocked via other UI or we can add button)
-  logJob("User risk ack received. Proceeding.");
+
+  // Custom risk modal instead of confirm/prompt
+  const riskConfirmed = await showRiskModal();
+  if (!riskConfirmed) {
+    logJob("User aborted at risk acknowledgment.");
+    return;
+  }
+  logJob("User risk acknowledgment received via custom modal. Proceeding.");
   state.pipeline.step5 = true;
   state.pipeline.activeStep = 6;
   updatePipelineSteps();
   updateChecklist();
-  logAudit(5, "Pre-write validation + risk acknowledgment complete");
+  logAudit(5, "Pre-write validation + risk acknowledgment complete (custom modal)");
 
-  // Step 6: Flash
-  if (!confirm("FINAL CONFIRM: About to FLASH the working BIN to ECU. This is irreversible without backup. Continue?")) return;
+  // Step 6: Flash - use tighter unified Rust guided_flash_pipeline command (refinement)
+  if (!confirm("FINAL CONFIRM: About to FLASH via guided pipeline. Irreversible without backup. Continue?")) return;
   try {
-    const mode = $$('input[name="write-mode"]:checked')[0]?.value || "calibration_only";
-    logJob(`Step 6: Executing ${mode} write...`);
-    let writeRes;
-    if (mode === "calibration_only") {
-      writeRes = await invokeCmd("write_calibration_cmd", { fileBytes: Array.from(workingBin) });
-    } else {
-      writeRes = await invokeCmd("write_os_calibration", { fileBytes: Array.from(workingBin) });
+    const ecuFam = state.detectedOsid || "P01_0411";
+    const req = {
+      ecu_family: ecuFam,
+      tuned_bin: Array.from(workingBin),
+      perform_backup: false, // already handled in prior guided step
+      auto_correct_checksum: true,
+      enable_recovery_prompts: true,
+      user_confirmed_risks: true
+    };
+    logJob(`Step 6: Calling unified guided_flash_pipeline for ${ecuFam}...`);
+    const resJson = await invokeCmd("guided_flash_pipeline", { request_json: JSON.stringify(req) });
+    const result = JSON.parse(resJson);
+    logJob("Pipeline result: " + (result.success ? "SUCCESS" : "FAILED") + " - " + (result.logs ? result.logs.join(" | ") : ""));
+    if (result.steps_completed) result.steps_completed.forEach(s => logJob("  Step: " + s));
+    if (result.recovery_prompt) {
+      logJob("Recovery prompt: " + result.recovery_prompt.message);
+      // UI could show additional modal from result.recovery_prompt
     }
-    logJob("Flash result: " + writeRes.message);
-    logAudit(6, "Flash executed", { mode, success: writeRes.success, message: writeRes.message });
-    // Optional kernel note
-    logJob("Note: For recovery scenarios, consider low-level kernel upload from reference/ (Kernel-P01.bin) using advanced flash_region if cal write fails.");
-    state.pipeline.step6 = true;
-    state.pipeline.activeStep = 7;
-    updatePipelineSteps();
+    logAudit(6, "Flash via unified Rust command", { success: result.success, steps: result.steps_completed });
+    if (result.success) {
+      state.pipeline.step6 = true;
+      state.pipeline.activeStep = 7;
+      updatePipelineSteps();
+      // Integrate roadmap #18: suggest/start logging/dyno after successful flash
+      logJob("Post-flash: Consider starting high-rate logging or dyno mode (templates available). Virtual dyno stub: use log data for power calc.");
+      // Simple dyno stub example (would use real log sessions)
+      if (state.lastLogSession) {
+        const dyno = computeSimpleDyno(state.lastLogSession); // see helper
+        logJob("Sample dyno from last session: " + JSON.stringify(dyno));
+      }
+    } else {
+      throw new Error(result.error || "Pipeline failed");
+    }
   } catch (e) {
-    logJob("FLASH FAILED: " + e);
+    logJob("FLASH/PIPELINE FAILED: " + e);
     logAudit(6, "Flash failed", { error: String(e) });
-    alert("Flash failed. Check logs and consider recovery kernel. Pipeline halted.");
+    alert("Flash/pipeline failed. Check logs and consider recovery kernel from reference/.");
     return;
   }
 
@@ -1117,6 +1140,11 @@ function loadTablesForOs(osid) {
   if (state.currentTables.length) {
     selectTable(state.currentTables[0].id);
   }
+  // Integrate #17: discovery assistant stub on BIN load for tables view
+  if (bin && state.detectedOsid) {
+    invokeCmd("discover_maps_from_bin", { binBytes: Array.from(bin), family: state.detectedOsid || "P01_0411" })
+      .then(s => logJob("Map discovery: " + s)).catch(()=>{});
+  }
   const chip = $("#tables-osid-chip");
   if (chip) chip.textContent = `XDF loaded • ${osid || "unknown"} (real offsets from TableData/XML)`;
   $("#btn-reload-xdf").disabled = false;
@@ -1480,6 +1508,8 @@ function undoLastEdit() {
   renderActiveTableGrid();
   const tbl = state.currentTables.find(t => t.id === id);
   if (tbl) render3DVisualIfNeeded(tbl);
+  // #18 integrate: overlay if log data
+  if (state.lastLogSession) overlayLogOnCurrentTable(state.lastLogSession);
 }
 
 function markModified(force) {
@@ -2110,20 +2140,113 @@ function setupPipeline() {
   const startBtn = $("#btn-start-pipeline");
   const exportBtn = $("#btn-export-audit");
   if (startBtn) startBtn.addEventListener("click", runGuidedPipeline);
-  if (exportBtn) exportBtn.addEventListener("click", () => {
-    if (!state.auditLog || !state.auditLog.length) { alert("No audit log yet. Run the pipeline first."); return; }
-    const blob = new Blob([JSON.stringify({ audit: state.auditLog, generated: new Date().toISOString() }, null, 2)], {type: "application/json"});
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `tuneitverse_audit_${Date.now()}.json`;
-    a.click();
-    logJob("Audit trail exported.");
+  if (exportBtn) exportBtn.addEventListener("click", exportAudit);
+
+  // Wire custom risk modal buttons
+  const riskModal = $("#risk-modal");
+  const btnConfirm = $("#btn-risk-confirm");
+  const btnCancel = $("#btn-risk-cancel");
+  if (btnCancel) btnCancel.addEventListener("click", () => {
+    if (riskModal) riskModal.classList.add("hidden");
+    if (window._riskResolve) window._riskResolve(false);
+  });
+  if (btnConfirm) btnConfirm.addEventListener("click", () => {
+    const a1 = $("#risk-ack1")?.checked;
+    const a2 = $("#risk-ack2")?.checked;
+    const a3 = $("#risk-ack3")?.checked;
+    const text = ($("#risk-confirm-text")?.value || "").trim();
+    if (a1 && a2 && a3 && text === "PROCEED") {
+      if (riskModal) riskModal.classList.add("hidden");
+      if (window._riskResolve) window._riskResolve(true);
+    } else {
+      alert("All checkboxes and exact 'PROCEED' text required.");
+    }
   });
 
-  // Auto-detect on connect (enhance existing connect success)
-  // We can override or hook the connect flow. For simplicity, after successful connect in setupConnect, call auto if on read-write.
-  // Simple: add to the connect modal success path indirectly by checking in updateConnUI or add a small auto button, but to keep simple:
-  // In practice, user clicks "Read Properties" which now also sets step1. Pipeline start will force it.
+  // Auto-detect on connect
+  // Load persisted audit on startup
+  try {
+    const persisted = localStorage.getItem("tuneitverse_last_audit");
+    if (persisted) {
+      const data = JSON.parse(persisted);
+      state.auditLog = data.audit || [];
+      logJob("Restored previous audit log from localStorage (persistence).");
+    }
+  } catch {}
+
+  // Integrate roadmap stubs on load (health, discovery, templates)
+  setTimeout(async () => {
+    try {
+      const health = await invokeCmd("get_connection_health");
+      logJob("Protocol health: " + health);
+      const templates = await invokeCmd("get_logging_templates");
+      if (templates && templates.length) logJob("Logging templates available: " + templates.join(", "));
+    } catch {}
+  }, 1500);
+
+  // Kernel upload UI handler (more auto-upload support)
+  const kernelInput = $("#kernel-file");
+  const btnKernel = $("#btn-upload-kernel");
+  if (btnKernel) btnKernel.addEventListener("click", async () => {
+    if (!kernelInput || !kernelInput.files.length) { alert("Select a kernel .bin first (e.g. Kernel-P01.bin from reference/)."); return; }
+    const f = kernelInput.files[0];
+    const buf = await f.arrayBuffer();
+    const kbytes = new Uint8Array(buf);
+    logJob(`Kernel selected: ${f.name} (${kbytes.length} bytes)`);
+    // For real: call flash write region or dedicated kernel upload command using state
+    // Example: if connected, use low-level (demo here)
+    try {
+      // Placeholder - in full would invoke "flash_write_region" or kernel specific with addr from DB profile
+      await invokeCmd("write_ecu_frame", { data: Array.from(kbytes.slice(0, 256)) }); // demo stub
+      $("#kernel-status").textContent = `Uploaded ${f.name} (demo stub - use real addr from profile)`;
+      logAudit("kernel", "Recovery kernel prepared/uploaded", { name: f.name, size: kbytes.length });
+      // Auto prompt in pipeline if enabled
+    } catch (e) { logJob("Kernel upload demo: " + e); }
+  });
+}
+
+function showRiskModal() {
+  return new Promise((resolve) => {
+    const modal = $("#risk-modal");
+    if (!modal) { resolve(confirm("Risks acknowledged? (fallback)")); return; }
+    window._riskResolve = resolve;
+    // Reset fields
+    ["risk-ack1","risk-ack2","risk-ack3"].forEach(id => { const el = $(`#${id}`); if (el) el.checked = false; });
+    const txt = $("#risk-confirm-text"); if (txt) txt.value = "";
+    modal.classList.remove("hidden");
+  });
+}
+
+function exportAudit() {
+  const log = state.auditLog || [];
+  if (!log.length) { alert("No audit log yet."); return; }
+  const data = { audit: log, generated: new Date().toISOString(), ecu: state.detectedOsid || "unknown" };
+  const blob = new Blob([JSON.stringify(data, null, 2)], {type: "application/json"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `tuneitverse_audit_${Date.now()}.json`;
+  a.click();
+  logJob("Audit trail exported.");
+  // Persistence: also save to localStorage
+  try { localStorage.setItem("tuneitverse_last_audit", JSON.stringify(data)); } catch {}
+}
+
+// Roadmap #18 simple dyno / logging helpers (build on existing live data + reference LogParam/DataLogger concepts)
+function computeSimpleDyno(logData) {
+  // Stub virtual dyno: mass=1500kg, assume accel from RPM delta, basic power = force*vel
+  if (!logData || !logData.rpm || logData.rpm.length < 2) return { hp: 0, tq: 0, note: "Need RPM + time series log" };
+  const dt = 0.1; // assume 10hz
+  const mass = 1500;
+  const maxRpmDelta = Math.max(...logData.rpm.map((v,i, a) => i>0 ? v - a[i-1] : 0));
+  const estAccel = maxRpmDelta / dt * 0.1; // rough
+  const hp = (mass * estAccel * 0.1) / 745.7; // very rough
+  return { est_hp: hp.toFixed(1), est_tq: (hp * 5252 / 5000).toFixed(1), note: "Stub - use real mass/slope/gear from session" };
+}
+
+// Example overlay stub: called from table render or pipeline complete to "overlay" log hits on maps (for #18)
+function overlayLogOnCurrentTable(logData) {
+  if (!state.activeTableId || !logData) return;
+  logJob(`Overlay stub: Would compute cell hits/stats from log on ${state.activeTableId} using axis breakpoints (RPM/MAP match). See tableseek reference for pattern.`);
 }
 
 // Call the pro setup from init (safe)
