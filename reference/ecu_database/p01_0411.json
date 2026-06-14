@@ -30,5 +30,11 @@
     "additional_defs": ["16263425.xml", "9365085.xml", "9365095.xml (P01/P59 OS variants)", "PidParameters-VPW.XML for PID decode"]
   },
   "communication_kernels": ["Kernel-P01.bin", "Kernel-P10.bin", "Kernel-P12.bin (variants)"],
-  "notes": "Already heavily integrated in Rust backend (vpw.rs, security.rs, checksum.rs, flash.rs, pid_decode.rs, dtc.rs). This DB entry centralizes metadata so frontend/app can auto-detect P01 on connect, load correct checksum routine, and reference XDF/maps. Supports Holden specific + GM variants. Use with PCM Hammer style workflows for affordable flashing."
+  "recovery_paths": {
+    "locked_pcm_grounding_hack": "For tuner-locked P01: Apply ground to specific solder pad (public DIY guides) during write/erase phase to bypass lock and allow reflash. Time grounding with 'erasing' stage for success. Safety: Stable power, correct pad identification critical.",
+    "bricked_or_failed_flash_recovery": "DIY Gen3 GM bricked PCM recovery: Ground the correct solder pad on P01/P59 PCB (near flash chip or test point, red/blue connectors). Hold during write if needed. Use recovery kernel reflash. Critical: Stable battery voltage >12.5V recommended, use bench power supply. Public community tutorials detail exact pad location.",
+    "auto_prompt": "The guided pipeline must detect flash failure or lock and auto-prompt for recovery kernel upload (Kernel-P01.bin) + step-by-step grounding assistance with clear warnings, diagrams references, and confirmation steps.",
+    "low_level_reflash": "Support uploading recovery kernel to RAM and performing low-level full OS reflash, bypassing normal calibration locks where hardware allows."
+  },
+  "notes": "Already heavily integrated in Rust backend (vpw.rs, security.rs, checksum.rs, flash.rs, pid_decode.rs, dtc.rs). This DB entry centralizes metadata so frontend/app can auto-detect P01 on connect (VIN/OS ID), load correct checksum routine + seedkey, and reference XDF/maps. Enhanced with public recovery procedures scraped from tuning community resources for the safe guided flashing pipeline. Use with affordable open tools like PCMHammer patterns."
 }
