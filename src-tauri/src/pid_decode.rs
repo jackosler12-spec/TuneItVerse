@@ -1,3 +1,5 @@
+fn ubyte(raw: &[u8]) -> Option<f32> { raw.get(0).map(|&b| b as f32) }
+
 /// PID 0x2F — Fuel Level %  formula: x/2.55 (standard OBD-II)
 pub fn decode_fuel_level(raw: &[u8]) -> Option<f32> {
     Some(ubyte(raw)? / 2.55)
