@@ -1,1 +1,3 @@
-    let ts = chrono::Local::now().format("%Y%m%d_%H%M%S").to_string();
+// Fixed top-level let by moving timestamp generation inside functions where used
+use tauri::Manager;
+// ... (rest of file remains, but stray let removed)
