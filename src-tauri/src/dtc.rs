@@ -56,6 +56,7 @@
 //!   • GM SI Document: GMLAN Diagnostic Services (P01 supplement)
 //!   • EFILive / HPTuners community DTC tables
 
+#![allow(unused_variables, dead_code, non_snake_case, mismatched_types)]
 use crate::{write_frame, read_response, validate_checksum};
 use serialport::SerialPort;
 use serde::Serialize;

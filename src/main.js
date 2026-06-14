@@ -2185,6 +2185,20 @@ function setupPipeline() {
   }, 1500);
 
   // Kernel upload UI handler (more auto-upload support)
+  // Embedded Assistant wiring (new next-level feature)
+  const adviceBtn = $("#btn-get-advice");
+  const queryInput = $("#assistant-query");
+  const respDiv = $("#assistant-response");
+  if (adviceBtn) adviceBtn.addEventListener("click", async () => {
+    const q = (queryInput?.value || state.activeTableId || "general").trim();
+    const fam = state.detectedOsid || "P01_0411";
+    try {
+      const advice = await invokeCmd("get_tuning_advice", { table_id: q, sample_value: 50.0, ecu_family: fam });
+      if (respDiv) respDiv.textContent = advice;
+      logJob("Advisor: " + advice.substring(0,80) + "...");
+    } catch (e) { if (respDiv) respDiv.textContent = "Advisor unavailable (stub): " + e; }
+  });
+
   const kernelInput = $("#kernel-file");
   const btnKernel = $("#btn-upload-kernel");
   if (btnKernel) btnKernel.addEventListener("click", async () => {
@@ -2227,8 +2241,11 @@ function exportAudit() {
   a.download = `tuneitverse_audit_${Date.now()}.json`;
   a.click();
   logJob("Audit trail exported.");
-  // Persistence: also save to localStorage
-  try { localStorage.setItem("tuneitverse_last_audit", JSON.stringify(data)); } catch {}
+  // Persistence: localStorage + Tauri fs (via new save_audit_log command)
+  try { 
+    localStorage.setItem("tuneitverse_last_audit", JSON.stringify(data)); 
+    invokeCmd("save_audit_log", { content: JSON.stringify(data) }).catch(() => {});
+  } catch {}
 }
 
 // Roadmap #18 simple dyno / logging helpers (build on existing live data + reference LogParam/DataLogger concepts)
