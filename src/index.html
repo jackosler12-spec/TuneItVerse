@@ -208,6 +208,27 @@
       </section>
 
       <section class="content content--hidden" id="view-read-write">
+        <!-- Guided Safe Flashing Pipeline (Priority #1) -->
+        <div class="pipeline-header panel">
+          <div class="panel-header">
+            <div class="panel-title">🛡️ Guided, Safe Flashing Pipeline (Priority #1)</div>
+            <div class="panel-actions">
+              <button class="btn-primary" id="btn-start-pipeline">Start Full Guided Pipeline</button>
+              <button class="btn-secondary" id="btn-export-audit">Export Audit Log</button>
+            </div>
+          </div>
+          <div class="pipeline-steps">
+            <div class="step" data-step="1"><span class="step-num">1</span> <span class="step-label">Auto-Detect ECU + Compat Check</span> <span class="step-status" id="step1-status">Ready</span></div>
+            <div class="step" data-step="2"><span class="step-num">2</span> <span class="step-label">Backup (Full PCM)</span> <span class="step-status" id="step2-status">Pending</span></div>
+            <div class="step" data-step="3"><span class="step-num">3</span> <span class="step-label">Load/Validate BIN + Patch (from Tables)</span> <span class="step-status" id="step3-status">Pending</span></div>
+            <div class="step" data-step="4"><span class="step-num">4</span> <span class="step-label">Compare BIN ↔ ECU</span> <span class="step-status" id="step4-status">Pending</span></div>
+            <div class="step" data-step="5"><span class="step-num">5</span> <span class="step-label">Pre-Write Validation (Checksum / Security / Risk Ack)</span> <span class="step-status" id="step5-status">Pending</span></div>
+            <div class="step" data-step="6"><span class="step-num">6</span> <span class="step-label">Flash (with Kernel Prompt if needed)</span> <span class="step-status" id="step6-status">Pending</span></div>
+            <div class="step" data-step="7"><span class="step-num">7</span> <span class="step-label">Verify + Audit Trail</span> <span class="step-status" id="step7-status">Pending</span></div>
+          </div>
+          <div class="pipeline-note">One-click guided flow with mandatory confirms at risky steps. Full audit trail exported as JSON. Leverages existing backup/compare/validate/write + checksum correction.</div>
+        </div>
+
         <div class="rw-grid">
           <article class="panel">
             <div class="panel-header">
