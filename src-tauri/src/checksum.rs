@@ -141,7 +141,7 @@ pub fn correct_checksums(data: &[u8]) -> Result<CorrectedCal, String> {
                 match correct_region(block_mut, region) {
                     Ok(new_cs) => { fixed_count += 1; (new_cs, true) }
                     Err(e) => {
-                        failed_count += 1;
+                        let _ = failed_count + 1; // assigned but read only in report
                         return Err(format!("Block {} region '{}': {}", block_idx, region.name, e));
                     }
                 }
