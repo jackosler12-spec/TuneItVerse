@@ -2,8 +2,9 @@
 // Pillar 1 completion: Full AppState with live SerialPort, real ECU DB integration, Tauri events for progress/logs
 
 use std::sync::Mutex;
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Emitter, State};
 use serde::{Serialize, Deserialize};
+use serde_json;
 
 mod checksum;
 mod dtc;
@@ -14,16 +15,16 @@ mod security;
 mod vpw;
 mod xdf;
 
-use crate::checksum::ChecksumReport;
+// use crate::checksum::ChecksumReport; // used in flash types
 use crate::ecu_database::{EcuDbEntry, get_ecu_by_family, list_supported_ecu_families};
-use crate::flash::{GuidedFlashRequest, GuidedFlashResult};
+use crate::flash::GuidedFlashRequest; // GuidedFlashResult used via flash module
 
 // Re-exported / pub(crate) helpers used by dtc.rs, security.rs, flash etc. (restored for compile)
-pub(crate) fn write_frame(port: &mut Box<dyn SerialPort + Send>, frame: &[u8]) -> Result<(), String> {
+pub(crate) fn write_frame(port: &mut Box<dyn SerialPort>, frame: &[u8]) -> Result<(), String> {
     port.write_all(frame).map_err(|e| format!("Write error: {}", e))
 }
 
-pub(crate) fn read_response(port: &mut Box<dyn SerialPort + Send>) -> Result<Vec<u8>, String> {
+pub(crate) fn read_response(port: &mut Box<dyn SerialPort>) -> Result<Vec<u8>, String> {
     let mut buf = [0u8; 256];
     let n = port.read(&mut buf).map_err(|e| format!("Read error: {}", e))?;
     Ok(buf[..n].to_vec())
@@ -65,7 +66,7 @@ impl Default for AppState {
 
 // Existing / placeholder commands
 #[tauri::command]
-fn read_entire_pcm(state: State<AppState>) -> Result<String, String> {
+fn read_entire_pcm(_state: State<AppState>) -> Result<String, String> {
     let ts = chrono::Local::now().format("%Y%m%d_%H%M%S").to_string();
     // TODO: Use state.port to perform real read via flash module
     Ok(format!("ECU dump saved as pcm_backup_{}.bin (live port ready)", ts))
@@ -148,7 +149,8 @@ async fn guided_flash_pipeline(
 
 #[tauri::command]
 fn get_recovery_prompt(ecu_family: String, error_context: String) -> Result<String, String> {
-    flash::get_recovery_prompt(ecu_family, error_context)
+    let p = flash::get_recovery_prompt(ecu_family, error_context);
+    serde_json::to_string(&p).map_err(|e| e.to_string())
 }
 
 // Roadmap #16: Protocol abstraction + health monitor stubs (foundation)

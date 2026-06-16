@@ -202,8 +202,8 @@ pub fn extract_table(bin: &[u8], def: &TableDef) -> ExtractedTable {
     let cols = def.cols.max(1);
     let is_word = def.data_type.to_uppercase().contains("WORD");
     let is_signed = def.data_type.to_uppercase().starts_with('S');
-    let esz = if is_word { 2 } else { 1 };
-    let need = off + rows * cols * esz;
+    let _esz = if is_word { 2 } else { 1 };
+    let need = off + rows * cols * _esz;
 
     let mut values: Vec<Vec<f64>> = vec![vec![0.0; cols]; rows];
     let mut note = None;
@@ -217,7 +217,7 @@ pub fn extract_table(bin: &[u8], def: &TableDef) -> ExtractedTable {
     for r in 0..rows {
         for c in 0..cols {
             let raw = if is_word {
-                if idx + 1 >= bin.len() { 0 } else {
+                if idx + 1 >= bin.len() { 0.0 } else {
                     let v = ((bin[idx] as u16) << 8) | (bin[idx + 1] as u16);
                     idx += 2;
                     if is_signed && v > 0x7FFF { (v as i32 - 0x10000) as i32 as f64 } else { v as f64 }
@@ -247,7 +247,7 @@ pub fn patch_table(mut bin: Vec<u8>, def: &TableDef, new_values: &[Vec<f64>]) ->
     let addr = parse_addr(&def.addr);
     let mut off = base + addr;
     let is_word = def.data_type.to_uppercase().contains("WORD");
-    let esz = if is_word { 2 } else { 1 };
+    let _esz = if is_word { 2 } else { 1 };
 
     for row in new_values {
         for phys in row {
