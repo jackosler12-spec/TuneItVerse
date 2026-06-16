@@ -51,8 +51,8 @@
       <div class="topbar-left">
         <button id="sidebar-toggle" class="btn-icon" aria-label="Toggle sidebar">≡</button>
         <div>
-          <h1 id="page-title" class="page-title">ECU Diagnostics</h1>
-          <div id="page-sub" class="page-sub">No vehicle loaded</div>
+          <h1 id="page-title" class="page-title">TuneItVerse</h1>
+          <div id="page-sub" class="page-sub"></div>
         </div>
       </div>
 
@@ -208,169 +208,140 @@
       </section>
 
       <section class="content content--hidden" id="view-read-write">
-        <!-- Guided Safe Flashing Pipeline (Priority #1) -->
-        <div class="pipeline-header panel">
-          <div class="panel-header">
-            <div class="panel-title">🛡️ Guided, Safe Flashing Pipeline (Priority #1)</div>
-            <div class="panel-actions">
-              <button class="btn-primary" id="btn-start-pipeline">Start Full Guided Pipeline</button>
-              <button class="btn-secondary" id="btn-export-audit">Export Audit Log</button>
+        <!-- Internal Tabs for Flash Workflow - no scroll, professional layout like TunerPro/HP Tuners -->
+        <div class="rw-tabs">
+          <div class="rw-tab-bar">
+            <button class="rw-tab active" data-rw-tab="pipeline">Pipeline</button>
+            <button class="rw-tab" data-rw-tab="detect">Detect & Identity</button>
+            <button class="rw-tab" data-rw-tab="backup">Backup</button>
+            <button class="rw-tab" data-rw-tab="validation">BIN & Validation</button>
+            <button class="rw-tab" data-rw-tab="write">Write & Verify</button>
+          </div>
+
+          <!-- Pipeline Tab -->
+          <div class="rw-tab-content active" data-rw-content="pipeline">
+            <div class="pipeline-header panel">
+              <div class="panel-header">
+                <div class="panel-title">🛡️ Safe Flash Pipeline</div>
+                <div class="panel-actions">
+                  <button class="btn-primary" id="btn-start-pipeline">Start Pipeline</button>
+                  <button class="btn-secondary" id="btn-export-audit">Export Audit</button>
+                </div>
+              </div>
+              <div class="pipeline-steps">
+                <div class="step" data-step="1"><span class="step-num">1</span> <span class="step-label">Auto-Detect + Compat</span> <span class="step-status" id="step1-status">Ready</span></div>
+                <div class="step" data-step="2"><span class="step-num">2</span> <span class="step-label">Backup PCM</span> <span class="step-status" id="step2-status">Pending</span></div>
+                <div class="step" data-step="3"><span class="step-num">3</span> <span class="step-label">BIN + Patch</span> <span class="step-status" id="step3-status">Pending</span></div>
+                <div class="step" data-step="4"><span class="step-num">4</span> <span class="step-label">Compare</span> <span class="step-status" id="step4-status">Pending</span></div>
+                <div class="step" data-step="5"><span class="step-num">5</span> <span class="step-label">Validate + Risk</span> <span class="step-status" id="step5-status">Pending</span></div>
+                <div class="step" data-step="6"><span class="step-num">6</span> <span class="step-label">Flash</span> <span class="step-status" id="step6-status">Pending</span></div>
+                <div class="step" data-step="7"><span class="step-num">7</span> <span class="step-label">Verify</span> <span class="step-status" id="step7-status">Pending</span></div>
+              </div>
+              <div style="padding: var(--space-2) var(--space-4); border-top:1px solid var(--border-subtle); display:flex; gap:8px; align-items:center; font-size:11px;">
+                <label>Recovery Kernel:</label>
+                <input type="file" id="kernel-file" accept=".bin" style="font-size:10px;" />
+                <button class="btn-sm" id="btn-upload-kernel">Upload</button>
+                <span id="kernel-status" class="panel-meta">Auto on failure</span>
+              </div>
             </div>
           </div>
-          <div class="pipeline-steps">
-            <div class="step" data-step="1"><span class="step-num">1</span> <span class="step-label">Auto-Detect ECU + Compat Check</span> <span class="step-status" id="step1-status">Ready</span></div>
-            <div class="step" data-step="2"><span class="step-num">2</span> <span class="step-label">Backup (Full PCM)</span> <span class="step-status" id="step2-status">Pending</span></div>
-            <div class="step" data-step="3"><span class="step-num">3</span> <span class="step-label">Load/Validate BIN + Patch (from Tables)</span> <span class="step-status" id="step3-status">Pending</span></div>
-            <div class="step" data-step="4"><span class="step-num">4</span> <span class="step-label">Compare BIN ↔ ECU</span> <span class="step-status" id="step4-status">Pending</span></div>
-            <div class="step" data-step="5"><span class="step-num">5</span> <span class="step-label">Pre-Write Validation (Checksum / Security / Risk Ack)</span> <span class="step-status" id="step5-status">Pending</span></div>
-            <div class="step" data-step="6"><span class="step-num">6</span> <span class="step-label">Flash (with Kernel Prompt if needed)</span> <span class="step-status" id="step6-status">Pending</span></div>
-            <div class="step" data-step="7"><span class="step-num">7</span> <span class="step-label">Verify + Audit Trail</span> <span class="step-status" id="step7-status">Pending</span></div>
+
+          <!-- Detect Tab -->
+          <div class="rw-tab-content" data-rw-content="detect">
+            <article class="panel">
+              <div class="panel-header">
+                <div class="panel-title">ECU Identity</div>
+              </div>
+              <div class="detail-grid">
+                <div class="detail-item"><span>Protocol</span><strong id="rw-protocol">GM J1850 VPW</strong></div>
+                <div class="detail-item"><span>PCM Type</span><strong id="rw-pcm-type">P01 / 0411</strong></div>
+                <div class="detail-item"><span>Operating System</span><strong id="rw-osid">Unknown</strong></div>
+                <div class="detail-item"><span>VIN</span><strong id="rw-vin">Unknown</strong></div>
+                <div class="detail-item"><span>Hardware</span><strong id="rw-hardware">Unknown</strong></div>
+                <div class="detail-item"><span>Status</span><strong id="rw-status">Not identified</strong></div>
+              </div>
+              <div class="panel-actions">
+                <button class="btn-primary" id="btn-read-properties">Read Properties</button>
+              </div>
+            </article>
           </div>
-          <div class="pipeline-note">One-click guided flow with mandatory confirms at risky steps. Full audit trail exported as JSON. Leverages existing backup/compare/validate/write + checksum correction.</div>
-          <!-- Kernel Auto-Upload UI (refinement for recovery in #15) -->
-          <div style="padding: var(--space-2) var(--space-4); border-top:1px solid var(--border-subtle); display:flex; gap:8px; align-items:center; font-size:11px;">
-            <label>Recovery Kernel:</label>
-            <input type="file" id="kernel-file" accept=".bin" style="font-size:10px;" />
-            <button class="btn-sm" id="btn-upload-kernel">Upload Kernel (for recovery/low-level reflash)</button>
-            <span id="kernel-status" class="panel-meta">Optional - auto-prompted on P01 failure per DB</span>
+
+          <!-- Backup Tab -->
+          <div class="rw-tab-content" data-rw-content="backup">
+            <article class="panel">
+              <div class="panel-header">
+                <div class="panel-title">Backup</div>
+              </div>
+              <div class="status-stack">
+                <div class="status-row"><span>Last backup file</span><strong id="backup-file">None</strong></div>
+                <div class="status-row"><span>Last backup size</span><strong id="backup-size">—</strong></div>
+                <div class="status-row"><span>Last backup hash</span><strong id="backup-hash">—</strong></div>
+              </div>
+              <div class="panel-actions">
+                <button class="btn-primary" id="btn-read-entire">Read Entire PCM</button>
+              </div>
+            </article>
+          </div>
+
+          <!-- Validation Tab -->
+          <div class="rw-tab-content" data-rw-content="validation">
+            <article class="panel">
+              <div class="panel-header">
+                <div class="panel-title">BIN Validation</div>
+              </div>
+              <div class="upload-box">
+                <label for="bin-file">Choose BIN or CAL file</label>
+                <input type="file" id="bin-file" accept=".bin,.cal" />
+              </div>
+              <div class="status-stack">
+                <div class="status-row"><span>Selected file</span><strong id="bin-name">None</strong></div>
+                <div class="status-row"><span>Detected OSID</span><strong id="bin-osid">Unknown</strong></div>
+                <div class="status-row"><span>Checksum</span><strong id="bin-checksum">Not validated</strong></div>
+                <div class="status-row"><span>Compatibility</span><strong id="bin-compat">Unchecked</strong></div>
+              </div>
+              <div class="panel-actions">
+                <button class="btn-secondary" id="btn-validate-bin">Validate BIN</button>
+                <button class="btn-secondary" id="btn-compare-bin">Compare to ECU</button>
+              </div>
+            </article>
+          </div>
+
+          <!-- Write Tab -->
+          <div class="rw-tab-content" data-rw-content="write">
+            <article class="panel">
+              <div class="panel-header">
+                <div class="panel-title">Write & Verify</div>
+              </div>
+              <div class="radio-stack">
+                <label class="radio-card">
+                  <input type="radio" name="write-mode" value="calibration_only" checked />
+                  <div><strong>Calibration Only</strong></div>
+                </label>
+                <label class="radio-card">
+                  <input type="radio" name="write-mode" value="os_calibration" />
+                  <div><strong>Calibration (checksum-corrected)</strong></div>
+                </label>
+              </div>
+              <div class="panel-actions">
+                <button class="btn-danger" id="btn-start-write">Start Write</button>
+              </div>
+            </article>
+            <article class="panel">
+              <div class="panel-header">
+                <div class="panel-title">Job Status</div>
+                <div class="panel-meta" id="job-phase">Idle</div>
+              </div>
+              <div class="job-log" id="job-log"></div>
+            </article>
           </div>
         </div>
-
-        <div class="rw-grid">
-          <article class="panel">
-            <div class="panel-header">
-              <div class="panel-title">ECU Identity</div>
-            </div>
-            <div class="detail-grid">
-              <div class="detail-item"><span>Protocol</span><strong id="rw-protocol">GM J1850 VPW</strong></div>
-              <div class="detail-item"><span>PCM Type</span><strong id="rw-pcm-type">P01 / 0411</strong></div>
-              <div class="detail-item"><span>Operating System</span><strong id="rw-osid">Unknown</strong></div>
-              <div class="detail-item"><span>VIN</span><strong id="rw-vin">Unknown</strong></div>
-              <div class="detail-item"><span>Hardware</span><strong id="rw-hardware">Unknown</strong></div>
-              <div class="detail-item"><span>Status</span><strong id="rw-status">Not identified</strong></div>
-            </div>
-            <div class="panel-actions">
-              <button class="btn-primary" id="btn-read-properties">Read Properties</button>
-            </div>
-          </article>
-
-          <article class="panel">
-            <div class="panel-header">
-              <div class="panel-title">Backup</div>
-            </div>
-            <div class="status-stack">
-              <div class="status-row">
-                <span>Backup required before write</span>
-                <strong id="backup-required">Yes</strong>
-              </div>
-              <div class="status-row">
-                <span>Last backup file</span>
-                <strong id="backup-file">None</strong>
-              </div>
-              <div class="status-row">
-                <span>Last backup size</span>
-                <strong id="backup-size">—</strong>
-              </div>
-              <div class="status-row">
-                <span>Last backup hash</span>
-                <strong id="backup-hash">—</strong>
-              </div>
-            </div>
-            <div class="panel-actions">
-              <button class="btn-primary" id="btn-read-entire">Read Entire PCM</button>
-            </div>
-          </article>
-
-          <article class="panel">
-            <div class="panel-header">
-              <div class="panel-title">BIN Validation</div>
-            </div>
-            <div class="upload-box">
-              <label for="bin-file">Choose BIN or CAL file</label>
-              <input type="file" id="bin-file" accept=".bin,.cal" />
-            </div>
-            <div class="status-stack">
-              <div class="status-row">
-                <span>Selected file</span>
-                <strong id="bin-name">None</strong>
-              </div>
-              <div class="status-row">
-                <span>Detected OSID</span>
-                <strong id="bin-osid">Unknown</strong>
-              </div>
-              <div class="status-row">
-                <span>Checksum</span>
-                <strong id="bin-checksum">Not validated</strong>
-              </div>
-              <div class="status-row">
-                <span>Compatibility</span>
-                <strong id="bin-compat">Unchecked</strong>
-              </div>
-            </div>
-            <div class="panel-actions">
-              <button class="btn-secondary" id="btn-validate-bin">Validate BIN</button>
-              <button class="btn-secondary" id="btn-compare-bin">Compare to ECU</button>
-            </div>
-          </article>
-
-          <article class="panel">
-            <div class="panel-header">
-              <div class="panel-title">Write Mode</div>
-            </div>
-            <div class="radio-stack">
-              <label class="radio-card">
-                <input type="radio" name="write-mode" value="calibration_only" checked />
-                <div>
-                  <strong>Calibration Only</strong>
-                  <span>Safest default write path.</span>
-                </div>
-              </label>
-              <label class="radio-card">
-                <input type="radio" name="write-mode" value="os_calibration" />
-                <div>
-                  <strong>Calibration (checksum-corrected)</strong>
-                  <span>128 KiB cal write with pre-write checksum correction.</span>
-                </div>
-              </label>
-            </div>
-            <div class="panel-actions">
-              <button class="btn-danger" id="btn-start-write">Start Write</button>
-            </div>
-          </article>
-        </div>
-
-        <article class="panel">
-          <div class="panel-header">
-            <div class="panel-title">Preflight Checklist</div>
-          </div>
-          <div class="checklist">
-            <label class="check-row"><input type="checkbox" id="chk-connected" disabled /> ECU connected.</label>
-            <label class="check-row"><input type="checkbox" id="chk-identified" disabled /> ECU identified.</label>
-            <label class="check-row"><input type="checkbox" id="chk-backup" disabled /> Backup completed this
-              session.</label>
-            <label class="check-row"><input type="checkbox" id="chk-bin" disabled /> BIN validated.</label>
-            <label class="check-row"><input type="checkbox" id="chk-compat" disabled /> OSID / compatibility check
-              passed.</label>
-            <label class="check-row"><input type="checkbox" id="chk-user" /> I understand write operations can brick the
-              PCM if interrupted.</label>
-          </div>
-        </article>
-
-        <article class="panel">
-          <div class="panel-header">
-            <div class="panel-title">Job Status</div>
-            <div class="panel-meta" id="job-phase">Idle</div>
-          </div>
-          <div class="job-log" id="job-log"></div>
-        </article>
       </section>
 
       <!-- Dedicated Live Data View with sensor selection, multi-line chart, and legend -->
       <section class="content content--hidden" id="view-live-data">
         <div class="live-data-header">
           <div>
-            <h2 style="margin:0; font-size:var(--text-lg); font-weight:700; letter-spacing:-0.02em;">Live Data Stream</h2>
-            <div class="page-sub" style="margin-top:4px;">Real-time multi-parameter charting from your ECU • Select sensors to plot</div>
+            <h2 style="margin:0; font-size:var(--text-lg); font-weight:700; letter-spacing:-0.02em;">Live Data</h2>
           </div>
           <div class="live-data-expansions">
             <button id="btn-start-log" class="btn-secondary">Start Session Log</button>
@@ -392,9 +363,7 @@
             <div class="sensor-select-grid" id="sensor-select-grid">
               <!-- Populated dynamically by JS with toggleable chips -->
             </div>
-            <div style="padding: var(--space-2) var(--space-4); font-size: var(--text-xs); color: var(--text-faint); border-top: 1px solid var(--border-subtle);">
-              Click to toggle traces. Default is empty — choose your sensors for a custom live view.
-            </div>
+            <!-- sensors info removed for clean UX -->
           </article>
 
           <!-- Main Chart with Legend -->
@@ -419,7 +388,7 @@
         <div class="panel-header dtc-toolbar">
           <div class="dtc-toolbar-left">
             <span class="panel-title">Fault Codes</span>
-            <span id="dtc-summary" class="panel-meta">No data — connect ECU to read</span>
+            <span id="dtc-summary" class="panel-meta"></span>
           </div>
           <div class="dtc-toolbar-right">
             <button id="btn-refresh-dtc" class="chip" title="Re-read DTCs from PCM">Refresh</button>
@@ -500,7 +469,6 @@
             </div>
             <div class="tables-list-footer">
               <span id="tables-count">0 tables</span>
-              <span class="panel-meta">Click to load editor</span>
             </div>
           </aside>
 
@@ -509,8 +477,7 @@
             <article class="panel" id="table-editor-empty-state">
               <div class="placeholder-view" style="min-height:280px; padding:var(--space-8);">
                 <h2 style="font-size:var(--text-base);">No table selected</h2>
-                <p>Recognize a .bin in the Read/Write tab to load XDF definitions, then choose a table from the list.</p>
-                <button class="btn-secondary" id="btn-go-to-rw">Go to Read / Write</button>
+                <button class="btn-secondary" id="btn-go-to-rw">Load BIN in Flash tab</button>
               </div>
             </article>
 
@@ -626,9 +593,11 @@
       </section>
 
       <section class="content content--hidden" id="view-logs">
-        <div class="placeholder-view">
-          <h2>Logs</h2>
-          <p>Session history, backups, hashes, and flash audit records will appear here.</p>
+        <div class="logs-view">
+          <div class="panel">
+            <div class="panel-header"><div class="panel-title">Audit & Session Logs</div></div>
+            <div class="job-log" id="global-log">No logs yet. Actions in Pipeline/Tables will appear here + persisted audits.</div>
+          </div>
         </div>
       </section>
     </main>

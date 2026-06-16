@@ -100,12 +100,12 @@ function switchView(view) {
   $$(".nav-item").forEach(n => n.classList.toggle("active", n.dataset.view === view));
 
   const titles = {
-    dashboard: { title: "ECU Diagnostics", sub: "Overview & key sensors" },
-    "read-write": { title: "Read / Write", sub: "Backup, BIN handling, flash" },
-    "live-data": { title: "Live Data", sub: "Real-time charting & sensors" },
-    dtc: { title: "Diagnostic Trouble Codes", sub: "Stored / Pending / Permanent" },
-    tables: { title: "Tables / Maps", sub: "XDF definitions — 1D / 2D / 3D editor" },
-    logs: { title: "Logs & History", sub: "Session & flash audit" },
+    dashboard: { title: "Dashboard", sub: "" },
+    "read-write": { title: "Flash & Backup", sub: "" },
+    "live-data": { title: "Live Data", sub: "" },
+    dtc: { title: "DTCs", sub: "" },
+    tables: { title: "Tables / Maps", sub: "" },
+    logs: { title: "Logs", sub: "" },
   };
   const t = titles[view] || { title: view, sub: "" };
   $("#page-title").textContent = t.title;
@@ -148,6 +148,9 @@ function setupNavigation() {
   // Go to RW from tables empty state
   const goRw = $("#btn-go-to-rw");
   if (goRw) goRw.addEventListener("click", () => switchView("read-write"));
+
+  // Internal tabs for Read/Write view (separate sections, no scroll)
+  setupReadWriteTabs();
 }
 
 // ─── Connection & Modal ───────────────────────────────────────────────────────
@@ -369,24 +372,28 @@ function setupReadWrite() {
     }, 900);
   });
 
-  // Checklist initial
+  // Checklist initial (now driven by pipeline steps)
   updateChecklist();
 }
 
-function updateChecklist() {
-  const ids = ["chk-connected", "chk-identified", "chk-backup", "chk-bin", "chk-compat", "chk-user"];
-  const map = {
-    "chk-connected": !!state.connected,
-    "chk-identified": !!(state.detectedOsid || state.binValidated),
-    "chk-backup": !!state.pipeline?.step2,
-    "chk-bin": !!state.binValidated,
-    "chk-compat": !!state.pipeline?.step1 && !!state.binCompatible,
-  };
-  ids.forEach(id => {
-    const el = $(`#${id}`);
-    if (!el) return;
-    if (map[id] !== undefined) el.checked = map[id];
+function setupReadWriteTabs() {
+  const tabs = $$(".rw-tab");
+  const contents = $$(".rw-tab-content");
+  if (!tabs.length) return;
+  tabs.forEach(tab => {
+    tab.addEventListener("click", () => {
+      const target = tab.dataset.rwTab;
+      tabs.forEach(t => t.classList.toggle("active", t === tab));
+      contents.forEach(c => c.classList.toggle("active", c.dataset.rwContent === target));
+    });
   });
+}
+
+function updateChecklist() {
+  // Pipeline steps now drive status visually in tabs; this is lightweight sync if needed
+  if (state.pipeline) {
+    // optional: could sync old elements if re-added
+  }
 }
 
 function updatePipelineSteps() {
@@ -1872,6 +1879,7 @@ function init() {
   setupDTC();
   setupTablesUI();
   setupPipeline();
+  setupReadWriteTabs();
 
   // Default view
   switchView("dashboard");
