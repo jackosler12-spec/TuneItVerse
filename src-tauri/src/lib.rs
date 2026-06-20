@@ -20,11 +20,11 @@ use crate::ecu_database::{EcuDbEntry, get_ecu_by_family, list_supported_ecu_fami
 use crate::flash::GuidedFlashRequest; // GuidedFlashResult used via flash module
 
 // Re-exported / pub(crate) helpers used by dtc.rs, security.rs, flash etc. (restored for compile)
-pub(crate) fn write_frame(port: &mut Box<dyn SerialPort>, frame: &[u8]) -> Result<(), String> {
+pub(crate) fn write_frame(port: &mut Box<dyn SerialPort + Send>, frame: &[u8]) -> Result<(), String> {
     port.write_all(frame).map_err(|e| format!("Write error: {}", e))
 }
 
-pub(crate) fn read_response(port: &mut Box<dyn SerialPort>) -> Result<Vec<u8>, String> {
+pub(crate) fn read_response(port: &mut Box<dyn SerialPort + Send>) -> Result<Vec<u8>, String> {
     let mut buf = [0u8; 256];
     let n = port.read(&mut buf).map_err(|e| format!("Read error: {}", e))?;
     Ok(buf[..n].to_vec())
