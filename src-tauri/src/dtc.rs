@@ -277,7 +277,7 @@ fn nrc_text(nrc: u8) -> &'static str {
 ///
 /// Requires: Security Level 1 active (Mode 03/07/0A are read-only,
 ///           but the P01 requires at least L1 for diagnostic services).
-pub fn read_dtcs(port: &mut Box<dyn SerialPort>) -> Result<DtcReadResult, String> {
+pub fn read_dtcs(port: &mut Box<dyn SerialPort + Send>) -> Result<DtcReadResult, String> {
     // Stored DTCs — Mode 03
     let stored = read_dtc_group(port, 0x03, 0x43, false, false)?;
 
@@ -293,7 +293,7 @@ pub fn read_dtcs(port: &mut Box<dyn SerialPort>) -> Result<DtcReadResult, String
 
 /// Internal: send a DTC request, collect all response frames, decode DTCs.
 fn read_dtc_group(
-    port:          &mut Box<dyn SerialPort>,
+    port:          &mut Box<dyn SerialPort + Send>,
     req_sid:       u8,
     resp_sid:      u8,
     is_pending:    bool,
@@ -336,7 +336,7 @@ fn read_dtc_group(
 /// ⚠️  Requires: Security Level 1 (Mode 04 does NOT require L2 on the P01;
 ///    it is a standard OBD-II service accessible without programming access).
 pub fn clear_dtcs(
-    port:          &mut Box<dyn SerialPort>,
+    port:          &mut Box<dyn SerialPort + Send>,
     prior_count:   usize,
 ) -> Result<DtcClearResult, String> {
     write_frame(port, &build_request(0x04))?;
@@ -379,7 +379,7 @@ pub fn clear_dtcs(
 ///   0x11 — Throttle position (%)
 ///   0x06 — Short-term fuel trim bank 1 (%)
 ///   0x07 — Long-term fuel trim bank 1 (%)
-pub fn read_freeze_frame(port: &mut Box<dyn SerialPort>) -> Result<FreezeFrameResult, String> {
+pub fn read_freeze_frame(port: &mut Box<dyn SerialPort + Send>) -> Result<FreezeFrameResult, String> {
     let mut ff = FreezeFrameResult {
         trigger_dtc:   None,
         engine_load:   None,
@@ -472,7 +472,7 @@ pub fn read_freeze_frame(port: &mut Box<dyn SerialPort>) -> Result<FreezeFrameRe
     Ok(ff)
 }
 
-fn poll_ff_pid(port: &mut Box<dyn SerialPort>, pid: u8) -> Result<Vec<u8>, String> {
+fn poll_ff_pid(port: &mut Box<dyn SerialPort + Send>, pid: u8) -> Result<Vec<u8>, String> {
     write_frame(port, &build_mode02_request(pid))?;
     let resp = read_response(port)?;
     parse_mode02_response(&resp, pid)

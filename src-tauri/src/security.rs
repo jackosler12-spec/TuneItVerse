@@ -256,7 +256,7 @@ fn nrc_description(nrc: u8) -> &'static str {
 ///   5. Read and validate key response
 ///
 /// Returns Ok(SecurityState) with locked=false on success.
-pub fn unlock_level1(port: &mut Box<dyn SerialPort>) -> Result<SecurityState, String> {
+pub fn unlock_level1(port: &mut Box<dyn SerialPort + Send>) -> Result<SecurityState, String> {
     // Step 1: request seed
     write_frame(port, &build_seed_request_l1())?;
     let resp = read_response(port)?;
@@ -297,7 +297,7 @@ pub fn unlock_level1(port: &mut Box<dyn SerialPort>) -> Result<SecurityState, St
 /// ⚠️  Level 1 must already be active before calling this.
 /// Level 2 enables Mode 34 (request download) and Mode 36 (transfer data).
 /// Wrong key = ECM locked for entire ignition cycle — must power-cycle before retry.
-pub fn unlock_level2(port: &mut Box<dyn SerialPort>) -> Result<SecurityState, String> {
+pub fn unlock_level2(port: &mut Box<dyn SerialPort + Send>) -> Result<SecurityState, String> {
     write_frame(port, &build_seed_request_l2())?;
     let resp = read_response(port)?;
     let (sh, sl) = parse_seed_response(&resp, 0x03)?;
