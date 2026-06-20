@@ -84,6 +84,12 @@ Status: FULL-FLEDGED ALL-VEHICLE/PROTOCOL TUNER READY
 - Bench tests + your vehicle tunes.
 - Installer / release build.
 
+## Executable Produced Successfully
+- `cargo tauri build --debug --no-bundle` completed cleanly.
+- **Runnable exe**: `src-tauri/target/debug/TuneItVerse.exe` (13.7 MB)
+- Launch directly or via `cargo tauri dev` for live reload during dev.
+- For optimized release exe (smaller): `cargo tauri build --release --no-bundle` (output in target/release/)
+
 This session consumed remaining context to deliver complete functional TuneItVerse.exe base for your company hardware + tuning business.
 
-Push verified on GitHub main via MCP + git.
+Push verified on GitHub main via MCP + git. Latest source on main, exe ready in worktree.
