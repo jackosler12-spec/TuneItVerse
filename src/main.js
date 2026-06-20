@@ -312,6 +312,7 @@ function setupReadWrite() {
         const chip = $("#tables-osid-chip");
         if (chip) chip.textContent = `Tables ready: ${state.detectedOsid}`;
         logJob(`XDF definitions loaded for OSID ${state.detectedOsid} (from ECU database).`);
+        if (state.selectedFileBytes) renderHexDump(state.selectedFileBytes, "0x000000");
         // enable tables nav hint
         const tablesNav = $$(".nav-item").find(n => n.dataset.view === "tables");
         if (tablesNav) tablesNav.style.outline = "1px solid var(--accent)";
@@ -663,6 +664,12 @@ function setupLiveData() {
     downloadBlob(csv, "tuneitverse_live_log.csv", "text/csv");
     $("#btn-download-log").disabled = true;
     $("#log-status").textContent = "Session: idle";
+  });
+
+  // Real logging integration (Phase 2) - save current series
+  $("#btn-start-log")?.addEventListener("click", () => {
+    state.lastLogSession = {...state.liveSeries};
+    logJob("Log session saved for overlays/dyno.");
   });
 
   // initial empty legend
@@ -1517,6 +1524,34 @@ function undoLastEdit() {
   if (tbl) render3DVisualIfNeeded(tbl);
   // #18 integrate: overlay if log data
   if (state.lastLogSession) overlayLogOnCurrentTable(state.lastLogSession);
+  // Hex editor integration (Phase 2)
+  if (state.selectedFileBytes && tbl && tbl.addr) {
+    renderHexDump(state.selectedFileBytes, tbl.addr);
+  }
+}
+
+function renderHexDump(bytes, highlightAddr) {
+  const dump = $("#hex-dump");
+  if (!dump) return;
+  const base = getCalBase(bytes);
+  const addr = parseInt(highlightAddr.replace(/^0x/i, ''), 16) || 0;
+  const rel = addr - base;
+  let html = '';
+  const start = Math.max(0, rel - 64);
+  const end = Math.min(bytes.length, rel + 128);
+  for (let i = start; i < end; i += 16) {
+    const lineAddr = (base + i).toString(16).padStart(6, '0');
+    let hex = '';
+    let ascii = '';
+    for (let j = 0; j < 16 && i+j < bytes.length; j++) {
+      const b = bytes[i+j];
+      const h = b.toString(16).padStart(2, '0');
+      hex += (i+j === rel ? `<span style="background:var(--accent);color:white">${h}</span> ` : h + ' ');
+      ascii += (b >= 32 && b < 127 ? String.fromCharCode(b) : '.');
+    }
+    html += `${lineAddr}  ${hex} |${ascii}|\n`;
+  }
+  dump.innerHTML = html;
 }
 
 function markModified(force) {

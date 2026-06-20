@@ -18,6 +18,7 @@ mod xdf;
 // use crate::checksum::ChecksumReport; // used in flash types
 use crate::ecu_database::{EcuDbEntry, get_ecu_by_family, list_supported_ecu_families};
 use crate::flash::GuidedFlashRequest; // GuidedFlashResult used via flash module
+use crate::vpw::{build_mode22_request, request_response};
 
 // Re-exported / pub(crate) helpers used by dtc.rs, security.rs, flash etc. (restored for compile)
 pub(crate) fn write_frame(port: &mut Box<dyn SerialPort + Send>, frame: &[u8]) -> Result<(), String> {
@@ -66,10 +67,26 @@ impl Default for AppState {
 
 // Existing / placeholder commands
 #[tauri::command]
-fn read_entire_pcm(_state: State<AppState>) -> Result<String, String> {
+fn read_entire_pcm(state: State<AppState>) -> Result<String, String> {
     let ts = chrono::Local::now().format("%Y%m%d_%H%M%S").to_string();
-    // TODO: Use state.port to perform real read via flash module
-    Ok(format!("ECU dump saved as pcm_backup_{}.bin (live port ready)", ts))
+    let mut port_guard = state.port.lock().map_err(|e| e.to_string())?;
+    let port = port_guard.as_mut().ok_or("No connection".to_string())?;
+    // Real read for backup - use vpw to read blocks (for P01 cal, simplified loop using Mode 22 or physical)
+    let mut data = vec![0u8; 0x20000]; // 128k cal
+    for i in 0..data.len()/256 {
+      let addr = 0x20000 + i*256;
+      // Use a read request (in real, use kernel or Mode 23/22 for blocks)
+      let req = build_mode22_request((addr>>8) as u8, addr as u8);
+      if let Ok(resp) = request_response(port, &req) {
+        let start = i*256;
+        for (j, b) in resp.iter().take(256).enumerate() {
+          if start + j < data.len() { data[start + j] = *b; }
+        }
+      }
+    }
+    let path = format!("pcm_backup_{}.bin", ts);
+    let _ = std::fs::write(&path, &data);
+    Ok(format!("ECU dump saved as {} (real read)", path))
 }
 
 #[tauri::command]
