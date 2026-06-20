@@ -55,6 +55,7 @@ pub struct GuidedFlashResult {
     pub error: Option<String>,
 }
 
+#[allow(dead_code)]
 pub const CAL_A_START: u32 = 0x0002_0000;
 
 // Include kernel for real upload (P01)

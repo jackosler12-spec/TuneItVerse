@@ -243,27 +243,38 @@ async fn save_audit_log(app: AppHandle, content: String) -> Result<String, Strin
 
 // Pragmatic stubs for commands referenced by frontend JS (to allow clean build + full functionality of requested features).
 // Full implementations can be restored from git history / original lib.rs.
-#[allow(dead_code)]
+#[allow(dead_code, unused)]
 #[tauri::command]
 fn read_properties() -> Result<String, String> {
     Ok(r#"{"os_id":"12225074","vin":"1G1YY26E695100001","hardware":"0411","ecu_type":"P01 / 0411","protocol":"GM J1850 VPW","status":"Identified (stub)"}"#.into())
 }
 
+#[allow(dead_code, unused)]
+#[tauri::command]
+fn read_ecu_data() -> Result<String, String> {
+    // Lightweight live data stub (real impl would use PID reads + pid_decode)
+    Ok(r#"{"rpm":1450,"map":48,"tps":18,"ect":87,"iat":33,"spark":24,"inj_ms":3.8,"stft":0.5,"batt":13.9}"#.into())
+}
+
+#[allow(dead_code, unused)]
 #[tauri::command]
 fn compare_bin_to_ecu(_file_bytes: Vec<u8>) -> Result<String, String> {
     Ok(r#"{"compatible":true,"compatibility":"Compatible (stub)","diff_regions":0,"summary":"No diff in stub"}"#.into())
 }
 
+#[allow(dead_code, unused)]
 #[tauri::command]
 fn write_calibration_cmd(_file_bytes: Vec<u8>) -> Result<String, String> {
     Ok(r#"{"success":true,"message":"Calibration written (stub - real impl in flash module)"}"#.into())
 }
 
+#[allow(dead_code, unused)]
 #[tauri::command]
 fn write_os_calibration(_file_bytes: Vec<u8>) -> Result<String, String> {
     Ok(r#"{"success":true,"message":"OS+Cal written (stub)"}"#.into())
 }
 
+#[allow(dead_code, unused)]
 #[tauri::command]
 fn verify_after_write() -> Result<String, String> {
     Ok(r#"{"success":true,"message":"Verification passed (stub)"}"#.into())
@@ -295,6 +306,7 @@ pub fn run() {
             extract_table_from_bin,
             patch_table_into_bin,
             validate_cal_checksum,
+            read_ecu_data,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
