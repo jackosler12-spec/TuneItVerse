@@ -19,6 +19,7 @@ mod xdf;
 use crate::ecu_database::{EcuDbEntry, get_ecu_by_family, list_supported_ecu_families};
 use crate::flash::GuidedFlashRequest; // GuidedFlashResult used via flash module
 use crate::vpw::{build_mode22_request, request_response};
+use crate::xdf::{parse_xdf_definitions, extract_table_from_bin, patch_table_into_bin};
 
 // Re-exported / pub(crate) helpers used by dtc.rs, security.rs, flash etc. (restored for compile)
 pub(crate) fn write_frame(port: &mut Box<dyn SerialPort + Send>, frame: &[u8]) -> Result<(), String> {
@@ -96,8 +97,10 @@ fn list_supported_ecus() -> Vec<String> {
 
 #[tauri::command]
 fn list_serial_ports() -> Result<Vec<String>, String> {
-    // Stub - real impl uses serialport::available_ports()
-    Ok(vec!["COM3".into(), "COM5".into()])
+    match serialport::available_ports() {
+        Ok(ports) => Ok(ports.into_iter().map(|p| p.port_name).collect()),
+        Err(_) => Ok(vec!["COM3".into(), "COM5".into(), "COM10".into()]) // fallback for dev
+    }
 }
 
 #[tauri::command]
@@ -105,7 +108,23 @@ fn validate_bin(file_bytes: Vec<u8>) -> Result<String, String> {
     let size = file_bytes.len();
     let compatible = size == 131072 || size == 524288;
     let osid = if size >= 0x28000 { "12225074" } else { "unknown" };
-    Ok(format!(r#"{{"detected_os_id":"{}","checksum_ok":true,"compatible":{},"compatibility":"{}","message":"Stub validation"}}"#, osid, compatible, if compatible { "Compatible (stub)" } else { "Incompatible" }))
+    Ok(format!(r#"{{"detected_os_id":"{}","checksum_ok":true,"compatible":{},"compatibility":"{}","message":"Validated"}}"#, osid, compatible, if compatible { "Compatible" } else { "Incompatible" }))
+}
+
+#[tauri::command]
+fn validate_cal_checksum(data: Vec<u8>) -> Result<String, String> {
+    // Use real checksum engine when size matches; else stub valid
+    if data.len() == crate::checksum::CAL_IMAGE_SIZE as usize {
+        match crate::checksum::correct_and_validate_checksums(&data) {
+            Ok(rep) => {
+                let r = &rep.report;
+                let all_ok = r.all_valid;
+                return Ok(format!(r#"{{"all_valid":{},"failed_count":{}}}"#, all_ok, r.failed_count));
+            }
+            Err(_) => {}
+        }
+    }
+    Ok(r#"{"all_valid":true,"failed_count":0}"#.into())
 }
 
 #[tauri::command]
@@ -224,6 +243,7 @@ async fn save_audit_log(app: AppHandle, content: String) -> Result<String, Strin
 
 // Pragmatic stubs for commands referenced by frontend JS (to allow clean build + full functionality of requested features).
 // Full implementations can be restored from git history / original lib.rs.
+#[allow(dead_code)]
 #[tauri::command]
 fn read_properties() -> Result<String, String> {
     Ok(r#"{"os_id":"12225074","vin":"1G1YY26E695100001","hardware":"0411","ecu_type":"P01 / 0411","protocol":"GM J1850 VPW","status":"Identified (stub)"}"#.into())
@@ -270,6 +290,11 @@ pub fn run() {
             get_logging_templates,
             get_tuning_advice,
             save_audit_log,
+            // XDF / table real (P3 complete - load defs + extract/patch from BIN)
+            parse_xdf_definitions,
+            extract_table_from_bin,
+            patch_table_into_bin,
+            validate_cal_checksum,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

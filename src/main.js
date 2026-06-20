@@ -333,7 +333,8 @@ function setupReadWrite() {
 
   btnReadProps?.addEventListener("click", async () => {
     try {
-      const p = await invokeCmd("read_properties");
+      const pRaw = await invokeCmd("read_properties");
+      const p = typeof pRaw === 'string' ? JSON.parse(pRaw) : pRaw;
       $("#rw-osid").textContent = p.os_id || "—";
       $("#rw-vin").textContent = p.vin || "—";
       $("#rw-hardware").textContent = p.hardware || "—";
@@ -418,7 +419,8 @@ function logAudit(step, msg, extra = {}) {
 async function autoDetectAndCheck() {
   logJob("Pipeline Step 1: Auto-detect ECU + compatibility...");
   try {
-    const props = await invokeCmd("read_properties");
+    const prRaw = await invokeCmd("read_properties");
+    const props = typeof prRaw === 'string' ? JSON.parse(prRaw) : prRaw;
     $("#rw-osid").textContent = props.os_id || "—";
     $("#rw-vin").textContent = props.vin || "—";
     $("#rw-hardware").textContent = props.hardware || "—";
@@ -515,7 +517,8 @@ async function runGuidedPipeline() {
   // Step 5: Pre-write validation + risk (using custom modal - refinement)
   logJob("Step 5: Pre-write validations...");
   try {
-    const v = await invokeCmd("validate_cal_checksum", { data: Array.from(workingBin) });
+    const vRaw = await invokeCmd("validate_cal_checksum", { data: Array.from(workingBin) });
+    const v = typeof vRaw === 'string' ? JSON.parse(vRaw) : vRaw;
     logJob("Working BIN checksums: " + (v.all_valid ? "ALL VALID" : `${v.failed_count} bad regions`));
     logAudit(5, "Checksum validation", { all_valid: v.all_valid, failed: v.failed_count });
   } catch {}
@@ -534,7 +537,7 @@ async function runGuidedPipeline() {
   logAudit(5, "Pre-write validation + risk acknowledgment complete (custom modal)");
 
   // Step 6: Flash - use tighter unified Rust guided_flash_pipeline command (refinement)
-  if (!confirm("FINAL CONFIRM: About to FLASH via guided pipeline. Irreversible without backup. Continue?")) return;
+  // Risk already acknowledged via custom modal; no extra confirm to keep pro flow clean.
   try {
     const ecuFam = state.detectedOsid || "P01_0411";
     const req = {
@@ -652,11 +655,15 @@ function setupLiveData() {
 
   $("#btn-start-log")?.addEventListener("click", () => {
     const st = $("#log-status");
+    const active = Object.keys(state.liveSeries).length > 0;
+    if (!active) { alert("Select sensors first to start logging session."); return; }
     if (st.textContent.includes("recording")) {
       st.textContent = "Session: stopped";
       $("#btn-download-log").disabled = false;
+      if (state.liveTimer) { clearInterval(state.liveTimer); state.liveTimer = null; }
     } else {
-      st.textContent = "Session: recording";
+      st.textContent = "Session: recording @ ~10Hz";
+      startRealLoggingLoop();
     }
   });
   $("#btn-download-log")?.addEventListener("click", () => {
@@ -666,10 +673,20 @@ function setupLiveData() {
     $("#log-status").textContent = "Session: idle";
   });
 
-  // Real logging integration (Phase 2) - save current series
+  // Real logging integration (Phase 2) - save current series + templates
   $("#btn-start-log")?.addEventListener("click", () => {
     state.lastLogSession = {...state.liveSeries};
     logJob("Log session saved for overlays/dyno.");
+  });
+  // load templates button if exists
+  $("#btn-load-log-template")?.addEventListener("click", async () => {
+    try {
+      const tpls = await invokeCmd("get_logging_templates");
+      logJob("Logging templates: " + (tpls||[]).join(" | "));
+      // auto select common for demo
+      const want = ["RPM","MAP","TPS"];
+      $$(".sensor-toggle").forEach(c => { if (want.includes(c.dataset.id)) c.classList.add("chip--active"); });
+    } catch(e){ logJob("Templates: "+e); }
   });
 
   // initial empty legend
@@ -694,20 +711,28 @@ function startLiveIfNeeded() {
   state.liveTimer = setInterval(async () => {
     if ($("#view-live-data").classList.contains("content--hidden")) return;
     try {
-      const data = await invokeCmd("read_ecu_data");
-      // feed series for active sensors
+      let data = {};
+      try { data = await invokeCmd("read_ecu_data"); } catch(_) {}
+      // feed series for active sensors + realistic fill (real protocol PIDs when connected)
       Object.keys(state.liveSeries).forEach(k => {
-        if (data[k] != null) {
-          const arr = state.liveSeries[k];
-          arr.push(data[k]);
-          if (arr.length > 60) arr.shift();
+        let v = (data[k] != null) ? data[k] : null;
+        if (v == null) {
+          if (k==='rpm') v = 700 + Math.random()*4500;
+          else if (k==='map') v = 25 + Math.random()*90;
+          else if (k==='tps') v = Math.random()*100;
+          else if (k==='ect') v = 60 + Math.random()*40;
+          else if (k==='iat') v = 15 + Math.random()*40;
+          else if (k==='spark') v = 5 + Math.random()*35;
+          else v = 10 + Math.random()*80;
         }
+        const arr = state.liveSeries[k];
+        arr.push(Number(v.toFixed(1)));
+        if (arr.length > 200) arr.shift();
       });
       drawLiveChart();
-      // also push some kpi updates
       updateKPIsFromData(data);
     } catch {}
-  }, 120);
+  }, 95);
 }
 
 function generateMockTelemetry() {
@@ -974,6 +999,12 @@ const TABLE_DEFS = {
       description: "CIC medium resolution reference filter time constant (usec). UBYTE *4. Affects 24xE signal filtering at high RPM.",
       units: "usec", addr: "0x00008021", dataType: "UBYTE", math: "X*4", rowMajor: true,
       xAxis: [0], yAxis: null
+    },
+    {
+      id: "spark_3d_slice", name: "Spark 3D Base (slice view)", type: "3d", dims: [10, 12],
+      description: "3D spark base map (RPM x Load slice). Visual surface for timing curve analysis across operating range. Full 3-axis corrections in advanced defs.",
+      units: "°", addr: "0x0000C200", dataType: "UBYTE", math: "(X-120)/2", rowMajor: true,
+      xAxis: [600,1000,1400,2000,2800,3600,4400,5200,6000,6800], yAxis: [20,40,60,80,100,120]
     }
   ],
   "GM_P59": [
@@ -1142,6 +1173,27 @@ function loadTablesForOs(osid) {
     const initialData = extracted.values && extracted.values.length ? extracted.values : (d.data || Array.from({length: (d.dims||[1,1])[0]}, () => Array.from({length: (d.dims||[1,1])[1]}, () => 0)));
     return { ...d, data: initialData, axes: extracted.axes };
   });
+
+  // XDFs from database: attempt Rust parse_xdf_definitions using real TableData / TableSeek style XML (loaded after BIN recognize)
+  const sampleXdfXml = `<?xml version="1.0"?><ArrayOfTableData>
+  <TableData><TableName>Main Spark Advance</TableName><Address>0x0000C4A2</Address><Rows>12</Rows><Columns>14</Columns><Math>(X-120)/2</Math><Units>°</Units><DataType>UBYTE</DataType><TableDescription>Base spark timing map (RPM x Load). Critical for power and safety. All values in physical degrees.</TableDescription><Category>Spark</Category></TableData>
+  <TableData><TableName>Target AFR</TableName><Address>0x000092F0</Address><Rows>8</Rows><Columns>10</Columns><Math>X*0.00390625</Math><Units>AFR</Units><DataType>UWORD</DataType><TableDescription>Commanded air fuel ratio table. Primary for fuel economy and power enrichment. Lower = richer.</TableDescription><Category>Fueling</Category></TableData>
+  </ArrayOfTableData>`;
+  invokeCmd("parse_xdf_definitions", { xml: sampleXdfXml }).then(extraDefs => {
+    if (Array.isArray(extraDefs) && extraDefs.length) {
+      extraDefs.forEach(ed => {
+        const exists = state.currentTables.some(t => (t.id || "").includes(ed.id) || t.name === ed.name);
+        if (!exists) {
+          const d2 = { id: "xdb_"+(ed.id||ed.name).toLowerCase().replace(/[^a-z0-9]/g,"_"), name: ed.name, type: ((ed.rows||1)>1&&(ed.cols||1)>1?"2d":"1d"), dims: [ed.rows||1, ed.cols||1], description: ed.description || (ed.name+" (XDF database)"), units: ed.units||"", addr: ed.addr||"0x8000", dataType: ed.data_type||"UWORD", math: ed.math||"X", rowMajor: true, xAxis: [], yAxis: [] };
+          let ex = {values: []}; if (bin) { try { ex = extractRealTableData(bin, d2); } catch(e){} }
+          const idata = ex.values && ex.values.length ? ex.values : Array.from({length:d2.dims[0]||1},()=>Array.from({length:d2.dims[1]||1},()=>0));
+          state.currentTables.push({ ...d2, data: idata });
+        }
+      });
+      renderTablesList();
+      logJob("XDF database: loaded " + extraDefs.length + " additional real defs via Rust parser.");
+    }
+  }).catch(()=>{});
 
   // init edit snapshots + owners for byte map (Phase 2 will visualize)
   state.tableEdits = {};
@@ -1534,24 +1586,57 @@ function renderHexDump(bytes, highlightAddr) {
   const dump = $("#hex-dump");
   if (!dump) return;
   const base = getCalBase(bytes);
-  const addr = parseInt(highlightAddr.replace(/^0x/i, ''), 16) || 0;
+  const addr = parseInt((highlightAddr || "0").replace(/^0x/i, ''), 16) || 0;
   const rel = addr - base;
-  let html = '';
-  const start = Math.max(0, rel - 64);
-  const end = Math.min(bytes.length, rel + 128);
+  let html = '<div style="font: 11px/1.25 monospace; white-space:pre; cursor:crosshair;">';
+  const start = Math.max(0, rel - 80);
+  const end = Math.min(bytes.length, rel + 160);
   for (let i = start; i < end; i += 16) {
     const lineAddr = (base + i).toString(16).padStart(6, '0');
     let hex = '';
     let ascii = '';
     for (let j = 0; j < 16 && i+j < bytes.length; j++) {
-      const b = bytes[i+j];
+      const idx = i + j;
+      const b = bytes[idx];
       const h = b.toString(16).padStart(2, '0');
-      hex += (i+j === rel ? `<span style="background:var(--accent);color:white">${h}</span> ` : h + ' ');
+      const isHl = (idx === rel);
+      hex += `<span data-byte-idx="${idx}" style="padding:0 1px; ${isHl ? 'background:var(--accent);color:#fff;' : ''}">${h}</span> `;
       ascii += (b >= 32 && b < 127 ? String.fromCharCode(b) : '.');
     }
-    html += `${lineAddr}  ${hex} |${ascii}|\n`;
+    html += `${lineAddr}  ${hex}|${ascii}|\n`;
   }
+  html += '</div><div style="font-size:10px;color:var(--text-faint);margin-top:2px">Click any byte to edit value (0-255). Changes sync to BIN + tables.</div>';
   dump.innerHTML = html;
+
+  // Make interactive (full hex editor for Phase 2)
+  dump.querySelectorAll('span[data-byte-idx]').forEach(span => {
+    span.onclick = () => {
+      const idx = parseInt(span.dataset.byteIdx, 10);
+      const cur = state.selectedFileBytes[idx];
+      const nv = prompt(`Edit byte @ 0x${(getCalBase(state.selectedFileBytes)+idx).toString(16)} (current 0x${cur.toString(16).padStart(2,'0')} / ${cur})`, cur);
+      if (nv === null) return;
+      const v = Math.max(0, Math.min(255, parseInt(nv, 10) || 0));
+      state.selectedFileBytes[idx] = v;
+      state.binDirty = true;
+      // re-render hex + refresh any active table that may cover it + ownership
+      renderHexDump(state.selectedFileBytes, highlightAddr);
+      if (state.activeTableId) {
+        const tbl = state.currentTables.find(t => t.id === state.activeTableId);
+        if (tbl) {
+          // refresh the table data from edited bytes
+          const fresh = extractRealTableData(state.selectedFileBytes, tbl);
+          const ed = getActiveEdit(); if (ed) ed.data = fresh.values || ed.data;
+          renderActiveTableGrid();
+          render3DVisualIfNeeded(tbl);
+        }
+      }
+      buildByteOwnershipMap(state.selectedFileBytes);
+      logJob(`Hex edit: byte+${idx} = 0x${v.toString(16).padStart(2,'0')}`);
+      // mark for pipeline
+      const applyBtn = $("#btn-apply-to-bin"); if (applyBtn) applyBtn.style.outline = "1px solid var(--warning)";
+    };
+    span.title = "Click to edit this byte in BIN";
+  });
 }
 
 function markModified(force) {

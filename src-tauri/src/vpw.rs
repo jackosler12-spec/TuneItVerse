@@ -139,12 +139,12 @@ pub fn parse_dtc_response(frame: &[u8]) -> Option<Vec<[u8; 2]>> {
 // ── Serial I/O ─────────────────────────────────────────────────────────────
 
 /// Write a VPW frame to the serial port.
-pub fn send_frame(port: &mut Box<dyn SerialPort>, frame: &[u8]) -> Result<(), String> {
+pub fn send_frame(port: &mut Box<dyn SerialPort + Send>, frame: &[u8]) -> Result<(), String> {
     port.write_all(frame).map_err(|e| format!("VPW send error: {}", e))
 }
 
 /// Read a response frame from the serial port (up to 256 bytes).
-pub fn recv_frame(port: &mut Box<dyn SerialPort>) -> Result<Vec<u8>, String> {
+pub fn recv_frame(port: &mut Box<dyn SerialPort + Send>) -> Result<Vec<u8>, String> {
     let mut buf = [0u8; 256];
     let n = port.read(&mut buf).map_err(|e| format!("VPW recv error: {}", e))?;
     if n == 0 {
@@ -155,7 +155,7 @@ pub fn recv_frame(port: &mut Box<dyn SerialPort>) -> Result<Vec<u8>, String> {
 
 /// Send a request and read one response, with retry on empty reads.
 pub fn request_response(
-    port: &mut Box<dyn SerialPort>,
+    port: &mut Box<dyn SerialPort + Send>,
     frame: &[u8],
 ) -> Result<Vec<u8>, String> {
     send_frame(port, frame)?;
@@ -169,4 +169,45 @@ pub fn request_response(
         }
     }
     Err("VPW: no response after 3 attempts".to_string())
+}
+
+// ── Flash / Kernel protocol builders (for P01 guided pipeline) ─────────────
+
+/// Build Mode 34 (Request Download) for kernel/cal upload.
+/// Format used by many GM kernels: 0x34 [fmt=0] [addr:4B BE] [size:4B BE] + cs
+pub fn build_mode34_request(address: u32, size: u32) -> Vec<u8> {
+    let mut frame = vec![PRIO_HIGH_PHYS, PCM_ADDR, TOOL_ADDR, 0x34, 0x00];
+    frame.extend_from_slice(&address.to_be_bytes());
+    frame.extend_from_slice(&size.to_be_bytes());
+    let cs = vpw_checksum(&frame);
+    frame.push(cs);
+    frame
+}
+
+/// Build a Mode 36 (Data Transfer) chunk for kernel or data.
+/// Simple: [prio, pcm, tool, 0x36, ...data...] + cs
+/// Real loaders may prefix chunk with seq/addr but this matches basic observed.
+pub fn build_mode36_chunk(data: &[u8]) -> Vec<u8> {
+    let mut frame = vec![PRIO_HIGH_PHYS, PCM_ADDR, TOOL_ADDR, 0x36];
+    frame.extend_from_slice(data);
+    let cs = vpw_checksum(&frame);
+    frame.push(cs);
+    frame
+}
+
+/// Build Mode 37 (Request Transfer Exit / start kernel).
+pub fn build_mode37_request() -> Vec<u8> {
+    let mut frame = vec![PRIO_HIGH_PHYS, PCM_ADDR, TOOL_ADDR, 0x37];
+    let cs = vpw_checksum(&frame);
+    frame.push(cs);
+    frame
+}
+
+/// Convenience full frame builder using physical high prio for direct PCM.
+pub fn build_physical_frame(payload: &[u8]) -> Vec<u8> {
+    let mut frame = vec![PRIO_HIGH_PHYS, PCM_ADDR, TOOL_ADDR];
+    frame.extend_from_slice(payload);
+    let cs = vpw_checksum(&frame);
+    frame.push(cs);
+    frame
 }
