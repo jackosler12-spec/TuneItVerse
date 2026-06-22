@@ -440,22 +440,22 @@
         <div class="tables-header">
           <div>
             <h2 style="margin:0; font-size:var(--text-lg); font-weight:700; letter-spacing:-0.02em;">Tables / Maps</h2>
-            <div class="page-sub" style="margin-top:2px;">XDF-backed definitions • Select table to edit • Loaded from recognized BIN</div>
+            <div class="page-sub" style="margin-top:2px;">Tables / Maps</div>
           </div>
           <div class="tables-header-actions">
-            <div id="tables-osid-chip" class="vehicle-chip">No BIN loaded — tables locked</div>
+            <div id="tables-osid-chip" class="vehicle-chip">No BIN</div>
             <button id="btn-reload-xdf" class="btn-sm" disabled>Reload from XDF</button>
             <button id="btn-export-all-tables" class="btn-sm">Export All (CSV)</button>
           </div>
         </div>
 
         <div class="tables-layout">
-          <!-- List of selectable tables (1D / 2D / 3D) -->
+          <!-- Left: Table tree/list (pro style like TunerPro/WinOLS) -->
           <aside class="tables-list-panel panel">
             <div class="panel-header" style="padding: var(--space-3) var(--space-4);">
-              <div class="panel-title">Table List</div>
+              <div class="panel-title">Tables</div>
               <div class="panel-actions">
-                <input id="table-search" type="search" placeholder="Filter..." style="width:120px; font-size:11px; padding:2px 6px; border:1px solid var(--border-subtle); border-radius:4px; background:var(--surface-2); color:var(--text);" />
+                <input id="table-search" type="search" placeholder="Filter" style="width:100px; font-size:11px;" />
               </div>
             </div>
             <div class="table-filters">
@@ -464,15 +464,13 @@
               <button class="chip chip-filter" data-filter="2d">2D</button>
               <button class="chip chip-filter" data-filter="3d">3D</button>
             </div>
-            <div class="tables-list" id="tables-list">
-              <!-- Populated by JS: table items with type badge, name, short desc -->
-            </div>
+            <div class="tables-list" id="tables-list"></div>
             <div class="tables-list-footer">
               <span id="tables-count">0 tables</span>
             </div>
           </aside>
 
-          <!-- Editor / Visualizer -->
+          <!-- Center: Main editor (grid + 3D) -->
           <div class="tables-editor-panel">
             <article class="panel" id="table-editor-empty-state">
               <div class="placeholder-view" style="min-height:280px; padding:var(--space-8);">
@@ -533,7 +531,7 @@
                 <!-- 3D specific visual -->
                 <div id="viz-3d-container" class="viz-container hidden">
                   <canvas id="viz-3d-canvas" width="420" height="280"></canvas>
-                  <div class="viz-legend">Z-value color map (blue=low → red=high). Click to select cells.</div>
+  
                 </div>
                 <!-- Main editable data area (grid or 1d controls) -->
                 <div id="table-data-grid" class="table-data-grid">
@@ -544,14 +542,14 @@
               <!-- EVERY BYTE MAPPED + SELECTABLE: Calibration Map (canvas) -->
               <div class="cal-map-panel" style="margin-top:8px; border-top:1px solid var(--border-subtle); padding-top:8px;">
                 <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
-                  <strong style="font-size:11px;">Calibration Memory Map (every byte selectable)</strong>
+                  <strong style="font-size:11px;">Memory Map</strong>
                   <span id="map-stats" class="panel-meta"></span>
                   <button class="btn-sm" id="btn-map-refresh">Refresh Map</button>
                   <input id="map-jump-addr" placeholder="0x2D65E" style="width:90px; font-size:10px;" />
                   <button class="btn-sm" id="btn-map-jump">Jump</button>
                 </div>
                 <canvas id="cal-map-canvas" width="512" height="200" style="border:1px solid var(--border-subtle); border-radius:4px; background:#0c1212; cursor:crosshair; width:100%; max-width:560px;"></canvas>
-                <div class="panel-meta" style="font-size:10px;">Hover/click byte → loads owning table + highlights cell. Color = table category. Gray = unmapped/free. Click grid cell to highlight bytes here.</div>
+
               </div>
 
               <!-- Live checksum + pro panel (industry standard) -->
@@ -569,28 +567,21 @@
               </div>
 
               <div class="table-editor-footer">
-                <div>
-                  <span class="panel-meta">Edits are in-memory only until "Apply to BIN Image". Use in Read/Write to write to ECU.</span>
-                </div>
                 <div class="footer-actions">
-                  <button class="btn-secondary btn-sm" id="btn-reset-table">Reset to Original</button>
+                  <button class="btn-secondary btn-sm" id="btn-reset-table">Reset</button>
                   <button class="btn-secondary btn-sm" id="btn-import-csv">Import CSV</button>
                 </div>
               </div>
 
-              <!-- Embedded Tuning Assistant (next-level "LM" feature - local rule+DB advisor for #17) -->
               <div class="assistant-pane" style="margin-top:8px; border:1px solid var(--accent); border-radius:4px; padding:6px; background:var(--surface-2);">
-                <strong style="font-size:11px;">Embedded Tuning Assistant (local heuristics)</strong>
-                <div style="display:flex; gap:4px; margin-top:4px;">
-                  <input id="assistant-query" placeholder="e.g. VE table advice" style="flex:1; font-size:10px;" />
-                  <button class="btn-sm" id="btn-get-advice">Ask Advisor</button>
+                <div style="display:flex; gap:4px;">
+                  <input id="assistant-query" placeholder="Advisor query" style="flex:1; font-size:10px;" />
+                  <button class="btn-sm" id="btn-get-advice">Ask</button>
                 </div>
                 <div id="assistant-response" style="font-size:10px; color:var(--text-muted); margin-top:4px; min-height:18px;"></div>
               </div>
 
-              <!-- Hex Editor for discovery (Phase 2) - all vehicle support -->
-              <div class="hex-pane" style="margin-top:8px; border:1px solid var(--border-subtle); padding:6px; background:var(--surface-2); font-family: monospace; font-size:10px; max-height:200px; overflow:auto;">
-                <strong>Hex View (select table to highlight addr)</strong>
+              <div class="hex-pane" style="margin-top:8px; border:1px solid var(--border-subtle); padding:6px; background:var(--surface-2); font-family: monospace; font-size:10px; max-height:180px; overflow:auto;">
                 <pre id="hex-dump" style="white-space: pre-wrap;"></pre>
               </div>
             </article>
@@ -614,13 +605,7 @@
     <div class="modal-content" style="max-width:520px;">
       <h2>⚠️ Critical Risk Acknowledgment - Safe Flash Pipeline</h2>
       <div class="modal-body">
-        <p><strong>Flashing carries permanent brick risk.</strong> Only proceed if you accept the conditions below:</p>
-        <ul style="font-size:12px; margin:8px 0;">
-          <li>You have a verified full backup from this exact ECU.</li>
-          <li>The BIN has passed all checksum/compat/validation steps.</li>
-          <li>You are on stable power (bench supply recommended for P01).</li>
-          <li>You understand recovery may require soldering/grounding hacks (see DB notes for P01).</li>
-        </ul>
+        <p><strong>Flashing carries permanent brick risk.</strong></p>
         <label><input type="checkbox" id="risk-ack1" /> I have a recent full backup and understand it is required for recovery.</label>
         <label><input type="checkbox" id="risk-ack2" /> I have verified the target BIN matches my ECU family/OSID and checksums are valid.</label>
         <label><input type="checkbox" id="risk-ack3" /> I accept full responsibility; I will not interrupt the process and have read all prompts.</label>
@@ -653,7 +638,7 @@
           <option value="KWP">KWP2000 / K-line</option>
           <option value="CONSULT">Nissan Consult II (ZD30CRD Patrol)</option>
         </select>
-        <p class="modal-hint">For ZD30CRD Nissan Patrol try CONSULT or CAN. P01 uses VPW @ ~10.4k or 115k.</p>
+        <p class="modal-hint">Select protocol for your ECU/adapter.</p>
       </div>
       <div class="modal-actions">
         <button id="btn-modal-connect" class="btn-primary">Connect</button>

@@ -1236,7 +1236,7 @@ function loadTablesForOs(osid) {
       .then(s => logJob("Map discovery: " + s)).catch(()=>{});
   }
   const chip = $("#tables-osid-chip");
-  if (chip) chip.textContent = `XDF loaded • ${osid || "unknown"} (real offsets from TableData/XML)`;
+  if (chip) chip.textContent = `${osid || "unknown"}`;
   $("#btn-reload-xdf").disabled = false;
 
   if (bin && !state.currentBinPatched) {
