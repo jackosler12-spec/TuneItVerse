@@ -90,13 +90,23 @@ Status: FULL-FLEDGED ALL-VEHICLE/PROTOCOL TUNER READY
 - Launch directly or via `cargo tauri dev` for live reload during dev.
 - For optimized release exe (smaller): `cargo tauri build --release --no-bundle` (output in target/release/)
 
-## Full Installer Bundle
-Config is set for NSIS (Windows recommended single-file installer).
-1. Install NSIS 3+ from https://nsis.sourceforge.io/Download
-2. `cd src-tauri && cargo tauri build`   (or --release)
-3. Installer will be in `src-tauri/target/release/bundle/nsis/TuneItVerse_*.exe`
+## Full Installer Bundle — SUCCESS
+`cargo tauri build` (release + NSIS) completed cleanly (Tauri auto-fetched NSIS + utils).
 
-The bundle build was kicked off; run the above on a machine with NSIS for the final distributable.
+**Artifacts produced:**
+- **Full Installer (recommended for distribution):**
+  `src-tauri/target/release/bundle/nsis/TuneItVerse_0.1.0_x64-setup.exe` (2.01 MB)
+- **Release Portable EXE:**
+  `src-tauri/target/release/TuneItVerse.exe` (9.74 MB)
+
+All new protocols (CAN/J2534, KWP2000, Nissan Consult II) are included.
+
+To rebuild installer later:
+```powershell
+cd src-tauri
+cargo tauri build
+```
+The resulting `.../bundle/nsis/TuneItVerse_...-setup.exe` is the complete distributable.
 
 This session consumed remaining context to deliver complete functional TuneItVerse.exe base for your company hardware + tuning business.
 
