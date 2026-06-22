@@ -50,7 +50,10 @@ async function mockInvoke(cmd, args) {
   if (cmd === "list_serial_ports") {
     return [{ port_name: "COM3", port_type: "SerialPort" }, { port_name: "COM5", port_type: "SerialPort" }];
   }
-  if (cmd === "connect_ecu") return "Connected (demo)";
+  if (cmd === "connect_ecu") {
+    const p = (args.protocol || "auto").toUpperCase();
+    return `Connected (demo) protocol=${p}`;
+  }
   if (cmd === "read_ecu_data") return generateMockTelemetry();
   if (cmd === "read_dtcs_cmd") return { stored: [], pending: [], permanent: [], total: 0 };
   if (cmd === "read_properties") {
@@ -58,6 +61,18 @@ async function mockInvoke(cmd, args) {
   }
   if (cmd === "validate_cal_checksum" || cmd === "correct_cal_checksum") {
     return { all_valid: true, valid_count: 8, fixed_count: 0, failed_count: 0, regions: [] };
+  }
+  if (cmd === "get_logging_templates") {
+    return ["P01 HighRate VE/Spark", "General OBD PIDs", "Dyno Pull (RPM/MAP/TPS)", "Nissan ZD30 Diesel (Consult + CAN)"];
+  }
+  if (cmd === "list_supported_protocols") {
+    return ["VPW (J1850 - GM P01/P59)", "CAN / ISO15765 500k (Nissan EDC16 + UDS)", "KWP2000 / K-line", "Nissan Consult II (ZD30CRD Patrol)"];
+  }
+  if (cmd === "read_nissan_consult_data") {
+    return JSON.stringify({ rpm: 1480, boost_raw: 118, maf_raw: 92, note: "Demo ZD30 Consult data" });
+  }
+  if (cmd === "send_can_uds" || cmd === "send_kwp_request") {
+    return "[demo] 7E 01 41 00 BE 3F B8 13";
   }
   return { ok: true, message: "mocked" };
 }
@@ -187,11 +202,14 @@ async function setupConnect() {
   btnModalConnect?.addEventListener("click", async () => {
     const port = portSelect.value || "COM3";
     const baud = parseInt(baudInput.value, 10) || 115200;
+    const protocolSel = $("#protocol-select")?.value || "auto";
     try {
-      await invokeCmd("connect_ecu", { port, baud });
+      await invokeCmd("connect_ecu", { port, baud, protocol: protocolSel });
       state.connected = true;
+      state.currentProtocol = protocolSel;
       closeModal();
       updateConnUI();
+      logJob(`Connected using protocol: ${protocolSel}`);
       // Auto-detect for pipeline (Priority #1)
       if (!$("#view-read-write").classList.contains("content--hidden") || true) {
         setTimeout(() => autoDetectAndCheck().catch(()=>{}), 300);
@@ -1011,6 +1029,10 @@ const TABLE_DEFS = {
     { id: "ve_p59", name: "VE Primary (P59)", type: "2d", dims: [12,14], description: "Main VE for P59 (derived from community defs). UWORD scale approx *0.000195. Larger displacement apps.", units: "%", addr: "0x00028000", dataType: "UWORD", math: "X*0.0001953125", rowMajor: true, xAxis: [700,900,1200,1600,2000,2500,3000,3500,4000,4500,5000,5500], yAxis: [25,35,45,55,65,75,85,95,105,115,125,130,140,150] },
     { id: "spark_p59", name: "Spark Advance (P59)", type: "2d", dims: [12,14], description: "Base spark for P59 truck/SUV. More conservative. UBYTE (X-120)/2 typical.", units: "°", addr: "0x0002A400", dataType: "UBYTE", math: "(X-120)/2", rowMajor: true, xAxis:[700,1000,1400,1800,2200,2800,3200,3800,4200,4600,5000,5400], yAxis:[30,42,55,68,80,92,105,115,125,132,140,150,155,160] }
   ],
+  "EDC16C41": [
+    { id: "iq_driver_wish", name: "Driver Wish / Torque Request (IQ)", type: "2d", dims: [12,16], description: "Injection quantity requested by driver (torque map). Critical for EDC16 ZD30 response and power. UWORD scaling typical.", units: "mg/st", addr: "0x000A0000", dataType: "UWORD", math: "X*0.01", rowMajor: true, xAxis: [800,1200,1600,2000,2400,2800,3200,3600,4000,4400,4800,5200], yAxis: [0,10,20,30,40,50,60,70,80,90,100,110,120,130,140,150] },
+    { id: "boost_setpoint", name: "Boost Setpoint (VGT)", type: "2d", dims: [10,12], description: "Target boost pressure map. Used with VGT duty and rail pressure for diesel tuning on ZD30CRD.", units: "kPa", addr: "0x000B2000", dataType: "UWORD", math: "X*0.1", rowMajor: true, xAxis: [900,1400,1800,2200,2800,3400,4000,4600,5200,5800], yAxis: [100,150,200,250,300,350,400,450,500,550] }
+  ],
   "default": [
     { id: "demo_real", name: "Fallback Scalar (RPM Hi)", type: "1d", dims: [1,1], description: "Fallback using real P01 address layout when no OS match. Demonstrates exact offset extraction.", units: "RPM", addr: "0x00008104", dataType: "UWORD", math: "X*0.1953125", rowMajor: true, xAxis:[0], yAxis:null }
   ]
@@ -1154,8 +1176,10 @@ function patchRealTableIntoBin(binBytes, tblDef, newValues2d) {
 }
 
 function getTablesForOs(osid) {
-  const key = (osid || "").toUpperCase().includes("122") || (osid || "").includes("0411") ? "P01_0411"
-            : (osid || "").toUpperCase().includes("P59") ? "GM_P59"
+  const up = (osid || "").toUpperCase();
+  const key = up.includes("122") || up.includes("0411") ? "P01_0411"
+            : up.includes("P59") ? "GM_P59"
+            : up.includes("EDC16") || up.includes("ZD30") || up.includes("NISSAN") || up.includes("392203") ? "EDC16C41"
             : "default";
   return TABLE_DEFS[key] || TABLE_DEFS.default;
 }

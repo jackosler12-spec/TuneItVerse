@@ -15,11 +15,19 @@ mod security;
 mod vpw;
 mod xdf;
 
+// New protocol modules for full connectivity
+mod can;
+mod kwp;
+mod consult;
+
 // use crate::checksum::ChecksumReport; // used in flash types
 use crate::ecu_database::{EcuDbEntry, get_ecu_by_family, list_supported_ecu_families};
 use crate::flash::GuidedFlashRequest; // GuidedFlashResult used via flash module
 use crate::vpw::{build_mode22_request, request_response};
 use crate::xdf::{parse_xdf_definitions, extract_table_from_bin, patch_table_into_bin};
+use crate::can::{elm_init_can_500k, elm_send_iso_tp_request, uds_request};
+use crate::kwp::{kwp_fast_init, kwp_request_response, build_kwp_request};
+use crate::consult::{consult_init, consult_send_command, consult_read_basic_diesel_data};
 
 // Re-exported / pub(crate) helpers used by dtc.rs, security.rs, flash etc. (restored for compile)
 pub(crate) fn write_frame(port: &mut Box<dyn SerialPort + Send>, frame: &[u8]) -> Result<(), String> {
@@ -128,16 +136,45 @@ fn validate_cal_checksum(data: Vec<u8>) -> Result<String, String> {
 }
 
 #[tauri::command]
-fn connect_ecu(state: State<AppState>, port_name: String, baud: u32) -> Result<String, String> {
+fn connect_ecu(state: State<AppState>, port_name: String, baud: u32, protocol: Option<String>) -> Result<String, String> {
     let mut port_guard = state.port.lock().map_err(|e| e.to_string())?;
     
-    let port = serialport::new(&port_name, baud)
-        .timeout(std::time::Duration::from_millis(1000))
+    let mut port: Box<dyn SerialPort + Send> = serialport::new(&port_name, baud)
+        .timeout(std::time::Duration::from_millis(1200))
         .open()
         .map_err(|e| format!("Failed to open serial port {}: {}", port_name, e))?;
     
+    let proto = protocol.clone().unwrap_or_else(|| "auto".to_string()).to_uppercase();
+    
+    // Multi-protocol init
+    let mut init_msg = format!("Connected to {} @ {} baud", port_name, baud);
+    match proto.as_str() {
+        "CAN" | "ISO15765" | "UDS" => {
+            let _ = elm_init_can_500k(&mut port); // best effort ELM
+            init_msg += " (CAN 500k init attempted)";
+        }
+        "KWP" | "K-LINE" | "KWP2000" => {
+            let _ = kwp_fast_init(&mut port);
+            init_msg += " (KWP2000 fast init)";
+        }
+        "CONSULT" | "NISSAN" | "CONSULT2" => {
+            let _ = consult_init(&mut port);
+            init_msg += " (Nissan Consult II @ 9600)";
+        }
+        "VPW" | "J1850" | _ => {
+            // existing VPW path is used on demand
+            init_msg += " (VPW/J1850)";
+        }
+    }
+    
     *port_guard = Some(port);
-    Ok(format!("Connected to {} @ {} baud", port_name, baud))
+    
+    // Update health
+    if let Ok(mut h) = state.health.lock() {
+        *h = ConnectionHealth::Connected;
+    }
+    
+    Ok(init_msg)
 }
 
 // Real Pillar 1 guided pipeline command with live port + events
@@ -198,10 +235,31 @@ fn get_connection_health(state: State<AppState>) -> Result<String, String> {
 
 #[tauri::command]
 fn auto_detect_protocol(state: State<AppState>, port_name: String) -> Result<String, String> {
-    // Stub: in full, try VPW/CAN/K-Line/J2534 shims from reference/, update health
-    let mut h = state.health.lock().map_err(|e| e.to_string())?;
-    *h = ConnectionHealth::Connected; // Simplified
-    Ok(format!("Auto-detected protocol on {} (stub - full shims in vpw.rs + future CAN etc.)", port_name))
+    // Try common protocols in order. Real detection would look at responses / timing.
+    let mut port_guard = state.port.lock().map_err(|e| e.to_string())?;
+    let port = port_guard.as_mut().ok_or("No port - call connect first")?;
+
+    // Try Nissan Consult first (user's ZD30 often responds on Consult port)
+    if consult_init(port).is_ok() {
+        if let Ok(mut h) = state.health.lock() { *h = ConnectionHealth::Connected; }
+        return Ok("Detected: Nissan Consult II (9600)".into());
+    }
+
+    // Try KWP fast init
+    if kwp_fast_init(port).is_ok() {
+        if let Ok(mut h) = state.health.lock() { *h = ConnectionHealth::Connected; }
+        return Ok("Detected: KWP2000 / K-line".into());
+    }
+
+    // Try CAN ELM 500k (Nissan EDC16 default)
+    if elm_init_can_500k(port).is_ok() {
+        if let Ok(mut h) = state.health.lock() { *h = ConnectionHealth::Connected; }
+        return Ok("Detected: CAN 500kbps (ISO15765 / UDS / KWP-on-CAN)".into());
+    }
+
+    // Fallback VPW
+    if let Ok(mut h) = state.health.lock() { *h = ConnectionHealth::Connected; }
+    Ok(format!("Auto-detected (fallback): VPW/J1850 on {} (try explicit protocol in connect)", port_name))
 }
 
 // Roadmap #17 stub: ingest def / discovery (ties to xdf + ecu_database)
@@ -215,7 +273,47 @@ fn discover_maps_from_bin(bin_bytes: Vec<u8>, family: String) -> Result<String, 
 // Roadmap #18 stub exposure (logging templates from DB)
 #[tauri::command]
 fn get_logging_templates() -> Result<Vec<String>, String> {
-    Ok(vec!["P01 HighRate VE/Spark".into(), "General OBD PIDs".into(), "Dyno Pull (RPM/MAP/TPS)".into()])
+    Ok(vec!["P01 HighRate VE/Spark".into(), "General OBD PIDs".into(), "Dyno Pull (RPM/MAP/TPS)".into(), "Nissan ZD30 Diesel (Consult + CAN)".into()])
+}
+
+/// List of supported protocol families for UI dropdown
+#[tauri::command]
+fn list_supported_protocols() -> Vec<String> {
+    vec![
+        "VPW (J1850 - GM P01/P59)".into(),
+        "CAN / ISO15765 500k (Nissan EDC16, UDS)".into(),
+        "KWP2000 / K-line".into(),
+        "Nissan Consult II (ZD30CRD / many Nissan)".into(),
+        "J2534 (PassThru - if hardware + DLL present)".into(),
+    ]
+}
+
+/// Quick Nissan ZD30 live data via Consult (if connected on Consult port)
+#[tauri::command]
+fn read_nissan_consult_data(state: State<AppState>) -> Result<String, String> {
+    let mut port_guard = state.port.lock().map_err(|e| e.to_string())?;
+    let port = port_guard.as_mut().ok_or("No connection")?;
+    let data = consult_read_basic_diesel_data(port)?;
+    Ok(data.to_string())
+}
+
+/// Send raw UDS-style request over CAN (ELM path)
+#[tauri::command]
+fn send_can_uds(state: State<AppState>, sid: u8, data: Vec<u8>) -> Result<String, String> {
+    let mut port_guard = state.port.lock().map_err(|e| e.to_string())?;
+    let port = port_guard.as_mut().ok_or("No connection")?;
+    let resp = uds_request(port, sid, &data, true)?;
+    Ok(format!("{:02X?}", resp))
+}
+
+/// Send KWP2000 request
+#[tauri::command]
+fn send_kwp_request(state: State<AppState>, tgt: u8, data: Vec<u8>) -> Result<String, String> {
+    let mut port_guard = state.port.lock().map_err(|e| e.to_string())?;
+    let port = port_guard.as_mut().ok_or("No connection")?;
+    let frame = build_kwp_request(tgt, 0xF1, &data);
+    let resp = kwp_request_response(port, &frame)?;
+    Ok(format!("{:02X?}", resp))
 }
 
 // Embedded "LM" / Tuning Assistant (next-level feature for #17 map discovery + general advice)
@@ -307,6 +405,11 @@ pub fn run() {
             patch_table_into_bin,
             validate_cal_checksum,
             read_ecu_data,
+            // New multi-protocol commands
+            list_supported_protocols,
+            read_nissan_consult_data,
+            send_can_uds,
+            send_kwp_request,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
