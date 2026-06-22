@@ -26,5 +26,5 @@
     "description": "No ready XDF in reference. Requires WinOLS export or manual reverse engineering of diesel maps from the working bin. Key maps: Driver Wish (torque request map), Injection Quantity (IQ) vs speed/torque, Boost setpoint, Rail pressure, VGT duty, EGR maps, Smoke limit, Timing.",
     "eeprom": "EDC16C41 working eeprom (2 KB) - immobiliser, adaptations, coding data"
   },
-  "notes": "Matches and expands the REFERENCE_INDEX.md entry. 23710-VS43B is the specific hardware/part for GU V Wagon variant. DB entry enables future auto-identification on CAN/UDS connect, checksum correction before flashing modified bins, and map loading. Recommend safe personal OBD or bench read of your own ECU. Full Rust EDC16 support (vpw-style but for CAN/UDS + checksum) to be added in follow-up."
+  "notes": "Matches and expands the REFERENCE_INDEX.md entry. 23710-VS43B is the specific hardware/part for GU V Wagon variant. DB entry enables auto-identification. Rust support added: CAN (ELM/ISO-TP), KWP2000, Nissan Consult II for live data + commands. Use protocol selector in UI. Full UDS flash sequence and Bosch checksum porting in progress for guided pipeline on this ECU."
 }
