@@ -2317,6 +2317,26 @@ function setupByteMapAndProFeatures() {
       }
     });
   });
+
+  // Pro toolbar buttons
+  const loadBinBtn = $("#tool-load-bin");
+  if (loadBinBtn) loadBinBtn.addEventListener("click", () => {
+    const binInput = $("#bin-file");
+    if (binInput) binInput.click();
+    else switchView("read-write");
+  });
+  const connectBtn = $("#tool-connect");
+  if (connectBtn) connectBtn.addEventListener("click", () => {
+    const btn = $("#btn-connect");
+    if (btn) btn.click();
+  });
+  const flashBtn = $("#tool-flash");
+  if (flashBtn) flashBtn.addEventListener("click", () => {
+    switchView("read-write");
+    // activate pipeline tab if possible
+    const pipelineTab = document.querySelector('.rw-tab[data-rw-tab="pipeline"]');
+    if (pipelineTab) pipelineTab.click();
+  });
 }
 
 // Wire pipeline buttons (call after DOM ready / in init)

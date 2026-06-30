@@ -441,6 +441,53 @@ a {
   font-weight: 600;
 }
 
+.pro-badge {
+  background: var(--accent);
+  color: white;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 10px;
+  letter-spacing: 1px;
+  box-shadow: 0 0 4px var(--accent-glow);
+}
+
+/* Pro Toolbar */
+.toolbar {
+  height: 36px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.tool-btn {
+  padding: 4px 10px;
+  font-size: 11px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  color: var(--text);
+  cursor: pointer;
+}
+.tool-btn:hover {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+}
+.tool-sep {
+  width: 1px;
+  height: 20px;
+  background: var(--border-subtle);
+  margin: 0 8px;
+}
+.tool-status {
+  font-size: 11px;
+  color: var(--text-faint);
+  margin-left: auto;
+}
+
 .content {
   flex: 1;
   overflow: auto;
