@@ -20,6 +20,7 @@
 //!   • GM Service Manual 12211875 (P01 PCM calibration)
 
 #![allow(unused_variables, dead_code, non_snake_case)]
+#[allow(unused_imports)]
 use crate::{write_frame, read_response, validate_checksum};
 use serialport::SerialPort;
 use serde::{Deserialize, Serialize};

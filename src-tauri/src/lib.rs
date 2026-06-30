@@ -1,5 +1,6 @@
 // TuneItVerse - lib.rs
 // Pillar 1 completion: Full AppState with live SerialPort, real ECU DB integration, Tauri events for progress/logs
+#![allow(unused_imports, dead_code, unused_variables, unused_mut)]
 
 use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, State};
@@ -25,9 +26,9 @@ use crate::ecu_database::{EcuDbEntry, get_ecu_by_family, list_supported_ecu_fami
 use crate::flash::GuidedFlashRequest; // GuidedFlashResult used via flash module
 use crate::vpw::{build_mode22_request, request_response};
 use crate::xdf::{parse_xdf_definitions, extract_table_from_bin, patch_table_into_bin};
-use crate::can::{elm_init_can_500k, elm_send_iso_tp_request, uds_request};
+use crate::can::{elm_init_can_500k, uds_request};
 use crate::kwp::{kwp_fast_init, kwp_request_response, build_kwp_request};
-use crate::consult::{consult_init, consult_send_command, consult_read_basic_diesel_data};
+use crate::consult::{consult_init, consult_read_basic_diesel_data};
 
 // Re-exported / pub(crate) helpers used by dtc.rs, security.rs, flash etc. (restored for compile)
 pub(crate) fn write_frame(port: &mut Box<dyn SerialPort + Send>, frame: &[u8]) -> Result<(), String> {

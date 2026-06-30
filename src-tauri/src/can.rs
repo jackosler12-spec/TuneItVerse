@@ -1,3 +1,4 @@
+#![allow(unused, dead_code)]
 //! can.rs — CAN / ISO-TP (ISO 15765) support for TuneItVerse
 //!
 //! Supports:

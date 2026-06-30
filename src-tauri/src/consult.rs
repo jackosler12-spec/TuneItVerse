@@ -1,3 +1,4 @@
+#![allow(unused, dead_code)]
 //! consult.rs — Nissan Consult II / Consult protocol for ZD30CRD and similar
 //!
 //! Nissan Patrol GU ZD30CRD (EDC16C41) often supports both CAN and the older Consult port.

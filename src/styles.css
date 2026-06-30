@@ -341,6 +341,81 @@ a {
   gap: var(--space-4);
 }
 
+/* Pro Menu Bar */
+.menu-bar {
+  height: 32px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  padding: 0 var(--space-4);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.menu-group {
+  display: flex;
+  gap: 16px;
+}
+.menu-group.right { margin-left: auto; }
+.menu-item { cursor: pointer; padding: 2px 6px; border-radius: 3px; }
+.menu-item:hover { background: var(--accent-dim); color: var(--accent); }
+.menu-status { color: var(--text-faint); font-size: 10px; }
+
+/* Professional bottom status bar */
+.status-bar {
+  height: 24px;
+  background: var(--surface-3);
+  border-top: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  font-size: 10px;
+  color: var(--text-faint);
+  padding: 0 12px;
+  flex-shrink: 0;
+}
+.status-left, .status-right { display: flex; align-items: center; gap: 8px; }
+.status-center { flex: 1; text-align: center; }
+.status-bar .sep { color: var(--border-subtle); }
+
+/* Dashboard pro welcome */
+.dashboard-welcome {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+}
+.quick-actions { display: flex; gap: 8px; }
+
+/* Editor inner tabs */
+.editor-tabs {
+  display: flex;
+  gap: 2px;
+  background: var(--surface-2);
+  padding: 2px;
+  border-radius: var(--radius-sm);
+  margin-bottom: 4px;
+}
+.editor-tab {
+  padding: 4px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: 3px;
+}
+.editor-tab.active {
+  background: var(--accent);
+  color: #fff;
+}
+.editor-tab:hover:not(.active) { background: var(--surface-3); }
+
+/* Dashboard welcome polish */
+.dashboard-welcome h2 { font-size: 15px; font-weight: 700; }
+.dashboard-welcome .page-sub { font-size: 11px; }
+
 .page-title {
   margin: 0;
   font-size: var(--text-base);

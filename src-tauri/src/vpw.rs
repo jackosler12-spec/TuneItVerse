@@ -1,3 +1,4 @@
+#![allow(unused, dead_code)]
 //! vpw.rs — J1850 VPW protocol layer for LS1 PCM (P01/P59)
 //! Device IDs and frame format sourced from reference/VPW.cs (UniversalPatcher)
 //! PCM  = 0x10, Tool = 0xF0, Broadcast = 0xFE

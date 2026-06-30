@@ -1,3 +1,4 @@
+#![allow(unused, dead_code)]
 //! kwp.rs — K-line / KWP2000 (ISO 14230) full support
 //!
 //! Supports fast initialization and the common KWP2000 frame format.

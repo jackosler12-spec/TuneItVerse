@@ -228,16 +228,25 @@ async function setupConnect() {
     const dot = $("#conn-dot");
     const label = $("#conn-label");
     const btn = $("#btn-connect");
+    const statusConn = $("#status-conn");
+    const menuProt = $("#menu-protocol");
+    const statusProt = $("#status-protocol");
     if (state.connected) {
       dot?.classList.add("connected");
       label.textContent = "Connected";
       btn.textContent = "Disconnect";
       btn.classList.add("connected");
+      if (statusConn) statusConn.textContent = "Connected";
+      if (menuProt) menuProt.textContent = `Protocol: ${state.currentProtocol || "auto"}`;
+      if (statusProt) statusProt.textContent = state.currentProtocol || "Connected";
     } else {
       dot?.classList.remove("connected");
       label.textContent = "Disconnected";
       btn.textContent = "Connect ECU";
       btn.classList.remove("connected");
+      if (statusConn) statusConn.textContent = "Disconnected";
+      if (menuProt) menuProt.textContent = "Protocol: —";
+      if (statusProt) statusProt.textContent = "No protocol";
     }
     // update checklist if present
     updateChecklist();
@@ -2285,6 +2294,29 @@ function setupByteMapAndProFeatures() {
 
   // Auto draw on first tables load
   setTimeout(() => { if (state.byteOwners) drawMap(); }, 800);
+
+  // New pro editor tabs (Grid / 3D / Hex) inside tables view
+  const editorTabs = $$(".editor-tab");
+  editorTabs.forEach(tab => {
+    tab.addEventListener("click", () => {
+      editorTabs.forEach(t => t.classList.remove("active"));
+      tab.classList.add("active");
+      const mode = tab.dataset.editorTab;
+      const grid = $("#table-data-grid");
+      const viz = $("#viz-3d-container");
+      const hexInline = $("#table-hex-inline");
+      if (grid) grid.style.display = (mode === "grid" ? "block" : "none");
+      if (viz) viz.style.display = (mode === "3d" ? "block" : "none");
+      if (hexInline) hexInline.style.display = (mode === "hex" ? "block" : "none");
+      if (mode === "hex" && state.selectedFileBytes && state.activeTableId) {
+        const tbl = state.currentTables.find(t => t.id === state.activeTableId);
+        if (tbl && tbl.addr) renderHexDump(state.selectedFileBytes, tbl.addr);
+        // simple copy hex to inline
+        const dump = $("#hex-dump");
+        if (dump && hexInline) hexInline.innerHTML = dump.innerHTML;
+      }
+    });
+  });
 }
 
 // Wire pipeline buttons (call after DOM ready / in init)
