@@ -22,3 +22,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Convenience exes at root
+TuneItVerse.exe
+TuneItVerse_Setup.exe
+TuneItVerse*.exe
