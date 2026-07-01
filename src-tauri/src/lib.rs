@@ -195,8 +195,9 @@ fn read_ecu_data(state: State<AppState>) -> Result<String, String> {
         let mut values: std::collections::HashMap<&str, f64> = std::collections::HashMap::new();
         for (name, pid) in pid_map {
             let mut req = vec![0x68u8, 0x6A, 0xF1, 0x01, *pid, 0x00];
-            let cs = req[..req.len()-1].iter().fold(0u8, |a, &b| a.wrapping_add(b));
-            req[req.len()-1] = cs;
+            let len = req.len();
+            let cs = req[..len-1].iter().fold(0u8, |a, &b| a.wrapping_add(b));
+            req[len-1] = cs;
             if let Ok(resp) = request_response(port, &req) {
                 if !resp.is_empty() {
                     let a = resp[0] as f64;
@@ -444,8 +445,10 @@ fn write_ecu_frame(state: State<AppState>, data: Vec<u8>) -> Result<String, Stri
 fn clear_dtcs_cmd(state: State<AppState>) -> Result<String, String> {
     let mut port_guard = state.port.lock().map_err(|e| e.to_string())?;
     let port = port_guard.as_mut().ok_or("No connection — call connect_ecu first")?;
-    let result = crate::dtc::clear_dtcs(port)?;
-    Ok(format!(r#"{{"success":true,"message":"{}"}}"#, result))
+    // Get prior count for the result
+    let prior = crate::dtc::read_dtcs(port).map(|r| r.total).unwrap_or(0);
+    let result = crate::dtc::clear_dtcs(port, prior)?;
+    Ok(format!(r#"{{"success":{},"cleared_count":{},"message":"{}"}}"#, result.success, result.cleared_count, result.message))
 }
 
 // ─── PCM Backup ────────────────────────────────────────────────────────────

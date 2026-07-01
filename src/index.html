@@ -91,13 +91,13 @@
       <section class="content" id="view-dashboard">
         <div class="dashboard-welcome panel">
           <div>
-            <h2 style="margin:0 0 4px 0;">Welcome to TuneItVerse</h2>
-            <div class="page-sub" style="margin:0;">Professional multi-protocol ECU tuner • Connect • Edit • Flash</div>
+            <h2 style="margin:0 0 4px 0;">TuneItVerse — Professional ECU Tuner</h2>
+            <div class="page-sub" style="margin:0;">Connect • Read/Write • Edit Maps • Log • Flash</div>
           </div>
           <div class="quick-actions">
-            <button class="btn-primary btn-sm" id="dash-connect">Connect</button>
-            <button class="btn-secondary btn-sm" onclick="document.querySelector('[data-view=\\'tables\\']').click()">Tables</button>
-            <button class="btn-secondary btn-sm" onclick="document.querySelector('[data-view=\\'live-data\\']').click()">Live Data</button>
+            <button class="btn-primary btn-sm" id="dash-connect">Connect ECU</button>
+            <button class="btn-secondary btn-sm" onclick="document.querySelector('[data-view=\\'tables\\']').click()">Open Tables</button>
+            <button class="btn-secondary btn-sm" onclick="document.querySelector('[data-view=\\'live-data\\']').click()">Start Logging</button>
           </div>
         </div>
 
@@ -107,140 +107,26 @@
             <div class="kpi-value" id="kpi-rpm">0</div>
             <div class="kpi-unit">rpm</div>
           </article>
-
           <article class="kpi-card">
-            <div class="kpi-label">Coolant Temp</div>
-            <div class="kpi-value" id="kpi-temp">0</div>
-            <div class="kpi-unit">°C</div>
-          </article>
-
-          <article class="kpi-card">
-            <div class="kpi-label">Battery Voltage</div>
-            <div class="kpi-value" id="kpi-volt">0.0</div>
-            <div class="kpi-unit">V</div>
-          </article>
-
-          <article class="kpi-card" id="kpi-dtc-card">
             <div class="kpi-label">Active DTCs</div>
             <div class="kpi-value" id="kpi-dtc">0</div>
             <div class="kpi-unit">faults</div>
           </article>
-        </div>
-
-        <div class="gauge-row">
-          <article class="gauge-card">
-            <div class="gauge-wrap">
-              <canvas id="gauge-rpm" width="180" height="100"></canvas>
-              <div class="gauge-readout">
-                <span id="gauge-rpm-val">0</span>
-                <small>rpm</small>
-              </div>
-            </div>
-            <div class="gauge-label">Engine RPM</div>
-          </article>
-
-          <article class="gauge-card">
-            <div class="gauge-wrap">
-              <canvas id="gauge-map" width="180" height="100"></canvas>
-              <div class="gauge-readout">
-                <span id="gauge-map-val">0</span>
-                <small>kPa</small>
-              </div>
-            </div>
-            <div class="gauge-label">Manifold Pressure</div>
-          </article>
-
-          <article class="gauge-card">
-            <div class="gauge-wrap">
-              <canvas id="gauge-iat" width="180" height="100"></canvas>
-              <div class="gauge-readout">
-                <span id="gauge-iat-val">0</span>
-                <small>°C</small>
-              </div>
-            </div>
-            <div class="gauge-label">Intake Air Temp</div>
-          </article>
-
-          <article class="gauge-card">
-            <div class="gauge-wrap">
-              <canvas id="gauge-afr" width="180" height="100"></canvas>
-              <div class="gauge-readout">
-                <span id="gauge-afr-val">14.7</span>
-                <small>AFR</small>
-              </div>
-            </div>
-            <div class="gauge-label">Air / Fuel Ratio</div>
+          <article class="kpi-card">
+            <div class="kpi-label">Battery</div>
+            <div class="kpi-value" id="kpi-volt">0.0</div>
+            <div class="kpi-unit">V</div>
           </article>
         </div>
 
-        <div class="bottom-grid">
-          <!-- Chart moved to dedicated Live Data tab for focused multi-line experience -->
-          <article class="panel">
-            <div class="panel-header">
-              <div class="panel-title">Fault Codes</div>
-              <button class="btn-sm" id="btn-refresh-dtc-dashboard">Refresh</button>
-            </div>
-            <ul class="dtc-list" id="dash-dtc-list">
-              <li class="dtc-item dtc-empty"><span class="dtc-desc">No DTCs</span></li>
-            </ul>
-          </article>
-        </div>
-
-        <article class="panel">
+        <div class="panel">
           <div class="panel-header">
-            <div class="panel-title">Sensor Readings</div>
+            <div class="panel-title">Quick Status</div>
           </div>
-          <div class="sensor-grid">
-            <div class="sensor-row">
-              <div class="sensor-name">Throttle Position</div>
-              <div class="sensor-bar-wrap">
-                <div class="sensor-bar" id="bar-tps"></div>
-              </div>
-              <div class="sensor-val" id="val-tps">0</div>
-              <div class="sensor-unit">%</div>
-            </div>
-            <div class="sensor-row">
-              <div class="sensor-name">O2 Voltage B1S1</div>
-              <div class="sensor-bar-wrap">
-                <div class="sensor-bar" id="bar-o2"></div>
-              </div>
-              <div class="sensor-val" id="val-o2">0</div>
-              <div class="sensor-unit">V</div>
-            </div>
-            <div class="sensor-row">
-              <div class="sensor-name">Fuel Trims ST B1</div>
-              <div class="sensor-bar-wrap">
-                <div class="sensor-bar sensor-bar--trim" id="bar-stft"></div>
-              </div>
-              <div class="sensor-val" id="val-stft">0</div>
-              <div class="sensor-unit">%</div>
-            </div>
-            <div class="sensor-row">
-              <div class="sensor-name">Ignition Timing</div>
-              <div class="sensor-bar-wrap">
-                <div class="sensor-bar" id="bar-ign"></div>
-              </div>
-              <div class="sensor-val" id="val-ign">0</div>
-              <div class="sensor-unit">°BTDC</div>
-            </div>
-            <div class="sensor-row">
-              <div class="sensor-name">Injector PW B1</div>
-              <div class="sensor-bar-wrap">
-                <div class="sensor-bar" id="bar-inj"></div>
-              </div>
-              <div class="sensor-val" id="val-inj">0</div>
-              <div class="sensor-unit">ms</div>
-            </div>
-            <div class="sensor-row">
-              <div class="sensor-name">Vehicle Speed</div>
-              <div class="sensor-bar-wrap">
-                <div class="sensor-bar" id="bar-vss"></div>
-              </div>
-              <div class="sensor-val" id="val-vss">0</div>
-              <div class="sensor-unit">km/h</div>
-            </div>
+          <div style="padding: 12px; color: var(--text-muted); font-size: 12px;">
+            Load a .bin in Read/Write or connect to ECU to begin. Use Tables for map editing with 1D/2D/3D views and hex.
           </div>
-        </article>
+        </div>
       </section>
 
       <section class="content content--hidden" id="view-read-write">
@@ -486,7 +372,7 @@
         </div>
 
         <div class="tables-layout">
-          <!-- Left: Table tree/list (pro style like TunerPro/WinOLS) -->
+          <!-- Left: Table list (pro style) -->
           <aside class="tables-list-panel panel">
             <div class="panel-header" style="padding: var(--space-3) var(--space-4);">
               <div class="panel-title">Tables</div>
@@ -506,7 +392,7 @@
             </div>
           </aside>
 
-          <!-- Center: Main editor (grid + 3D) -->
+          <!-- Center: Main visual/editor -->
           <div class="tables-editor-panel">
             <article class="panel" id="table-editor-empty-state">
               <div class="placeholder-view" style="min-height:280px; padding:var(--space-8);">
@@ -629,6 +515,42 @@
               </div>
             </article>
           </div>
+
+          <!-- Right: Info and tools (to reduce jumble in center) -->
+          <aside class="tables-side-panel panel">
+            <div class="panel-header">
+              <div class="panel-title">Table Info</div>
+            </div>
+            <div class="table-description" id="editor-table-desc" style="margin-bottom:8px; font-size:11px; color:var(--text-muted);">
+              Description...
+            </div>
+
+            <div class="checksum-live" style="margin-bottom:8px; background:var(--surface-2); border:1px solid var(--border-subtle); border-radius:4px; padding:6px; font-size:11px;">
+              <div><strong>Checksums:</strong> <span id="cs-status">—</span></div>
+              <div style="margin-top:4px; display:flex; gap:4px; flex-wrap:wrap;">
+                <button class="btn-sm" id="btn-correct-cs">Correct</button>
+                <button class="btn-sm" id="btn-validate-cs">Validate</button>
+                <button class="btn-sm" id="btn-export-patched">Export</button>
+              </div>
+            </div>
+
+            <div class="assistant-pane" style="margin-bottom:8px; border:1px solid var(--accent); border-radius:4px; padding:6px; background:var(--surface-2);">
+              <div style="font-size:10px; margin-bottom:4px;"><strong>Advisor</strong></div>
+              <div style="display:flex; gap:4px;">
+                <input id="assistant-query" placeholder="query" style="flex:1; font-size:10px;" />
+                <button class="btn-sm" id="btn-get-advice">Ask</button>
+              </div>
+              <div id="assistant-response" style="font-size:10px; color:var(--text-muted); margin-top:4px;"></div>
+            </div>
+
+            <div style="font-size:10px;">
+              <button class="btn-sm" id="btn-map-refresh" style="width:100%;">Refresh Memory Map</button>
+              <div style="margin-top:4px;">
+                <input id="map-jump-addr" placeholder="0x addr" style="width:70%; font-size:10px;" />
+                <button class="btn-sm" id="btn-map-jump">Jump</button>
+              </div>
+            </div>
+          </aside>
         </div>
       </section>
 
