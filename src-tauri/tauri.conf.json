@@ -19,8 +19,7 @@
         "transparent": false,
         "minWidth": 1100,
         "minHeight": 720
-      },
-
+      }
     ],
     "security": {
         "csp": null
