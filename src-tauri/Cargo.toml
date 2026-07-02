@@ -28,3 +28,4 @@ serialport = "4"
 sha2 = "0.10"
 chrono = { version = "0.4", features = ["serde"] }
 quick-xml = { version = "0.31", features = ["serialize"] }
+libloading = "0.8"
