@@ -1,64 +1,63 @@
-// TuneItVerse main.js - Complete Logical UI + Custom Scripts + EDC16
-// Rearranged nav, new Scripts view, full Python custom script support, EDC16 checksum wired.
+// Add near the end of init() or in a setup function
 
-// ... (previous helpers, state, TABLE_DEFS, dynamicXdfAutoParse, triggerDynamicParsingOnLoad remain)
+function setupIsoTpStatsToggle() {
+  const toggle = document.getElementById('toggle-iso-stats');
+  const panel = document.getElementById('iso-stats-panel');
+  const resetBtn = document.getElementById('btn-reset-iso-stats');
 
-// New: Scripts View Logic
-async function setupScriptsView() {
-  const refreshBtn = $("#btn-refresh-scripts");
-  const runBuiltinBtn = $("#btn-run-builtin");
-  const customList = $("#custom-scripts-list");
-  const scriptSelect = $("#script-select");
-  const runBtn = $("#btn-run-script");
-  const outputPre = $("#script-output");
+  let statsInterval = null;
 
-  async function refreshScripts() {
-    try {
-      const listJson = await invokeCmd("list_custom_python_scripts");
-      const scripts = JSON.parse(listJson);
-      if (customList) {
-        customList.innerHTML = scripts.map(s => `<div class="script-item" data-name="${s.name}">${s.name} - ${s.description}</div>`).join("");
+  if (toggle && panel) {
+    toggle.addEventListener('change', async () => {
+      if (toggle.checked) {
+        panel.style.display = 'block';
+        await updateIsoTpStats();
+        if (!statsInterval) {
+          statsInterval = setInterval(updateIsoTpStats, 1500); // live update every 1.5s
+        }
+      } else {
+        panel.style.display = 'none';
+        if (statsInterval) {
+          clearInterval(statsInterval);
+          statsInterval = null;
+        }
       }
-      if (scriptSelect) {
-        scriptSelect.innerHTML = scripts.map(s => `<option value="${s.name}">${s.name}</option>`).join("");
-      }
-    } catch (e) {
-      if (customList) customList.innerHTML = "<div>No custom scripts yet. Add .py to python/custom_scripts/</div>";
-    }
+    });
   }
 
-  if (refreshBtn) refreshBtn.addEventListener("click", refreshScripts);
-
-  if (runBuiltinBtn) runBuiltinBtn.addEventListener("click", async () => {
-    // Run EDC16 checksum via Python
-    const result = await invokeCmd("calculate_edc16_checksum", { data: [] }); // or real bin
-    if (outputPre) outputPre.textContent = "EDC16 Checksum Result: " + result;
-    showToast("EDC16 checksum executed via Python scripting layer.");
-  });
-
-  if (runBtn) runBtn.addEventListener("click", async () => {
-    const name = scriptSelect?.value;
-    if (!name) return;
-    try {
-      const result = await invokeCmd("run_custom_python_script", { script_name: name, input_json: JSON.stringify({ family: state.detectedOsid || "EDC16C41" }) });
-      if (outputPre) outputPre.textContent = result;
-    } catch (e) {
-      if (outputPre) outputPre.textContent = "Error: " + e;
-    }
-  });
-
-  // Initial load
-  refreshScripts();
+  if (resetBtn) {
+    resetBtn.addEventListener('click', async () => {
+      await invokeCmd('reset_iso_tp_statistics');
+      await updateIsoTpStats();
+    });
+  }
 }
 
-// Wire EDC16 in flash/validation (example in existing handlers)
-// In BIN validation or flash start: if family includes EDC16, call calculate_edc16_checksum
+async function updateIsoTpStats() {
+  try {
+    const json = await invokeCmd('get_iso_tp_statistics');
+    const stats = JSON.parse(json);
 
-// Update nav and init to include new views
-// In setupNavigation and init, the data-view now includes 'scripts' and re-ordered items.
-// triggerDynamicParsingOnLoad() called in connect and BIN load success paths.
+    const set = (id, val) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = val;
+    };
 
-// Final init
-// init() { ... setupScriptsView(); ... triggerDynamicParsingOnLoad hooks ... }
+    set('stat-ff-sent', stats.ff_sent || 0);
+    set('stat-cf-sent', stats.cf_sent || 0);
+    set('stat-fc-rcv', stats.fc_received || 0);
+    set('stat-bytes-sent', stats.bytes_sent || 0);
+    set('stat-bytes-rcv', stats.bytes_received || 0);
+    set('stat-errors', stats.errors || 0);
 
-console.log("%c[TuneItVerse] Interface rearranged logically. Custom Python scripts + full EDC16 support complete.", "color:#0f0");
+    const errEl = document.getElementById('stat-last-error');
+    if (errEl) {
+      errEl.textContent = stats.last_error ? `Last: ${stats.last_error}` : '';
+    }
+  } catch (e) {
+    console.warn('Failed to fetch ISO-TP stats:', e);
+  }
+}
+
+// Call in init()
+// setupIsoTpStatsToggle();
