@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>TuneItVerse</title>
+  <title>TuneItVerse — Professional ECU Tuning Platform</title>
   <link rel="stylesheet" href="./styles.css" />
 </head>
 
@@ -30,10 +30,10 @@
         <span class="nav-badge" id="dtc-count-badge">0</span>
       </a>
       <a href="#" class="nav-item" data-view="tables">
-        <span>📋 Tables</span>
+        <span>📋 Tables / Maps</span>
       </a>
       <a href="#" class="nav-item" data-view="logs">
-        <span>📝 Logs</span>
+        <span>📝 Audit & Logs</span>
       </a>
     </nav>
 
@@ -47,17 +47,18 @@
   </aside>
 
   <div class="main-wrapper">
-    <!-- Pro Menu Bar (like TunerPro / WinOLS) -->
+    <!-- Pro Menu Bar (HP Tuners / TunerPro style) -->
     <div class="menu-bar">
       <div class="menu-group">
-        <span class="menu-item">File</span>
-        <span class="menu-item">ECU</span>
+        <span class="menu-item" onclick="showHelp()">File</span>
+        <span class="menu-item" onclick="showHardwareMenu()">Hardware</span>
         <span class="menu-item">View</span>
         <span class="menu-item">Tools</span>
-        <span class="menu-item">Help</span>
+        <span class="menu-item" onclick="showHelp()">Help</span>
       </div>
       <div class="menu-group right">
         <span id="menu-protocol" class="menu-status">Protocol: —</span>
+        <span id="j2534-status" class="menu-status" style="color: var(--accent); display:none;">J2534 Ready</span>
       </div>
     </div>
 
@@ -66,7 +67,7 @@
         <button id="sidebar-toggle" class="btn-icon" aria-label="Toggle sidebar">≡</button>
         <div>
           <h1 id="page-title" class="page-title">TuneItVerse</h1>
-          <div id="page-sub" class="page-sub"></div>
+          <div id="page-sub" class="page-sub">Professional ECU Programming Platform</div>
         </div>
       </div>
 
@@ -74,38 +75,67 @@
         <div class="vehicle-chip" id="vehicle-osid-chip">No ECU identified</div>
         <div class="vehicle-chip" id="last-update">Disconnected</div>
         <span class="pro-badge">PRO</span>
-        <button class="btn-icon" data-theme-toggle aria-label="Toggle theme">Theme</button>
+        <button class="btn-icon" data-theme-toggle aria-label="Toggle theme">🌓</button>
       </div>
     </header>
 
-    <!-- Pro Toolbar -->
+    <!-- Pro Toolbar (inspired by commercial tools) -->
     <div class="toolbar">
-      <button class="tool-btn" id="tool-load-bin">Load BIN</button>
-      <button class="tool-btn" id="tool-connect">Connect</button>
-      <button class="tool-btn" id="tool-flash">Flash</button>
+      <button class="tool-btn" id="tool-load-bin" title="Load calibration or full OS image">Load BIN</button>
+      <button class="tool-btn" id="tool-connect" title="Connect to vehicle or hardware">Connect</button>
+      <button class="tool-btn" id="tool-j2534" title="Connect Professional J2534 Hardware (OpenPort, Tactrix, etc.)">J2534 Connect</button>
+      <button class="tool-btn" id="tool-flash" title="Start Guided Flash Pipeline">Flash</button>
       <div class="tool-sep"></div>
-      <span class="tool-status" id="tool-status">Ready</span>
+      <button class="tool-btn" onclick="switchView('tables')" title="Edit maps and tables">Tables</button>
+      <button class="tool-btn" onclick="switchView('live-data')" title="Real-time monitoring and logging">Live Log</button>
+      <span class="tool-status" id="tool-status">Ready — Select workflow or connect hardware</span>
     </div>
 
     <main>
+      <!-- Dashboard with clear workflow paths for usability (no confusion) -->
       <section class="content" id="view-dashboard">
         <div class="dashboard-welcome panel">
           <div>
-            <h2 style="margin:0 0 4px 0;">TuneItVerse — Professional ECU Tuner</h2>
-            <div class="page-sub" style="margin:0;">Connect • Read/Write • Edit Maps • Log • Flash</div>
-            <div style="color: var(--accent); font-size: 10px; margin-top: 4px;">PRO UI v2 - Updated Layout (3-col tables, clean dashboard, native-like panes)</div>
+            <h2 style="margin:0 0 4px 0;">Welcome to TuneItVerse</h2>
+            <div class="page-sub" style="margin:0;">The industry-standard platform for custom ECU tuning. Choose your path below.</div>
           </div>
           <div class="quick-actions">
-            <button class="btn-primary btn-sm" id="dash-connect">Connect ECU</button>
-            <button class="btn-secondary btn-sm" onclick="document.querySelector('[data-view=\\'tables\\']').click()">Open Tables</button>
-            <button class="btn-secondary btn-sm" onclick="document.querySelector('[data-view=\\'live-data\\']').click()">Start Logging</button>
+            <button class="btn-primary btn-sm" id="dash-connect">Quick Connect (ELM/OBD)</button>
+            <button class="btn-secondary btn-sm" id="dash-j2534">Pro J2534 Connect</button>
+            <button class="btn-secondary btn-sm" onclick="document.querySelector('[data-view=\\'tables\\']').click()">Load BIN & Edit Maps</button>
+            <button class="btn-secondary btn-sm" onclick="switchView('live-data')">Start Live Monitoring</button>
+          </div>
+        </div>
+
+        <!-- Clear workflow cards for usability (above and beyond - prevents confusion) -->
+        <div class="workflow-cards">
+          <div class="workflow-card panel" onclick="switchView('read-write')">
+            <div class="workflow-icon">⚡</div>
+            <div>
+              <strong>Flash Workflow</strong>
+              <div class="panel-meta">Guided safe pipeline: Detect → Backup → Validate → Flash → Verify. Perfect for OBD or J2534.</div>
+            </div>
+          </div>
+          <div class="workflow-card panel" onclick="switchView('tables')">
+            <div class="workflow-icon">📋</div>
+            <div>
+              <strong>Map Editing</strong>
+              <div class="panel-meta">Load BIN or read ECU → Auto XDF/tables → 1D/2D/3D editor with hex, memory map, batch ops. Deep EDC16 support.</div>
+            </div>
+          </div>
+          <div class="workflow-card panel" onclick="switchView('live-data')">
+            <div class="workflow-icon">📊</div>
+            <div>
+              <strong>Live Data & Logging</strong>
+              <div class="panel-meta">Real-time PIDs, customizable sensors, multi-line charts, CSV export, dyno stubs. High-rate sessions.</div>
+            </div>
           </div>
         </div>
 
         <div class="kpi-row">
           <article class="kpi-card">
             <div class="kpi-label">Engine RPM</div>
-            <div class="kpi-value" id="kpi-rpm">0</div>
+            <div class="kpi-value" id="kpi-rpm">—</div>
             <div class="kpi-unit">rpm</div>
           </article>
           <article class="kpi-card">
@@ -115,507 +145,448 @@
           </article>
           <article class="kpi-card">
             <div class="kpi-label">Battery</div>
-            <div class="kpi-value" id="kpi-volt">0.0</div>
+            <div class="kpi-value" id="kpi-volt">—</div>
             <div class="kpi-unit">V</div>
+          </article>
+          <article class="kpi-card">
+            <div class="kpi-label">Connection</div>
+            <div class="kpi-value" id="kpi-conn">—</div>
+            <div class="kpi-unit">status</div>
           </article>
         </div>
 
         <div class="panel">
           <div class="panel-header">
-            <div class="panel-title">Quick Status</div>
+            <div class="panel-title">Recent Activity & Tips</div>
           </div>
-          <div style="padding: 12px; color: var(--text-muted); font-size: 12px;">
-            Load a .bin in Read/Write or connect to ECU to begin. Use Tables for map editing with 1D/2D/3D views and hex.
+          <div style="padding: var(--space-4); font-size: var(--text-xs); color: var(--text-muted);">
+            • Connect hardware (ELM or J2534) → Auto-detect ECU → Tables load automatically with real XDF/EDC16 maps.<br>
+            • Use Guided Pipeline for safe flashing (includes kernel upload & readback verify).<br>
+            • Edit maps in Tables view with batch math, 3D viz, hex editor, and memory map.<br>
+            • All actions audited. Export logs/audits for professional records.<br>
+            <strong>Pro tip:</strong> Favorites coming soon. Use search in Tables for quick map location. J2534 for advanced adapters.
           </div>
         </div>
       </section>
 
+      <!-- Read/Write remains with internal professional tabs (HP Tuners style workflow) -->
       <section class="content content--hidden" id="view-read-write">
-        <!-- Internal Tabs for Flash Workflow - no scroll, professional layout like TunerPro/HP Tuners -->
         <div class="rw-tabs">
           <div class="rw-tab-bar">
-            <button class="rw-tab active" data-rw-tab="pipeline">Pipeline</button>
+            <button class="rw-tab active" data-rw-tab="pipeline">🛡️ Pipeline</button>
             <button class="rw-tab" data-rw-tab="detect">Detect & Identity</button>
             <button class="rw-tab" data-rw-tab="backup">Backup</button>
-            <button class="rw-tab" data-rw-tab="validation">BIN & Validation</button>
+            <button class="rw-tab" data-rw-tab="validation">BIN Validation</button>
             <button class="rw-tab" data-rw-tab="write">Write & Verify</button>
           </div>
 
-          <!-- Pipeline Tab -->
+          <!-- Pipeline Tab (clear step-by-step for usability) -->
           <div class="rw-tab-content active" data-rw-content="pipeline">
             <div class="pipeline-header panel">
               <div class="panel-header">
-                <div class="panel-title">🛡️ Safe Flash Pipeline</div>
+                <div class="panel-title">Safe Flash Pipeline (Industry Standard)</div>
                 <div class="panel-actions">
-                  <button class="btn-primary" id="btn-start-pipeline">Start Pipeline</button>
-                  <button class="btn-secondary" id="btn-export-audit">Export Audit</button>
+                  <button class="btn-primary" id="btn-start-pipeline">Start Guided Pipeline</button>
+                  <button class="btn-secondary" id="btn-export-audit">Export Full Audit</button>
                 </div>
               </div>
               <div class="pipeline-steps">
+                <!-- Steps with visual status -->
                 <div class="step" data-step="1"><span class="step-num">1</span> <span class="step-label">Auto-Detect + Compat</span> <span class="step-status" id="step1-status">Ready</span></div>
-                <div class="step" data-step="2"><span class="step-num">2</span> <span class="step-label">Backup PCM</span> <span class="step-status" id="step2-status">Pending</span></div>
-                <div class="step" data-step="3"><span class="step-num">3</span> <span class="step-label">BIN + Patch</span> <span class="step-status" id="step3-status">Pending</span></div>
-                <div class="step" data-step="4"><span class="step-num">4</span> <span class="step-label">Compare</span> <span class="step-status" id="step4-status">Pending</span></div>
-                <div class="step" data-step="5"><span class="step-num">5</span> <span class="step-label">Validate + Risk</span> <span class="step-status" id="step5-status">Pending</span></div>
-                <div class="step" data-step="6"><span class="step-num">6</span> <span class="step-label">Flash</span> <span class="step-status" id="step6-status">Pending</span></div>
-                <div class="step" data-step="7"><span class="step-num">7</span> <span class="step-label">Verify</span> <span class="step-status" id="step7-status">Pending</span></div>
+                <div class="step" data-step="2"><span class="step-num">2</span> <span class="step-label">Full PCM Backup</span> <span class="step-status" id="step2-status">Pending</span></div>
+                <div class="step" data-step="3"><span class="step-num">3</span> <span class="step-label">BIN + Patch / Tables</span> <span class="step-status" id="step3-status">Pending</span></div>
+                <div class="step" data-step="4"><span class="step-num">4</span> <span class="step-label">Compare to ECU</span> <span class="step-status" id="step4-status">Pending</span></div>
+                <div class="step" data-step="5"><span class="step-num">5</span> <span class="step-label">Validate + Risk Ack</span> <span class="step-status" id="step5-status">Pending</span></div>
+                <div class="step" data-step="6"><span class="step-num">6</span> <span class="step-label">Flash (Kernel if needed)</span> <span class="step-status" id="step6-status">Pending</span></div>
+                <div class="step" data-step="7"><span class="step-num">7</span> <span class="step-label">Readback Verify</span> <span class="step-status" id="step7-status">Pending</span></div>
               </div>
-              <div style="padding: var(--space-2) var(--space-4); border-top:1px solid var(--border-subtle); display:flex; gap:8px; align-items:center; font-size:11px;">
-                <label>Recovery Kernel:</label>
+              <div style="padding: var(--space-2) var(--space-4); border-top:1px solid var(--border-subtle); display:flex; gap:8px; align-items:center; font-size:11px; flex-wrap:wrap;">
+                <label>Recovery Kernel (optional):</label>
                 <input type="file" id="kernel-file" accept=".bin" style="font-size:10px;" />
-                <button class="btn-sm" id="btn-upload-kernel">Upload</button>
-                <span id="kernel-status" class="panel-meta">Auto on failure</span>
+                <button class="btn-sm" id="btn-upload-kernel">Upload Kernel</button>
+                <span id="kernel-status" class="panel-meta">Auto on failure for supported ECUs</span>
               </div>
             </div>
           </div>
 
-          <!-- Detect Tab -->
+          <!-- Other tabs similar, cleaned for consistency -->
           <div class="rw-tab-content" data-rw-content="detect">
             <article class="panel">
-              <div class="panel-header">
-                <div class="panel-title">ECU Identity</div>
-              </div>
+              <div class="panel-header"><div class="panel-title">ECU Identity & Protocol</div></div>
               <div class="detail-grid">
-                <div class="detail-item"><span>Protocol</span><strong id="rw-protocol">GM J1850 VPW</strong></div>
-                <div class="detail-item"><span>PCM Type</span><strong id="rw-pcm-type">P01 / 0411</strong></div>
-                <div class="detail-item"><span>Operating System</span><strong id="rw-osid">Unknown</strong></div>
-                <div class="detail-item"><span>VIN</span><strong id="rw-vin">Unknown</strong></div>
-                <div class="detail-item"><span>Hardware</span><strong id="rw-hardware">Unknown</strong></div>
+                <div class="detail-item"><span>Protocol</span><strong id="rw-protocol">—</strong></div>
+                <div class="detail-item"><span>PCM Type / Family</span><strong id="rw-pcm-type">—</strong></div>
+                <div class="detail-item"><span>Operating System / OSID</span><strong id="rw-osid">Unknown</strong></div>
+                <div class="detail-item"><span>VIN</span><strong id="rw-vin">—</strong></div>
+                <div class="detail-item"><span>Hardware Rev</span><strong id="rw-hardware">—</strong></div>
                 <div class="detail-item"><span>Status</span><strong id="rw-status">Not identified</strong></div>
               </div>
               <div class="panel-actions">
-                <button class="btn-primary" id="btn-read-properties">Read Properties</button>
+                <button class="btn-primary" id="btn-read-properties">Read Live Properties</button>
               </div>
             </article>
           </div>
 
-          <!-- Backup Tab -->
           <div class="rw-tab-content" data-rw-content="backup">
             <article class="panel">
-              <div class="panel-header">
-                <div class="panel-title">Backup</div>
-              </div>
+              <div class="panel-header"><div class="panel-title">PCM Backup (Mandatory before any write)</div></div>
               <div class="status-stack">
                 <div class="status-row"><span>Last backup file</span><strong id="backup-file">None</strong></div>
-                <div class="status-row"><span>Last backup size</span><strong id="backup-size">—</strong></div>
-                <div class="status-row"><span>Last backup hash</span><strong id="backup-hash">—</strong></div>
+                <div class="status-row"><span>Size</span><strong id="backup-size">—</strong></div>
+                <div class="status-row"><span>SHA256</span><strong id="backup-hash">—</strong></div>
               </div>
               <div class="panel-actions">
-                <button class="btn-primary" id="btn-read-entire">Read Entire PCM</button>
+                <button class="btn-primary" id="btn-read-entire">Read Entire PCM (Backup)</button>
               </div>
             </article>
           </div>
 
-          <!-- Validation Tab -->
           <div class="rw-tab-content" data-rw-content="validation">
             <article class="panel">
-              <div class="panel-header">
-                <div class="panel-title">BIN Validation</div>
-              </div>
+              <div class="panel-header"><div class="panel-title">BIN / Calibration Validation</div></div>
               <div class="upload-box">
-                <label for="bin-file">Choose BIN or CAL file</label>
+                <label for="bin-file">Select .bin or .cal file</label>
                 <input type="file" id="bin-file" accept=".bin,.cal" />
               </div>
               <div class="status-stack">
-                <div class="status-row"><span>Selected file</span><strong id="bin-name">None</strong></div>
+                <div class="status-row"><span>Selected</span><strong id="bin-name">None</strong></div>
                 <div class="status-row"><span>Detected OSID</span><strong id="bin-osid">Unknown</strong></div>
-                <div class="status-row"><span>Checksum</span><strong id="bin-checksum">Not validated</strong></div>
+                <div class="status-row"><span>Checksum Status</span><strong id="bin-checksum">Not validated</strong></div>
                 <div class="status-row"><span>Compatibility</span><strong id="bin-compat">Unchecked</strong></div>
               </div>
               <div class="panel-actions">
-                <button class="btn-secondary" id="btn-validate-bin">Validate BIN</button>
-                <button class="btn-secondary" id="btn-compare-bin">Compare to ECU</button>
+                <button class="btn-secondary" id="btn-validate-bin">Validate BIN + Load XDF/Tables</button>
+                <button class="btn-secondary" id="btn-compare-bin">Compare to Live ECU</button>
               </div>
             </article>
           </div>
 
-          <!-- Write Tab -->
           <div class="rw-tab-content" data-rw-content="write">
             <article class="panel">
-              <div class="panel-header">
-                <div class="panel-title">Write & Verify</div>
-              </div>
+              <div class="panel-header"><div class="panel-title">Write & Post-Flash Verify</div></div>
               <div class="radio-stack">
                 <label class="radio-card">
                   <input type="radio" name="write-mode" value="calibration_only" checked />
-                  <div><strong>Calibration Only</strong></div>
+                  <div><strong>Calibration Only (recommended)</strong><span class="panel-meta">Checksum corrected</span></div>
                 </label>
                 <label class="radio-card">
                   <input type="radio" name="write-mode" value="os_calibration" />
-                  <div><strong>Calibration (checksum-corrected)</strong></div>
+                  <div><strong>Full OS + Calibration</strong><span class="panel-meta">Advanced</span></div>
                 </label>
               </div>
               <div class="panel-actions">
-                <button class="btn-danger" id="btn-start-write">Start Write</button>
+                <button class="btn-danger" id="btn-start-write">Start Write + Verify</button>
               </div>
             </article>
             <article class="panel">
-              <div class="panel-header">
-                <div class="panel-title">Job Status</div>
-                <div class="panel-meta" id="job-phase">Idle</div>
-              </div>
+              <div class="panel-header"><div class="panel-title">Job Log</div><div class="panel-meta" id="job-phase">Idle</div></div>
               <div class="job-log" id="job-log"></div>
             </article>
           </div>
         </div>
       </section>
 
-      <!-- Dedicated Live Data View with sensor selection, multi-line chart, and legend -->
+      <!-- Live Data (EFI Live / TunerPro style dashboard) -->
       <section class="content content--hidden" id="view-live-data">
         <div class="live-data-header">
           <div>
-            <h2 style="margin:0; font-size:var(--text-lg); font-weight:700; letter-spacing:-0.02em;">Live Data</h2>
+            <h2 style="margin:0; font-size:var(--text-lg); font-weight:700;">Live Data Dashboard</h2>
+            <div class="page-sub">Real-time ECU monitoring • High-rate logging • Custom sensors</div>
           </div>
           <div class="live-data-expansions">
-            <button id="btn-start-log" class="btn-secondary">Start Session Log</button>
-            <button id="btn-download-log" class="btn-secondary" disabled>Download CSV Log</button>
-            <span id="log-status" class="panel-meta">Session: idle</span>
+            <button id="btn-start-log" class="btn-secondary">Start Recording Session</button>
+            <button id="btn-download-log" class="btn-secondary" disabled>Download CSV</button>
+            <span id="log-status" class="panel-meta">Idle</span>
           </div>
         </div>
 
         <div class="live-data-grid">
-          <!-- Sensor Selection Panel -->
           <article class="panel sensor-panel">
             <div class="panel-header">
-              <div class="panel-title">Available Sensors</div>
+              <div class="panel-title">Sensor Selection</div>
               <div class="panel-actions">
-                <button id="btn-select-all" class="btn-sm">All</button>
+                <button id="btn-select-all" class="btn-sm">Select All</button>
                 <button id="btn-clear-selection" class="btn-sm">Clear</button>
               </div>
             </div>
-            <div class="sensor-select-grid" id="sensor-select-grid">
-              <!-- Populated dynamically by JS with toggleable chips -->
-            </div>
-            <!-- sensors info removed for clean UX -->
+            <div class="sensor-select-grid" id="sensor-select-grid"></div>
           </article>
 
-          <!-- Main Chart with Legend -->
           <article class="panel chart-main-panel">
             <div class="panel-header">
-              <div class="panel-title">Multi-Line Live Trace</div>
+              <div class="panel-title">Live Multi-Line Traces</div>
               <div class="chart-legend" id="chart-legend"></div>
             </div>
             <div class="chart-container">
               <canvas id="live-chart"></canvas>
             </div>
-            <div class="chart-footer">
-              <span class="panel-meta">Real ECU data only • Independent Y-scaling • 60-point history</span>
-            </div>
           </article>
         </div>
       </section>
 
+      <!-- DTC View (clean, pro) -->
       <section class="content content--hidden" id="view-dtc">
-      <div class="dtc-panel">
-        <!-- DTC toolbar -->
-        <div class="panel-header dtc-toolbar">
-          <div class="dtc-toolbar-left">
-            <span class="panel-title">Fault Codes</span>
-            <span id="dtc-summary" class="panel-meta"></span>
+        <div class="dtc-panel">
+          <div class="panel-header dtc-toolbar">
+            <div class="dtc-toolbar-left">
+              <span class="panel-title">Diagnostic Trouble Codes</span>
+              <span id="dtc-summary" class="panel-meta"></span>
+            </div>
+            <div class="dtc-toolbar-right">
+              <button id="btn-refresh-dtc" class="chip">Refresh from ECU</button>
+              <button id="btn-clear-dtc" class="btn-sm">Clear All DTCs</button>
+            </div>
           </div>
-          <div class="dtc-toolbar-right">
-            <button id="btn-refresh-dtc" class="chip" title="Re-read DTCs from PCM">Refresh</button>
-            <button id="btn-clear-dtc" class="btn-sm">Clear All</button>
+
+          <div class="dtc-section">
+            <div class="dtc-section-header"><span class="dtc-section-title">Stored (Confirmed)</span><span id="dtc-stored-count" class="nav-badge">0</span></div>
+            <ul id="dtc-list-stored" class="dtc-list"></ul>
           </div>
-        </div>
-
-        <!-- Stored DTCs -->
-        <div class="dtc-section">
-          <div class="dtc-section-header">
-            <span class="dtc-section-title">Stored (Confirmed)</span>
-            <span id="dtc-stored-count" class="nav-badge">0</span>
+          <div class="dtc-section">
+            <div class="dtc-section-header"><span class="dtc-section-title">Pending</span><span id="dtc-pending-count" class="nav-badge" style="background:var(--warning)">0</span></div>
+            <ul id="dtc-list-pending" class="dtc-list"></ul>
           </div>
-          <ul id="dtc-list-stored" class="dtc-list">
-            <li class="dtc-item dtc-empty"><span class="dtc-desc">No stored DTCs</span></li>
-          </ul>
-        </div>
-
-        <!-- Pending DTCs -->
-        <div class="dtc-section">
-          <div class="dtc-section-header">
-            <span class="dtc-section-title">Pending (Test-Failed)</span>
-            <span id="dtc-pending-count" class="nav-badge" style="background:var(--warning)">0</span>
+          <div class="dtc-section">
+            <div class="dtc-section-header"><span class="dtc-section-title">Permanent</span><span id="dtc-permanent-count" class="nav-badge" style="background:var(--text-faint)">0</span></div>
+            <ul id="dtc-list-permanent" class="dtc-list"></ul>
           </div>
-          <ul id="dtc-list-pending" class="dtc-list">
-            <li class="dtc-item dtc-empty"><span class="dtc-desc">No pending DTCs</span></li>
-          </ul>
-        </div>
 
-        <!-- Permanent DTCs -->
-        <div class="dtc-section">
-          <div class="dtc-section-header">
-            <span class="dtc-section-title">Permanent (Non-Erasable)</span>
-            <span id="dtc-permanent-count" class="nav-badge" style="background:var(--text-faint)">0</span>
-          </div>
-          <ul id="dtc-list-permanent" class="dtc-list">
-            <li class="dtc-item dtc-empty"><span class="dtc-desc">No permanent DTCs</span></li>
-          </ul>
+          <div id="dtc-clear-banner" class="dtc-clear-banner dtc-clear-banner--hidden"></div>
         </div>
+      </section>
 
-        <!-- Clear confirmation banner (hidden until clear is triggered) -->
-        <div id="dtc-clear-banner" class="dtc-clear-banner dtc-clear-banner--hidden">
-          <span id="dtc-clear-msg"></span>
-        </div>
-      </div>
-    </section>
-
+      <!-- Tables View (WinOLS / TunerPro inspired - deep EDC16 support) -->
       <section class="content content--hidden" id="view-tables">
         <div class="tables-header">
           <div>
-            <h2 style="margin:0; font-size:var(--text-lg); font-weight:700; letter-spacing:-0.02em;">Tables / Maps</h2>
-            <div class="page-sub" style="margin-top:2px;">Tables / Maps</div>
+            <h2 style="margin:0; font-size:var(--text-lg); font-weight:700;">Tables / Maps Editor</h2>
+            <div class="page-sub">Auto-loaded XDF & real extraction • 1D/2D/3D • Hex • Memory Map • Batch ops</div>
           </div>
           <div class="tables-header-actions">
-            <div id="tables-osid-chip" class="vehicle-chip">No BIN</div>
-            <button id="btn-reload-xdf" class="btn-sm" disabled>Reload from XDF</button>
-            <button id="btn-export-all-tables" class="btn-sm">Export All (CSV)</button>
+            <div id="tables-osid-chip" class="vehicle-chip">No BIN loaded</div>
+            <button id="btn-deep-discover" class="btn-sm" title="Deeper EDC16 map extraction from reference XMLs & patterns">Deep Discover EDC16 Maps</button>
+            <button id="btn-reload-xdf" class="btn-sm" disabled>Reload XDF</button>
+            <button id="btn-export-all-tables" class="btn-sm">Export Catalogue</button>
           </div>
         </div>
 
         <div class="tables-layout">
-          <!-- Left: Table list (pro style) -->
           <aside class="tables-list-panel panel">
-            <div class="panel-header" style="padding: var(--space-3) var(--space-4);">
-              <div class="panel-title">Tables</div>
-              <div class="panel-actions">
-                <input id="table-search" type="search" placeholder="Filter" style="width:100px; font-size:11px;" />
-              </div>
+            <div class="panel-header">
+              <div class="panel-title">Available Maps</div>
+              <input id="table-search" type="search" placeholder="Search maps..." style="width:120px; font-size:11px;" />
             </div>
             <div class="table-filters">
               <button class="chip chip-filter active" data-filter="all">All</button>
-              <button class="chip chip-filter" data-filter="1d">1D</button>
-              <button class="chip chip-filter" data-filter="2d">2D</button>
-              <button class="chip chip-filter" data-filter="3d">3D</button>
+              <button class="chip chip-filter" data-filter="1d">1D Scalars</button>
+              <button class="chip chip-filter" data-filter="2d">2D Maps</button>
+              <button class="chip chip-filter" data-filter="3d">3D Surfaces</button>
             </div>
             <div class="tables-list" id="tables-list"></div>
-            <div class="tables-list-footer">
-              <span id="tables-count">0 tables</span>
-            </div>
+            <div class="tables-list-footer"><span id="tables-count">0 / 0 tables</span></div>
           </aside>
 
-          <!-- Center: Main visual/editor -->
           <div class="tables-editor-panel">
             <article class="panel" id="table-editor-empty-state">
-              <div class="placeholder-view" style="min-height:280px; padding:var(--space-8);">
-                <h2 style="font-size:var(--text-base);">No table selected</h2>
-                <button class="btn-secondary" id="btn-go-to-rw">Load BIN in Flash tab</button>
+              <div class="placeholder-view">
+                <h2>No table selected</h2>
+                <p>Load a compatible BIN or connect to ECU. Tables & XDF definitions load automatically. Use Deep Discover for more EDC16 maps.</p>
+                <button class="btn-secondary" id="btn-go-to-rw">Go to Read/Write</button>
               </div>
             </article>
 
             <article class="panel tables-editor-pane hidden" id="table-editor-pane">
+              <!-- Header with meta (pro like WinOLS) -->
               <div class="panel-header">
                 <div>
                   <div class="panel-title" id="editor-table-name">Table Name</div>
                   <div class="editor-meta-row">
                     <span class="tbl-badge" id="editor-table-type">2D</span>
-                    <span id="editor-table-units">units</span>
+                    <span id="editor-table-units"></span>
                     <span id="editor-table-size"></span>
                     <span id="editor-table-addr" class="panel-meta"></span>
                   </div>
                 </div>
                 <div class="panel-actions">
-                  <button class="btn-sm" id="btn-revert-table">Revert</button>
+                  <button class="btn-sm" id="btn-revert-table">Revert Changes</button>
                   <button class="btn-sm" id="btn-export-table">Export CSV</button>
-                  <button class="btn-primary btn-sm" id="btn-apply-to-bin">Apply to BIN Image</button>
+                  <button class="btn-primary btn-sm" id="btn-apply-to-bin">Apply Edits to BIN</button>
                 </div>
               </div>
 
-              <!-- Description (mandatory per spec) -->
-              <div class="table-description" id="editor-table-desc">
-                Description of what the table represents...
-              </div>
+              <div class="table-description" id="editor-table-desc"></div>
 
-              <!-- Typical tuning software toolbar -->
+              <!-- Pro tuning toolbar (batch, ops like TunerPro) -->
               <div class="tuning-toolbar">
                 <div class="toolbar-group">
-                  <label class="small-label">Batch:</label>
-                  <input type="number" id="batch-value" value="1" step="0.1" style="width:70px;" />
-                  <button class="btn-sm" data-batch-op="add">+ Add</button>
-                  <button class="btn-sm" data-batch-op="sub">− Sub</button>
-                  <button class="btn-sm" data-batch-op="mul">× Mul</button>
-                  <button class="btn-sm" data-batch-op="div">÷ Div</button>
-                  <button class="btn-sm" id="btn-interpolate">Interpolate</button>
-                  <button class="btn-sm" id="btn-smooth">Smooth</button>
-                  <button class="btn-sm" id="btn-clamp">Clamp</button>
+                  <label class="small-label">Batch Edit:</label>
+                  <input type="number" id="batch-value" value="1" step="0.1" style="width:60px;" />
+                  <button class="btn-sm" data-batch-op="add">+Add</button>
+                  <button class="btn-sm" data-batch-op="sub">-Sub</button>
+                  <button class="btn-sm" data-batch-op="mul">×Mul</button>
+                  <button class="btn-sm" data-batch-op="div">÷Div</button>
                 </div>
                 <div class="toolbar-group">
-                  <label><input type="checkbox" id="show-diff" /> Show diff</label>
+                  <button class="btn-sm" id="btn-interpolate">Interpolate</button>
+                  <button class="btn-sm" id="btn-smooth">Smooth</button>
+                  <button class="btn-sm" id="btn-clamp">Clamp Range</button>
                   <button class="btn-sm" id="btn-undo">Undo</button>
                   <button class="btn-sm" id="btn-select-all-cells">Select All</button>
-                  <button class="btn-sm" id="btn-clear-selection">Clear Sel</button>
                 </div>
                 <div class="toolbar-group toolbar-right">
+                  <label><input type="checkbox" id="show-diff" /> Show Diff from Original</label>
                   <span id="edit-stats" class="panel-meta"></span>
                 </div>
               </div>
 
-              <!-- Editor mode tabs (pro like TunerPro / WinOLS) -->
               <div class="editor-tabs">
-                <button class="editor-tab active" data-editor-tab="grid">Grid</button>
+                <button class="editor-tab active" data-editor-tab="grid">Grid View</button>
                 <button class="editor-tab" data-editor-tab="3d">3D Surface</button>
-                <button class="editor-tab" data-editor-tab="hex">Hex</button>
+                <button class="editor-tab" data-editor-tab="hex">Hex Editor</button>
               </div>
 
-              <!-- Data visualization + editable grid (1D/2D/3D aware) -->
-              <div class="table-visual-area" id="table-visual-area">
-                <!-- 3D specific visual -->
-                <div id="viz-3d-container" class="viz-container hidden">
-                  <canvas id="viz-3d-canvas" width="420" height="280"></canvas>
-                </div>
-                <!-- Main editable data area (grid or 1d controls) -->
-                <div id="table-data-grid" class="table-data-grid">
-                  <!-- JS injects <table class="map-table"> or 1D row or 3D slices -->
-                </div>
-                <div id="table-hex-inline" class="table-hex-inline hidden" style="font-family:monospace;font-size:11px;max-height:220px;overflow:auto;background:var(--surface-2);padding:6px;border:1px solid var(--border-subtle);"></div>
+              <div class="table-visual-area">
+                <div id="viz-3d-container" class="viz-container hidden"><canvas id="viz-3d-canvas" width="420" height="280"></canvas></div>
+                <div id="table-data-grid" class="table-data-grid"></div>
+                <div id="table-hex-inline" class="table-hex-inline hidden"></div>
               </div>
 
-              <!-- EVERY BYTE MAPPED + SELECTABLE: Calibration Map (canvas) -->
-              <div class="cal-map-panel" style="margin-top:8px; border-top:1px solid var(--border-subtle); padding-top:8px;">
+              <!-- Memory Map (every byte mapped - unique pro feature) -->
+              <div class="cal-map-panel">
                 <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
-                  <strong style="font-size:11px;">Memory Map</strong>
+                  <strong>Calibration Memory Map (every byte accounted for)</strong>
                   <span id="map-stats" class="panel-meta"></span>
-                  <button class="btn-sm" id="btn-map-refresh">Refresh Map</button>
-                  <input id="map-jump-addr" placeholder="0x2D65E" style="width:90px; font-size:10px;" />
-                  <button class="btn-sm" id="btn-map-jump">Jump</button>
+                  <button class="btn-sm" id="btn-map-refresh">Refresh</button>
+                  <input id="map-jump-addr" placeholder="0xAddr" style="width:80px; font-size:10px;" />
+                  <button class="btn-sm" id="btn-map-jump">Jump to Table</button>
                 </div>
-                <canvas id="cal-map-canvas" width="512" height="200" style="border:1px solid var(--border-subtle); border-radius:4px; background:#0c1212; cursor:crosshair; width:100%; max-width:560px;"></canvas>
-
+                <canvas id="cal-map-canvas" width="512" height="180" style="border:1px solid var(--border-subtle); background:#0c1212; cursor:crosshair; width:100%; max-width:100%;"></canvas>
               </div>
 
-              <!-- Live checksum + pro panel (industry standard) -->
-              <div class="checksum-live" style="margin-top:8px; background:var(--surface-2); border:1px solid var(--border-subtle); border-radius:4px; padding:6px 10px; font-size:11px;">
-                <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
-                  <span><strong>Checksums:</strong> <span id="cs-status">—</span></span>
-                  <button class="btn-sm" id="btn-correct-cs">Correct Now (auto)</button>
+              <!-- Checksum & Pro Tools -->
+              <div class="checksum-live">
+                <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                  <strong>Checksums:</strong> <span id="cs-status">—</span>
+                  <button class="btn-sm" id="btn-correct-cs">Auto Correct</button>
                   <button class="btn-sm" id="btn-validate-cs">Validate</button>
-                  <span id="cs-detail" class="panel-meta"></span>
-                  <button class="btn-sm" id="btn-load-compare">Compare 2nd BIN (diff)</button>
                   <button class="btn-sm" id="btn-export-patched">Export Patched BIN</button>
-                  <input type="file" id="custom-xdf-xml" accept=".xml,.xdf" style="font-size:10px;" />
-                  <button class="btn-sm" id="btn-load-custom-xdf">Load custom defs XML</button>
+                  <button class="btn-sm" id="btn-load-compare">Load 2nd BIN for Diff</button>
                 </div>
               </div>
 
               <div class="table-editor-footer">
                 <div class="footer-actions">
-                  <button class="btn-secondary btn-sm" id="btn-reset-table">Reset</button>
+                  <button class="btn-secondary btn-sm" id="btn-reset-table">Reset Table</button>
                   <button class="btn-secondary btn-sm" id="btn-import-csv">Import CSV</button>
                 </div>
               </div>
 
-              <div class="assistant-pane" style="margin-top:8px; border:1px solid var(--accent); border-radius:4px; padding:6px; background:var(--surface-2);">
+              <!-- Advisor (tuning help) -->
+              <div class="assistant-pane">
                 <div style="display:flex; gap:4px;">
-                  <input id="assistant-query" placeholder="Advisor query" style="flex:1; font-size:10px;" />
-                  <button class="btn-sm" id="btn-get-advice">Ask</button>
+                  <input id="assistant-query" placeholder="Ask tuning advisor (e.g. VE table advice)" style="flex:1; font-size:10px;" />
+                  <button class="btn-sm" id="btn-get-advice">Ask Advisor</button>
                 </div>
-                <div id="assistant-response" style="font-size:10px; color:var(--text-muted); margin-top:4px; min-height:18px;"></div>
-              </div>
-
-              <div class="hex-pane" style="margin-top:8px; border:1px solid var(--border-subtle); padding:6px; background:var(--surface-2); font-family: monospace; font-size:10px; max-height:180px; overflow:auto;">
-                <pre id="hex-dump" style="white-space: pre-wrap;"></pre>
+                <div id="assistant-response" style="font-size:10px; color:var(--text-muted); margin-top:4px;"></div>
               </div>
             </article>
           </div>
 
-          <!-- Right: Info and tools (to reduce jumble in center) -->
           <aside class="tables-side-panel panel">
-            <div class="panel-header">
-              <div class="panel-title">Table Info</div>
-            </div>
-            <div class="table-description" id="editor-table-desc" style="margin-bottom:8px; font-size:11px; color:var(--text-muted);">
-              Description...
-            </div>
-
-            <div class="checksum-live" style="margin-bottom:8px; background:var(--surface-2); border:1px solid var(--border-subtle); border-radius:4px; padding:6px; font-size:11px;">
-              <div><strong>Checksums:</strong> <span id="cs-status">—</span></div>
-              <div style="margin-top:4px; display:flex; gap:4px; flex-wrap:wrap;">
-                <button class="btn-sm" id="btn-correct-cs">Correct</button>
-                <button class="btn-sm" id="btn-validate-cs">Validate</button>
-                <button class="btn-sm" id="btn-export-patched">Export</button>
-              </div>
-            </div>
-
-            <div class="assistant-pane" style="margin-bottom:8px; border:1px solid var(--accent); border-radius:4px; padding:6px; background:var(--surface-2);">
-              <div style="font-size:10px; margin-bottom:4px;"><strong>Advisor</strong></div>
-              <div style="display:flex; gap:4px;">
-                <input id="assistant-query" placeholder="query" style="flex:1; font-size:10px;" />
-                <button class="btn-sm" id="btn-get-advice">Ask</button>
-              </div>
-              <div id="assistant-response" style="font-size:10px; color:var(--text-muted); margin-top:4px;"></div>
-            </div>
-
-            <div style="font-size:10px;">
-              <button class="btn-sm" id="btn-map-refresh" style="width:100%;">Refresh Memory Map</button>
-              <div style="margin-top:4px;">
-                <input id="map-jump-addr" placeholder="0x addr" style="width:70%; font-size:10px;" />
-                <button class="btn-sm" id="btn-map-jump">Jump</button>
-              </div>
+            <div class="panel-header"><div class="panel-title">Quick Tools & Info</div></div>
+            <div style="padding:var(--space-3); font-size:var(--text-xs);">
+              <div><strong>Favorites</strong> (coming in next update - pin common maps)</div>
+              <div style="margin-top:8px;"><strong>Memory Map</strong> shows every byte linked to tables. Click to jump.</div>
+              <div style="margin-top:8px; color:var(--accent);">Deep EDC16 extraction available via button above.</div>
             </div>
           </aside>
         </div>
       </section>
 
       <section class="content content--hidden" id="view-logs">
-        <div class="logs-view">
-          <div class="panel">
-            <div class="panel-header"><div class="panel-title">Audit & Session Logs</div></div>
-            <div class="job-log" id="global-log">No logs yet. Actions in Pipeline/Tables will appear here + persisted audits.</div>
-          </div>
+        <div class="panel">
+          <div class="panel-header"><div class="panel-title">Audit Trail & Session Logs</div></div>
+          <div class="job-log" id="global-log">Professional audit logging active. All pipeline, table edits, and flashes are recorded.</div>
         </div>
       </section>
     </main>
 
-    <!-- Professional bottom status bar -->
+    <!-- Status Bar (pro like all commercial tools) -->
     <div class="status-bar">
       <div class="status-left">
         <span id="status-conn">Disconnected</span>
         <span class="sep">|</span>
         <span id="status-protocol">No protocol</span>
+        <span id="status-j2534" style="display:none; color:var(--accent);"> | J2534 Active</span>
       </div>
-      <div class="status-center" id="status-msg">Ready</div>
-      <div class="status-right">TuneItVerse v0.1.0</div>
+      <div class="status-center" id="status-msg">Ready. Choose a workflow or connect hardware.</div>
+      <div class="status-right">TuneItVerse v0.2.0 • JRTuners</div>
     </div>
   </div>
 
-  <!-- Custom Risk Confirmation Modal for Pipeline (refinement for #15) -->
+  <!-- Risk Modal (professional confirmation) -->
   <div id="risk-modal" class="modal hidden">
     <div class="modal-content" style="max-width:520px;">
-      <h2>⚠️ Critical Risk Acknowledgment - Safe Flash Pipeline</h2>
+      <h2>⚠️ Risk Acknowledgment — Guided Flash Pipeline</h2>
       <div class="modal-body">
-        <p><strong>Flashing carries permanent brick risk.</strong></p>
-        <label><input type="checkbox" id="risk-ack1" /> I have a recent full backup and understand it is required for recovery.</label>
-        <label><input type="checkbox" id="risk-ack2" /> I have verified the target BIN matches my ECU family/OSID and checksums are valid.</label>
-        <label><input type="checkbox" id="risk-ack3" /> I accept full responsibility; I will not interrupt the process and have read all prompts.</label>
-        <label style="margin-top:8px;">Type <strong>PROCEED</strong> to confirm: <input type="text" id="risk-confirm-text" style="width:120px;" placeholder="PROCEED" /></label>
+        <p><strong>Flashing an ECU carries risk of permanent damage.</strong> This pipeline includes mandatory backup, checksum correction, kernel upload for recovery, and readback verification.</p>
+        <label><input type="checkbox" id="risk-ack1" /> I have a verified full backup and understand recovery requires it.</label>
+        <label><input type="checkbox" id="risk-ack2" /> The target BIN matches my ECU family and has valid checksums.</label>
+        <label><input type="checkbox" id="risk-ack3" /> I will not interrupt the process and accept full responsibility.</label>
+        <label>Type <strong>PROCEED</strong> exactly to continue: <input type="text" id="risk-confirm-text" style="width:120px;" placeholder="PROCEED" /></label>
       </div>
       <div class="modal-actions">
-        <button id="btn-risk-confirm" class="btn-danger">Confirm & Proceed with Flash</button>
-        <button id="btn-risk-cancel" class="btn-secondary">Cancel Pipeline</button>
+        <button id="btn-risk-confirm" class="btn-danger">Confirm & Start Flash</button>
+        <button id="btn-risk-cancel" class="btn-secondary">Cancel</button>
       </div>
     </div>
   </div>
 
-  <!-- Connect Modal (better than prompt) -->
+  <!-- Enhanced Connect Modal with J2534 (professional hardware options) -->
   <div id="connect-modal" class="modal hidden">
     <div class="modal-content">
-      <h2>Connect to ECU</h2>
+      <h2>Connect to ECU / Hardware</h2>
       <div class="modal-body">
-        <label for="port-select">Serial Port</label>
-        <div style="display: flex; gap: 8px; align-items: center;">
-          <select id="port-select" style="flex: 1;"></select>
-          <button id="refresh-ports" class="btn-sm">Refresh</button>
+        <div style="margin-bottom:12px;">
+          <label><strong>Hardware Type</strong></label>
+          <div style="display:flex; gap:8px; margin-top:4px;">
+            <label class="radio-card" style="flex:1; padding:8px;">
+              <input type="radio" name="hw-type" value="elm" checked />
+              <div><strong>ELM / OBDLink / Serial</strong><br><span style="font-size:10px; color:var(--text-faint);">Common for OBD2 (your MX+)</span></div>
+            </label>
+            <label class="radio-card" style="flex:1; padding:8px;">
+              <input type="radio" name="hw-type" value="j2534" />
+              <div><strong>J2534 Professional</strong><br><span style="font-size:10px; color:var(--text-faint);">OpenPort, Tactrix, etc. (Windows)</span></div>
+            </label>
+          </div>
         </div>
-        <label for="baud-input">Baud Rate</label>
-        <input type="number" id="baud-input" value="115200" style="width: 100%;">
-        <label for="protocol-select">Protocol / Bus</label>
-        <select id="protocol-select" style="width:100%; padding:4px;">
-          <option value="auto">Auto-detect</option>
+
+        <div id="elm-section">
+          <label for="port-select">Serial / COM Port</label>
+          <div style="display:flex; gap:8px;">
+            <select id="port-select" style="flex:1;"></select>
+            <button id="refresh-ports" class="btn-sm">Refresh</button>
+          </div>
+          <label for="baud-input">Baud Rate</label>
+          <input type="number" id="baud-input" value="115200" />
+        </div>
+
+        <div id="j2534-section" style="display:none;">
+          <p style="font-size:11px; color:var(--text-muted);">J2534 DLL will be auto-detected or you can specify path. Supports CAN 500k for EDC16, VPW, etc.</p>
+          <button class="btn-secondary" id="btn-j2534-detect" style="width:100%;">Detect Available J2534 Devices</button>
+          <div id="j2534-devices-list" style="margin-top:8px; font-size:11px;"></div>
+        </div>
+
+        <label for="protocol-select">Protocol Preference</label>
+        <select id="protocol-select">
+          <option value="auto">Auto-detect (recommended)</option>
           <option value="VPW">VPW (J1850 - GM P01/P59)</option>
           <option value="CAN">CAN / ISO15765 500k (Nissan EDC16 + UDS)</option>
           <option value="KWP">KWP2000 / K-line</option>
-          <option value="CONSULT">Nissan Consult II (ZD30CRD Patrol)</option>
+          <option value="CONSULT">Nissan Consult II (ZD30 Patrol)</option>
+          <option value="J2534">J2534 PassThru (professional adapters)</option>
         </select>
-        <p class="modal-hint">Select protocol for your ECU/adapter.</p>
+        <p class="modal-hint">J2534 option uses your professional hardware for best compatibility with modern ECUs.</p>
       </div>
       <div class="modal-actions">
         <button id="btn-modal-connect" class="btn-primary">Connect</button>
