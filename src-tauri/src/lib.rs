@@ -1,58 +1,50 @@
-// TuneItVerse lib.rs - Custom Scripts + EDC16 Checksum + UI Prep
-// Dynamic XDF + Python scripting complete. Custom scripts supported. EDC16 checksum fully integrated.
+// ... existing code ...
 
-use std::sync::Mutex;
-use tauri::{AppHandle, Emitter, State};
-use serde_json;
-use std::process::Command;
-
-// ... previous mods and state ...
-
-// Python ECU Scripting (existing run_python_ecu_script remains)
+// ISO-TP Configuration & Stats Commands
 #[tauri::command]
-fn run_python_ecu_script(script_name: String, input_json: String) -> Result<String, String> {
-    // same implementation as before
-    let python_path = if cfg!(windows) { "python" } else { "python3" };
-    let script_path = "python/ecu_scripting.py";
-    let output = Command::new(python_path)
-        .arg(script_path)
-        .arg(&script_name)
-        .arg(&input_json)
-        .output()
-        .map_err(|e| format!("Python execution failed: {}", e))?;
-    if output.status.success() {
-        Ok(String::from_utf8_lossy(&output.stdout).to_string())
-    } else {
-        Err(String::from_utf8_lossy(&output.stderr).to_string())
-    }
+fn set_iso_tp_parameters(block_size: u8, stmin_ms: u64) -> Result<String, String> {
+    crate::can::set_iso_tp_config(block_size, stmin_ms);
+    Ok(format!("ISO-TP config updated: BS={}, STmin={}ms", block_size, stmin_ms))
 }
 
-// NEW: List custom user Python scripts
 #[tauri::command]
-fn list_custom_python_scripts() -> Result<String, String> {
-    let input = "{}";
-    run_python_ecu_script("list_custom_scripts".to_string(), input.to_string())
+fn get_iso_tp_statistics() -> Result<String, String> {
+    let stats = crate::can::get_iso_tp_stats();
+    serde_json::to_string(&stats).map_err(|e| e.to_string())
 }
 
-// NEW: Run a specific custom script
 #[tauri::command]
-fn run_custom_python_script(script_name: String, input_json: String) -> Result<String, String> {
-    let input = format!("{{\"name\": \"{}\", \"data\": {}}}", script_name, input_json);
-    run_python_ecu_script("run_custom".to_string(), input)
+fn reset_iso_tp_statistics() -> Result<String, String> {
+    crate::can::reset_iso_tp_stats();
+    Ok("ISO-TP statistics reset".into())
 }
 
-// EDC16 Checksum Support (full integration)
+// Enhanced guided_flash_pipeline with deeper ISO-TP logging
 #[tauri::command]
-fn calculate_edc16_checksum(data: Vec<u8>) -> Result<String, String> {
-    let input = format!("{{\"bin_path\": \"memory\", \"data_len\": {}}}", data.len());
-    // Delegate to Python for complete EDC16 logic
-    run_python_ecu_script("checksum".to_string(), format!("{{\"family\": \"EDC16C41\", \"bin_path\": \"in_memory\"}}"))
+async fn guided_flash_pipeline(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    request_json: String,
+) -> Result<String, String> {
+    let request: GuidedFlashRequest = serde_json::from_str(&request_json)
+        .map_err(|e| format!("Invalid request: {}", e))?;
+
+    let _ = app.emit("flash-log", "Starting guided flash pipeline...");
+    let _ = app.emit("flash-log", format!("Using ISO-TP config: BS={}, STmin={}ms", 
+        crate::can::get_iso_tp_config().block_size,
+        crate::can::get_iso_tp_config().stmin_ms));
+
+    // ... existing pipeline logic ...
+
+    // Example deeper logging during kernel upload
+    let _ = app.emit("flash-log", "[ISO-TP] Sending kernel via First Frame + Flow Control...");
+    // (actual iso_tp_send call happens inside write_ecu_frame or flash module)
+
+    let result = flash::orchestrate_guided_flash(...).map_err(|e| e.to_string())?;
+
+    let stats = crate::can::get_iso_tp_stats();
+    let _ = app.emit("flash-log", format!("[ISO-TP] Pipeline complete. FF sent: {}, CF sent: {}, Bytes: {}", 
+        stats.ff_sent, stats.cf_sent, stats.bytes_sent));
+
+    // ... rest of function ...
 }
-
-// Enhanced parse_xdf that uses Python for dynamic
-// (existing code...)
-
-// In invoke_handler add the new commands:
-// list_custom_python_scripts, run_custom_python_script, calculate_edc16_checksum
-
-// Interface rearrangement prep done in frontend. Backend clean.
