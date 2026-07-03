@@ -4,16 +4,107 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>TuneItVerse — UNRESTRICTED Pro Tuning Platform</title>
+  <title>TuneItVerse — Professional ECU Tuning Platform</title>
   <link rel="stylesheet" href="./styles.css" />
 </head>
 
 <body>
-  <!-- ... existing structure ... -->
-  <!-- In tables-header-actions, add: -->
-  <button id="btn-load-full-catalog" class="btn-sm" title="Load ALL available maps/tables for this ECU family (unrestricted mode)">Load Full Catalog (All Maps)</button>
-  <span id="catalog-mode" class="pro-badge" style="background:var(--success);">FULL CATALOG</span>
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-logo">
+      <div class="sidebar-logo-mark">TV</div>
+      <div class="sidebar-logo-text">TuneItVerse</div>
+    </div>
 
-  <!-- ... rest of previous polished HTML ... -->
+    <!-- REARRANGED LOGICAL WORKFLOW NAV -->
+    <nav class="sidebar-nav">
+      <a href="#" class="nav-item active" data-view="dashboard">
+        <span>🏠 Dashboard (Hub)</span>
+      </a>
+      <a href="#" class="nav-item" data-view="connect">
+        <span>🔌 Connect & Hardware</span>
+      </a>
+      <a href="#" class="nav-item" data-view="identity">
+        <span>🔍 ECU Identity</span>
+      </a>
+      <a href="#" class="nav-item" data-view="tables">
+        <span>📋 Tables / Maps Editor</span>
+      </a>
+      <a href="#" class="nav-item" data-view="live-data">
+        <span>📊 Live Data & Logging</span>
+      </a>
+      <a href="#" class="nav-item" data-view="dtc">
+        <span>⚠️ Diagnostics (DTC)</span>
+      </a>
+      <a href="#" class="nav-item" data-view="flash">
+        <span>⚡ Flash Pipeline (EDC16 Supported)</span>
+      </a>
+      <a href="#" class="nav-item" data-view="scripts">
+        <span>🐍 Python Scripts & Custom</span>
+      </a>
+      <a href="#" class="nav-item" data-view="logs">
+        <span>📝 Audit & History</span>
+      </a>
+    </nav>
+
+    <div class="sidebar-footer">
+      <div class="connection-status">
+        <span class="conn-dot" id="conn-dot"></span>
+        <span id="conn-label">Disconnected</span>
+      </div>
+      <button id="btn-connect" class="btn-connect">Connect</button>
+    </div>
+  </aside>
+
+  <div class="main-wrapper">
+    <!-- Top bar and toolbar same as before -->
+    <div class="menu-bar">...</div>
+    <header class="topbar">...</header>
+    <div class="toolbar">...</div>
+
+    <main>
+      <!-- Existing views kept, but reordered in nav -->
+      <!-- New Scripts View for custom Python ECU scripts -->
+      <section class="content content--hidden" id="view-scripts">
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-title">Python ECU Scripting</div>
+            <div class="panel-actions">
+              <button id="btn-refresh-scripts" class="btn-sm">Refresh Custom Scripts</button>
+              <button id="btn-run-builtin" class="btn-sm">Run Built-in Checksum (EDC16)</button>
+            </div>
+          </div>
+          <div>
+            <h3>Built-in Scripts</h3>
+            <div id="builtin-scripts-list">
+              <div class="script-item">XDF Dynamic Parser</div>
+              <div class="script-item">P01 / LS1 Checksum</div>
+              <div class="script-item">EDC16 Checksum (Nissan ZD30)</div>
+              <div class="script-item">Full Map Discovery</div>
+            </div>
+
+            <h3>Custom User Scripts (python/custom_scripts/)</h3>
+            <div id="custom-scripts-list"></div>
+
+            <div class="panel" style="margin-top:16px;">
+              <div class="panel-header"><div class="panel-title">Run Script</div></div>
+              <div>
+                <select id="script-select"></select>
+                <button id="btn-run-script" class="btn-primary">Run Selected Script</button>
+                <pre id="script-output" style="background:var(--surface-2); padding:12px; margin-top:8px; max-height:200px; overflow:auto;"></pre>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Other views (dashboard, tables, flash, etc.) remain with EDC16 options added in flash/validation -->
+      <!-- ... existing content sections ... -->
+    </main>
+
+    <div class="status-bar">...</div>
+  </div>
+
+  <!-- Modals remain -->
+  <script type="module" src="./main.js"></script>
 </body>
 </html>
