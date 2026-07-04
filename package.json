@@ -1,13 +1,14 @@
 {
   "name": "tuneitverse",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "TuneItVerse - Industry-standard open ECU tuning platform (Tauri + Rust)",
   "type": "module",
   "scripts": {
     "tauri": "tauri",
     "dev": "tauri dev",
     "build": "tauri build",
+    "build:win-exe": "tauri build && powershell -NoProfile -Command \"Get-ChildItem 'src-tauri/target/release/bundle/nsis' -Filter 'TuneItVerse*-setup.exe' | Copy-Item -Destination '.' -Force; Write-Host 'Fresh .exe installer copied to main TuneItVerse folder'\"",
     "check": "tauri info"
   },
   "devDependencies": {
