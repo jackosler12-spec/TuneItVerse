@@ -1,63 +1,34 @@
-// Add near the end of init() or in a setup function
+// In setupConnect() or the modal connect handler, add:
 
-function setupIsoTpStatsToggle() {
-  const toggle = document.getElementById('toggle-iso-stats');
-  const panel = document.getElementById('iso-stats-panel');
-  const resetBtn = document.getElementById('btn-reset-iso-stats');
+// Apply advanced CAN/ISO-TP settings before connecting
+const applyAdvancedCanSettings = async () => {
+  const canFdEnabled = document.getElementById('enable-can-fd')?.checked || false;
+  const blockSize = parseInt(document.getElementById('iso-block-size')?.value || '0', 10);
+  const stmin = parseInt(document.getElementById('iso-stmin')?.value || '5', 10);
 
-  let statsInterval = null;
-
-  if (toggle && panel) {
-    toggle.addEventListener('change', async () => {
-      if (toggle.checked) {
-        panel.style.display = 'block';
-        await updateIsoTpStats();
-        if (!statsInterval) {
-          statsInterval = setInterval(updateIsoTpStats, 1500); // live update every 1.5s
-        }
-      } else {
-        panel.style.display = 'none';
-        if (statsInterval) {
-          clearInterval(statsInterval);
-          statsInterval = null;
-        }
-      }
-    });
-  }
-
-  if (resetBtn) {
-    resetBtn.addEventListener('click', async () => {
-      await invokeCmd('reset_iso_tp_statistics');
-      await updateIsoTpStats();
-    });
-  }
-}
-
-async function updateIsoTpStats() {
   try {
-    const json = await invokeCmd('get_iso_tp_statistics');
-    const stats = JSON.parse(json);
-
-    const set = (id, val) => {
-      const el = document.getElementById(id);
-      if (el) el.textContent = val;
-    };
-
-    set('stat-ff-sent', stats.ff_sent || 0);
-    set('stat-cf-sent', stats.cf_sent || 0);
-    set('stat-fc-rcv', stats.fc_received || 0);
-    set('stat-bytes-sent', stats.bytes_sent || 0);
-    set('stat-bytes-rcv', stats.bytes_received || 0);
-    set('stat-errors', stats.errors || 0);
-
-    const errEl = document.getElementById('stat-last-error');
-    if (errEl) {
-      errEl.textContent = stats.last_error ? `Last: ${stats.last_error}` : '';
-    }
+    await invokeCmd('set_can_fd_mode', { enabled: canFdEnabled });
+    await invokeCmd('set_iso_tp_parameters', { block_size: blockSize, stmin_ms: stmin });
+    console.log(`[TuneItVerse] Applied CAN FD: ${canFdEnabled}, ISO-TP BS=${blockSize}, STmin=${stmin}ms`);
   } catch (e) {
-    console.warn('Failed to fetch ISO-TP stats:', e);
+    console.warn('Failed to apply advanced CAN settings:', e);
   }
-}
+};
 
-// Call in init()
-// setupIsoTpStatsToggle();
+// Call applyAdvancedCanSettings() just before the actual connect logic in btnModalConnect handler
+// Example integration point:
+// btnModalConnect?.addEventListener('click', async () => {
+//   await applyAdvancedCanSettings();
+//   // then existing connect code...
+// });
+
+// Also show/hide advanced section based on hardware type (optional polish)
+const hwRadios = $$('input[name="hw-type"]');
+hwRadios.forEach(radio => {
+  radio.addEventListener('change', () => {
+    const advSection = document.querySelector('#connect-modal .modal-body > div:last-child');
+    if (advSection) {
+      advSection.style.display = (radio.value === 'j2534') ? 'block' : 'block'; // always show for now
+    }
+  });
+});
