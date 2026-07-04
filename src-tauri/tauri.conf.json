@@ -1,29 +1,39 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "TuneItVerse",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "identifier": "com.jrtuners.tuneitverse",
   "build": {
-    "frontendDist": "../src"
+    "frontendDist": "../src",
+    "beforeBuildCommand": "",
+    "beforeDevCommand": "",
+    "features": ["custom-protocol"]
   },
   "app": {
     "withGlobalTauri": true,
     "windows": [
       {
         "label": "main",
-        "title": "TuneItVerse",
+        "title": "TuneItVerse - Professional ECU Tuning Platform",
         "width": 1440,
         "height": 900,
+        "minWidth": 1100,
+        "minHeight": 720,
         "resizable": true,
         "fullscreen": false,
         "transparent": false,
-        "minWidth": 1100,
-        "minHeight": 720
+        "center": true
       }
     ],
     "security": {
-        "csp": null
-      }
+      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' http://localhost:* ws://localhost:*;",
+      "dangerousDisableAssetCspModification": false
+    },
+    "trayIcon": {
+      "icon": "icons/icon.ico",
+      "tooltip": "TuneItVerse - ECU Tuning",
+      "menuOnLeftClick": true
+    }
   },
   "bundle": {
     "active": true,
@@ -37,10 +47,18 @@
     ],
     "windows": {
       "nsis": {
-        "installMode": "both",
+        "installMode": "currentUser",
         "languages": ["English"],
-        "template": null
+        "compression": "lzma",
+        "displayLanguageSelector": false,
+        "startMenuFolder": "JRTuners",
+        "headerImage": null,
+        "sidebarImage": null,
+        "installerIcon": "icons/icon.ico",
+        "uninstallerIcon": "icons/icon.ico",
+        "webviewInstallMode": "embedBootstrapper"
       }
     }
-  }
+  },
+  "plugins": {}
 }
