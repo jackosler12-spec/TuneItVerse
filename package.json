@@ -8,11 +8,12 @@
     "tauri": "tauri",
     "dev": "tauri dev",
     "build": "tauri build",
+    "build:innosetup": "tauri build --target x86_64-pc-windows-msvc && iscc installer\\TuneItVerse.iss",
     "build:win-exe": "tauri build --target x86_64-pc-windows-msvc && node scripts/copy-installer.js",
     "bump-version": "node scripts/bump-version.js",
     "check": "tauri info"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.11.2"
-    }
+  }
 }
