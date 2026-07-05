@@ -1,4 +1,11 @@
-// In the Apply button success path, show address if returned
+// Update the Apply button logic to pass auto_unlock
 
-// Update the success toast to include more detail if available
-showToast(`Applied ${success} changes to ECU`, 'success');
+// In the loop where we call apply_live_patch:
+await invokeCmd('apply_live_patch', {
+    table_id: table.id,
+    row: change.row,
+    col: change.col,
+    new_value: change.value,
+    auto_unlock: true,           // Enable automatic security access
+    family: "P01"                // Change to "EDC16" or "ZD30" as needed
+});
