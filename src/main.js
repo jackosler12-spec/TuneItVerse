@@ -1,11 +1,20 @@
-// Update the Apply button logic to pass auto_unlock
+// Global disconnect helpers
 
-// In the loop where we call apply_live_patch:
-await invokeCmd('apply_live_patch', {
-    table_id: table.id,
-    row: change.row,
-    col: change.col,
-    new_value: change.value,
-    auto_unlock: true,           // Enable automatic security access
-    family: "P01"                // Change to "EDC16" or "ZD30" as needed
-});
+window.disconnectAll = async function() {
+  try {
+    const result = await invokeCmd('disconnect_all', {});
+    showToast(result, 'info');
+    // Optionally reload or update UI state
+  } catch (e) {
+    showToast('Disconnect failed: ' + e, 'error');
+  }
+};
+
+window.resetConnectionState = async function() {
+  try {
+    const result = await invokeCmd('reset_connection_state', {});
+    showToast(result, 'info');
+  } catch (e) {
+    showToast('Reset failed: ' + e, 'error');
+  }
+};
