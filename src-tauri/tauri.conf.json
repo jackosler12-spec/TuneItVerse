@@ -39,10 +39,7 @@
     ],
     "windows": {
       "nsis": {
-        "installMode": "currentUser",
-        "languages": ["English"],
-        "compression": "lzma",
-        "license": "../LICENSE"
+        "installMode": "currentUser"
       }
     }
   }
