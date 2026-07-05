@@ -45,7 +45,7 @@
         "license": "../LICENSE",
         "installerIcon": "icons/icon.ico",
         "uninstallerIcon": "icons/icon.ico",
-        "startMenuFolder": "JRTuners\\TuneItVerse"
+        "startMenuFolder": "JRTuners/TuneItVerse"
       }
     }
   }
