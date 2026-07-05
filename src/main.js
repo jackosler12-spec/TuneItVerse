@@ -1,106 +1,65 @@
-// main.js — Professional-grade J2534 UI integration + Diagnostics Panel
+// main.js — Professional 2D Table Editor
 
-// ... existing code ...
+function renderTableEditor(table) {
+  const editor = document.getElementById('table-editor');
+  if (!editor) return;
 
-// ==================== PROFESSIONAL J2534 DIAGNOSTICS PANEL ====================
+  editor.innerHTML = '';
+  editor.style.padding = '12px';
 
-function createJ2534DiagnosticsPanel() {
-  const container = document.createElement('div');
-  container.id = 'j2534-diagnostics';
-  container.style.cssText = 'margin-top: 20px; padding: 16px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface);';
+  const title = document.createElement('h4');
+  title.textContent = `Editing: ${table.name} (${table.size ? table.size.join(' × ') : 'N/A'})`;
+  editor.appendChild(title);
 
-  container.innerHTML = `
-    <h3 style="margin:0 0 12px 0; font-size:15px;">🔧 J2534 Diagnostics</h3>
-    
-    <div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">
-      <button id="btn-j2534-status" class="btn">Check Status</button>
-      <button id="btn-j2534-reconnect" class="btn">Reconnect</button>
-      <button id="btn-j2534-disconnect" class="btn btn-danger">Disconnect</button>
-    </div>
-
-    <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px;">
-      <div>
-        <label>Send UDS (hex, space separated)</label>
-        <input id="j2534-send-data" type="text" value="22 F1 90" style="width:100%; padding:6px;" />
-        <button id="btn-j2534-send" class="btn" style="margin-top:6px; width:100%;">Send UDS</button>
-      </div>
-      <div>
-        <label>Read Messages</label>
-        <button id="btn-j2534-read" class="btn" style="width:100%;">Read (last 5 msgs)</button>
-        <pre id="j2534-read-output" style="margin-top:6px; background:#111; padding:8px; font-size:11px; max-height:120px; overflow:auto;"></pre>
-      </div>
-    </div>
-
-    <div style="font-size:11px; color:var(--text-faint);">
-      Status: <span id="j2534-status">Not connected</span>
-    </div>
-  `;
-
-  // Append to Flash view or a tools section if exists, otherwise to body for now
-  const flashView = document.getElementById('view-flash');
-  if (flashView) {
-    flashView.appendChild(container);
-  } else {
-    document.body.appendChild(container);
+  if (!table.size || table.size.length !== 2) {
+    editor.innerHTML += '<p>Table size not available for editing.</p>';
+    return;
   }
 
-  // Bind buttons
-  bindJ2534Buttons(container);
-}
+  const [rows, cols] = table.size;
+  const grid = document.createElement('div');
+  grid.style.display = 'grid';
+  grid.style.gridTemplateColumns = `repeat(${cols}, 58px)`;
+  grid.style.gap = '2px';
+  grid.style.marginTop = '12px';
 
-function bindJ2534Buttons(panel) {
-  const statusEl = panel.querySelector('#j2534-status');
+  // Create editable cells
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const cell = document.createElement('input');
+      cell.type = 'number';
+      cell.step = '0.1';
+      cell.style.width = '56px';
+      cell.style.padding = '4px';
+      cell.style.textAlign = 'center';
+      cell.style.fontSize = '12px';
+      cell.style.border = '1px solid #444';
+      cell.style.background = '#1a1a1a';
+      cell.style.color = '#ddd';
 
-  panel.querySelector('#btn-j2534-status').onclick = async () => {
-    const connected = state.connected && state.protocol === 'j2534';
-    statusEl.textContent = connected ? 'Connected (J2534)' : 'Not connected';
-    statusEl.style.color = connected ? '#0f0' : '#f66';
-  };
+      // Placeholder value (in real version this would come from loaded bin/XDF)
+      const baseValue = 50 + (r * 3) + (c * 1.2);
+      cell.value = baseValue.toFixed(1);
 
-  panel.querySelector('#btn-j2534-reconnect').onclick = async () => {
-    try {
-      const res = await invokeCmd('j2534_reconnect', {});
-      showToast(res, 'success');
-    } catch (e) { showToast('Reconnect failed: ' + e, 'error'); }
-  };
+      // Live edit handler (future: send patch to ECU)
+      cell.addEventListener('change', () => {
+        console.log(`[TuneItVerse] Cell [${r},${c}] changed to ${cell.value}`);
+        // TODO: Send live patch via Tauri when connected
+      });
 
-  panel.querySelector('#btn-j2534-disconnect').onclick = async () => {
-    try {
-      const res = await invokeCmd('j2534_disconnect', {});
-      state.connected = false;
-      statusEl.textContent = 'Disconnected';
-      showToast(res, 'info');
-    } catch (e) { showToast(e, 'error'); }
-  };
-
-  panel.querySelector('#btn-j2534-send').onclick = async () => {
-    const input = panel.querySelector('#j2534-send-data').value.trim();
-    const bytes = input.split(/\s+/).map(h => parseInt(h, 16)).filter(n => !isNaN(n));
-    if (bytes.length === 0) return showToast('Invalid hex data', 'error');
-
-    try {
-      const res = await invokeCmd('j2534_write_uds', { data: bytes });
-      showToast(res, 'success');
-    } catch (e) { showToast('Send failed: ' + e, 'error'); }
-  };
-
-  panel.querySelector('#btn-j2534-read').onclick = async () => {
-    const output = panel.querySelector('#j2534-read-output');
-    try {
-      const msgs = await invokeCmd('j2534_read_msgs', { timeout_ms: 800, max_msgs: 5 });
-      output.textContent = Array.isArray(msgs) ? msgs.join('\n') : JSON.stringify(msgs, null, 2);
-    } catch (e) {
-      output.textContent = 'Error: ' + e;
+      grid.appendChild(cell);
     }
-  };
-}
-
-// Auto-create diagnostics panel on Flash view load
-setTimeout(() => {
-  if (document.getElementById('view-flash') && !document.getElementById('j2534-diagnostics')) {
-    createJ2534DiagnosticsPanel();
   }
-}, 1200);
 
-// Also expose in Connect modal for quick access
-// (existing setupConnect already improved)
+  editor.appendChild(grid);
+
+  // Add action buttons
+  const actions = document.createElement('div');
+  actions.style.marginTop = '16px';
+  actions.innerHTML = `
+    <button class="btn">Apply to ECU</button>
+    <button class="btn">Save as .bin patch</button>
+    <button class="btn">Reset to Original</button>
+  `;
+  editor.appendChild(actions);
+}
