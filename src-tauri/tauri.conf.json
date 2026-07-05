@@ -42,6 +42,7 @@
         "installMode": "currentUser",
         "languages": ["English"],
         "compression": "lzma",
+        "license": "../LICENSE",
         "installerIcon": "icons/icon.ico",
         "uninstallerIcon": "icons/icon.ico"
       }
