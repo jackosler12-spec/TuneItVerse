@@ -2,19 +2,18 @@
 AppName=TuneItVerse
 AppVersion=0.2.0
 AppPublisher=JRTuners
-AppPublisherURL=https://github.com/jackosler12-spec/TuneItVerse
-AppSupportURL=https://github.com/jackosler12-spec/TuneItVerse
-AppUpdatesURL=https://github.com/jackosler12-spec/TuneItVerse
 DefaultDirName={userappdata}\TuneItVerse
 DefaultGroupName=TuneItVerse
 DisableProgramGroupPage=yes
 OutputDir=..\..\
 OutputBaseFilename=TuneItVerse-Setup
-Compression=lzma2
+Compression=lzma2/max
 SolidCompression=yes
 SetupIconFile=..\src-tauri\icons\icon.ico
-UninstallDisplayIcon={app}\TuneItVerse.exe
+UninstallDisplayIcon={app}\tuneitverse.exe
 PrivilegesRequired=lowest
+ArchitecturesAllowed=x64compatible
+ArchitecturesInstallIn64BitMode=x64compatible
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -23,12 +22,13 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-Source: "..\src-tauri\target\release\bundle\appimage\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
-; Note: Adjust source path after confirming Tauri output structure
+Source: "..\src-tauri\target\release\tuneitverse.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\src-tauri\target\release\*.dll"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs
+Source: "..\src-tauri\target\release\resources\*"; DestDir: "{app}\resources"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{group}\TuneItVerse"; Filename: "{app}\TuneItVerse.exe"
-Name: "{autodesktop}\TuneItVerse"; Filename: "{app}\TuneItVerse.exe"; Tasks: desktopicon
+Name: "{group}\TuneItVerse"; Filename: "{app}\tuneitverse.exe"
+Name: "{autodesktop}\TuneItVerse"; Filename: "{app}\tuneitverse.exe"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\TuneItVerse.exe"; Description: "{cm:LaunchProgram,TuneItVerse}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\tuneitverse.exe"; Description: "{cm:LaunchProgram,TuneItVerse}"; Flags: nowait postinstall skipifsilent
