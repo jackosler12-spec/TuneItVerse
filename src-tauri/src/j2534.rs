@@ -1,37 +1,60 @@
-// j2534.rs — Enhanced with UDS helpers and reconnection logic
+// j2534.rs — Advanced features: Proper filtering + 29-bit CAN
 
-// ... (keep all previous code)
+// ... existing constants and structs ...
+
+// Additional constants for advanced use
+pub const J2534_FLAG_CAN_29BIT_ID: c_ulong = 0x00000100;
+pub const J2534_FLAG_ISO15765_FRAME_PAD: c_ulong = 0x00000040;
 
 impl J2534Device {
     // ... existing methods ...
 
-    /// Higher-level UDS write (ISO15765)
-    pub unsafe fn write_uds(&self, data: &[u8], timeout_ms: u32) -> Result<(), String> {
-        self.write_msg(data, timeout_ms)
+    /// Start a proper ISO15765 flow control filter (recommended for real ECUs)
+    pub unsafe fn start_iso15765_filter(&self, can_id: u32, mask: u32, is_29bit: bool) -> Result<c_ulong, String> {
+        let start_filter: Symbol<PassThruStartMsgFilter> = self.get_symbol(b"PassThruStartMsgFilter\0")?;
+
+        let mut mask_msg = PASSTHRU_MSG {
+            ProtocolID: J2534_PROTOCOL_ISO15765,
+            TxFlags: if is_29bit { J2534_FLAG_CAN_29BIT_ID } else { 0 },
+            DataSize: 4,
+            ..Default::default()
+        };
+        mask_msg.Data[0..4].copy_from_slice(&mask.to_be_bytes());
+
+        let mut pattern_msg = PASSTHRU_MSG {
+            ProtocolID: J2534_PROTOCOL_ISO15765,
+            TxFlags: if is_29bit { J2534_FLAG_CAN_29BIT_ID } else { 0 },
+            DataSize: 4,
+            ..Default::default()
+        };
+        pattern_msg.Data[0..4].copy_from_slice(&can_id.to_be_bytes());
+
+        let mut filter_id: c_ulong = 0;
+        let status = start_filter(
+            self.channel_id,
+            0x00000001, // PASS_FILTER
+            &mask_msg,
+            &pattern_msg,
+            std::ptr::null(),
+            &mut filter_id,
+        );
+
+        if status != 0 {
+            return Err(format!("StartMsgFilter failed with status {}", status));
+        }
+        Ok(filter_id)
     }
 
-    /// Higher-level read (returns raw PASSTHRU_MSGs)
-    pub unsafe fn read_uds(&self, timeout_ms: u32, max_msgs: usize) -> Result<Vec<PASSTHRU_MSG>, String> {
-        self.read_msgs(timeout_ms, max_msgs)
-    }
+    /// Connect with explicit 29-bit CAN support
+    pub unsafe fn connect_can_29bit(&mut self) -> Result<(), String> {
+        let connect: Symbol<PassThruConnect> = self.get_symbol(b"PassThruConnect\0")?;
+        let mut ch_id: c_ulong = 0;
+        let flags = J2534_FLAG_CAN_29BIT_ID | J2534_FLAG_ISO15765_FRAME_PAD;
 
-    /// Simple health check (device_id > 0 means we have opened a device)
-    pub fn is_connected(&self) -> bool {
-        self.device_id != 0 && self.channel_id != 0
-    }
-
-    /// Attempt to reconnect using the stored dll_path
-    pub unsafe fn reconnect(&mut self) -> Result<(), String> {
-        // Close existing if any
-        let _ = self.disconnect();
-
-        // Re-open
-        self.open()?;
-        self.connect_can_500k()?;
-        let _ = self.start_filter()?;
+        let status = connect(self.device_id, J2534_PROTOCOL_ISO15765, flags, 500000, &mut ch_id);
+        if status != 0 { return Err(format!("29-bit Connect failed: {}", status)); }
+        self.channel_id = ch_id;
+        self.set_config().ok();
         Ok(())
     }
 }
-
-// Update the old placeholder functions to note they are legacy
-// The real logic now lives in AppState + commands in lib.rs
