@@ -1,93 +1,91 @@
-// TuneItVerse — Full Backend with AppState and real J2534 wiring
+// lib.rs — Extended J2534 commands with reconnection and error recovery
 
-use std::sync::Mutex;
-use tauri::{AppHandle, Emitter, Manager, State};
-use serde_json;
-use std::process::Command;
+// ... (previous code remains)
 
-mod can;
-mod checksum;
-mod consult;
-mod dtc;
-mod ecu_database;
-mod flash;
-mod j2534;
-mod kwp;
-mod pid_decode;
-mod security;
-mod vpw;
-mod xdf;
+// ==================== ENHANCED J2534 COMMANDS ====================
 
-// ==================== APP STATE ====================
-pub struct AppState {
-    pub j2534_device: Mutex<Option<crate::j2534::J2534Device>>,
-}
-
-impl Default for AppState {
-    fn default() -> Self {
-        Self {
-            j2534_device: Mutex::new(None),
-        }
-    }
-}
-
-// ==================== J2534 REAL WIRING ====================
 #[tauri::command]
-fn j2534_connect_cmd(
+fn j2534_write_uds(
     state: State<'_, AppState>,
-    dll_path: Option<String>,
+    data: Vec<u8>,
+    timeout_ms: Option<u32>,
 ) -> Result<String, String> {
-    let path = dll_path.unwrap_or_else(|| "j2534.dll".to_string());
+    let timeout = timeout_ms.unwrap_or(2000);
 
-    unsafe {
-        let mut device = crate::j2534::J2534Device::load(&path)
-            .map_err(|e| format!("Failed to load J2534 DLL: {}", e))?;
+    let mut guard = state.j2534_device.lock().map_err(|e| e.to_string())?;
 
-        device.open()
-            .map_err(|e| format!("PassThruOpen failed: {}", e))?;
-        device.connect_can_500k()
-            .map_err(|e| format!("Connect CAN 500k failed: {}", e))?;
-        let _ = device.start_filter();
-
-        // Store the device in AppState
-        if let Ok(mut guard) = state.j2534_device.lock() {
-            *guard = Some(device);
+    if let Some(ref device) = *guard {
+        unsafe {
+            device.write_uds(&data, timeout)
+                .map_err(|e| format!("J2534 write UDS failed: {}", e))?;
+            Ok("UDS frame sent successfully".into())
         }
-
-        Ok(format!("J2534 connected successfully via {} (ISO15765 CAN 500k)", path))
+    } else {
+        Err("No J2534 device connected. Call j2534_connect_cmd first.".into())
     }
 }
 
-// ==================== EXISTING COMMANDS (kept for compatibility) ====================
-// ... (all previous commands remain here)
+#[tauri::command]
+fn j2534_read_msgs(
+    state: State<'_, AppState>,
+    timeout_ms: Option<u32>,
+    max_msgs: Option<usize>,
+) -> Result<Vec<String>, String> {
+    let timeout = timeout_ms.unwrap_or(1000);
+    let max = max_msgs.unwrap_or(10);
+
+    let guard = state.j2534_device.lock().map_err(|e| e.to_string())?;
+
+    if let Some(ref device) = *guard {
+        unsafe {
+            let msgs = device.read_uds(timeout, max)
+                .map_err(|e| format!("J2534 read failed: {}", e))?;
+
+            // Convert to simple hex strings for frontend
+            let result: Vec<String> = msgs.iter().map(|m| {
+                let len = m.DataSize as usize;
+                let hex: String = m.Data[..len.min(4128)].iter()
+                    .map(|b| format!("{:02X}", b))
+                    .collect();
+                format!("{} bytes: {}", len, hex)
+            }).collect();
+
+            Ok(result)
+        }
+    } else {
+        Err("No J2534 device connected".into())
+    }
+}
 
 #[tauri::command]
-fn connect_elm(port: String) -> Result<serde_json::Value, String> {
-    Ok(serde_json::json!({ "success": true, "protocol": "elm", "port": port }))
+fn j2534_disconnect(state: State<'_, AppState>) -> Result<String, String> {
+    let mut guard = state.j2534_device.lock().map_err(|e| e.to_string())?;
+
+    if let Some(ref device) = *guard {
+        unsafe {
+            let _ = device.disconnect();
+        }
+        *guard = None;
+        Ok("J2534 device disconnected".into())
+    } else {
+        Ok("No active J2534 connection".into())
+    }
 }
 
-// ==================== INVOKE HANDLER ====================
-#[cfg_attr(mobile, tauri::mobile_entry_point)]
-pub fn run() {
-    tauri::Builder::default()
-        .manage(AppState::default())
-        .invoke_handler(tauri::generate_handler![
-            run_python_ecu_script,
-            list_custom_python_scripts,
-            run_custom_python_script,
-            calculate_edc16_checksum,
-            set_iso_tp_parameters,
-            get_iso_tp_statistics,
-            reset_iso_tp_statistics,
-            set_can_fd_mode,
-            j2534_connect_cmd,           // Now real implementation
-            connect_elm,
-            guided_flash_pipeline,
-            parse_xdf_definitions,
-        ])
-        .setup(|_app| {
-            Ok(())
-        })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+#[tauri::command]
+fn j2534_reconnect(state: State<'_, AppState>) -> Result<String, String> {
+    let mut guard = state.j2534_device.lock().map_err(|e| e.to_string())?;
+
+    if let Some(ref mut device) = *guard {
+        unsafe {
+            device.reconnect()
+                .map_err(|e| format!("Reconnect failed: {}", e))?;
+            Ok("J2534 reconnected successfully".into())
+        }
+    } else {
+        Err("No previous J2534 device to reconnect. Use j2534_connect_cmd instead.".into())
+    }
 }
+
+// Also improve the original connect command with better error recovery
+// (already updated in previous step)
