@@ -37,6 +37,7 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "resources": [],
     "windows": {
       "nsis": {
         "installMode": "currentUser",
@@ -44,7 +45,9 @@
         "compression": "lzma",
         "license": "../LICENSE",
         "installerIcon": "icons/icon.ico",
-        "uninstallerIcon": "icons/icon.ico"
+        "uninstallerIcon": "icons/icon.ico",
+        "installMode": "currentUser",
+        "startMenuFolder": "JRTuners\\TuneItVerse"
       }
     }
   }
