@@ -1,7 +1,6 @@
-// In the ELM branch of read_live_data, replace the basic parsing with:
+// Add this command in lib.rs
 
-if let Ok(resp) = send_elm_command(state.clone(), &obd_cmd) {
-    if let Some(value) = parse_elm_response(&resp, &pid) {
-        result[pid.clone()] = serde_json::json!(value);
-    }
+#[tauri::command]
+fn load_xdf_for_os(osid: String) -> Result<String, String> {
+    crate::xdf::load_xdf_for_os(&osid)
 }
