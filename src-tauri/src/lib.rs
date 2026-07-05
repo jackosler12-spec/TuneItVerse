@@ -1,14 +1,7 @@
-.setup(|app| {
-    use tauri_plugin_log::{Target, TargetKind, Builder};
+// Expose connection state to frontend
 
-    let _ = app.handle().plugin(
-        Builder::new()
-            .targets([
-                Target::new(TargetKind::Stdout),
-                Target::new(TargetKind::LogDir { file_name: None }),
-            ])
-            .build()
-    );
-
-    Ok(())
-})
+#[tauri::command]
+async fn get_connection_state(state: State<'_, AppState>) -> Result<String, String> {
+    let guard = state.connection_state.lock().map_err(|e| e.to_string())?;
+    serde_json::to_string(&*guard).map_err(|e| e.to_string())
+}
