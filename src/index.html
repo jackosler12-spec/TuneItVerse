@@ -1,50 +1,126 @@
-<!-- NEW: Collapsible Advanced CAN / ISO-TP Settings -->
-<details style="margin-top:16px; border:1px solid var(--border-subtle); border-radius: var(--radius-md); overflow:hidden;">
-  <summary style="
-    padding: 10px 14px;
-    background: var(--surface-2);
-    font-weight: 600;
-    font-size: 12px;
-    cursor: pointer;
-    user-select: none;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  ">
-    ⚙️ Advanced CAN / ISO-TP Settings
-    <span style="margin-left: auto; font-size: 10px; color: var(--text-faint);">(optional)</span>
-  </summary>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>TuneItVerse - Professional ECU Tuning Platform</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
 
-  <div style="padding: 12px 14px; border-top: 1px solid var(--border-subtle); font-size: 11px;">
-    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-      
-      <!-- CAN FD Toggle -->
-      <div>
-        <label style="display:flex; align-items:center; gap:6px;">
-          <input type="checkbox" id="enable-can-fd" />
-          <span><strong>Enable CAN FD</strong></span>
+<!-- Top Navigation -->
+<nav class="top-nav">
+  <div class="nav-brand">TuneItVerse <span class="version">v0.2</span></div>
+  <div class="nav-links">
+    <a href="#" class="nav-item active" data-view="dashboard">Dashboard</a>
+    <a href="#" class="nav-item" data-view="connect">Connect</a>
+    <a href="#" class="nav-item" data-view="live">Live Data</a>
+    <a href="#" class="nav-item" data-view="tables">Tables / Maps</a>
+    <a href="#" class="nav-item" data-view="flash">Flash</a>
+    <a href="#" class="nav-item" data-view="scripts">Python Scripts</a>
+  </div>
+  <div class="nav-status">
+    <span id="connection-status">Disconnected</span>
+    <button id="btn-connect" class="btn btn-primary">Connect ECU</button>
+  </div>
+</nav>
+
+<!-- Main Content Areas -->
+<div id="view-dashboard" class="content">
+  <h1>Dashboard</h1>
+  <p>Welcome to TuneItVerse — the next-generation open tuning platform.</p>
+</div>
+
+<div id="view-connect" class="content content--hidden">
+  <h2>ECU Connection</h2>
+  <!-- Connect modal content will be shown via JS or inline -->
+</div>
+
+<div id="view-live" class="content content--hidden">
+  <h2>Live Data</h2>
+  <button id="btn-start-log">Start Logging</button>
+  <button id="btn-stop-log">Stop</button>
+  <canvas id="live-chart" width="600" height="200"></canvas>
+  <div id="kpi-rpm">--</div>
+  <div id="kpi-map">--</div>
+</div>
+
+<div id="view-tables" class="content content--hidden">
+  <h2>Tables / Maps</h2>
+  <div id="tables-list"></div>
+  <div id="table-editor"></div>
+</div>
+
+<div id="view-flash" class="content content--hidden">
+  <h2>Flash / Guided Pipeline</h2>
+  <button onclick="runGuidedPipeline()">Run Guided Flash</button>
+  <pre id="flash-log"></pre>
+</div>
+
+<div id="view-scripts" class="content content--hidden">
+  <h2>Python ECU Scripts</h2>
+  <button id="btn-refresh-scripts">Refresh Custom Scripts</button>
+  <div id="custom-scripts-list"></div>
+</div>
+
+<!-- Professional Connect Modal -->
+<div id="connect-modal" class="modal hidden">
+  <div class="modal-content">
+    <h2>Connect to ECU</h2>
+
+    <div class="form-group">
+      <label>Hardware Interface</label>
+      <div style="display: flex; gap: 16px; margin-top: 8px;">
+        <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+          <input type="radio" name="hw-type" value="elm" checked> ELM327 / OBDLink
         </label>
-        <div style="font-size:9px; color:var(--text-faint); margin-top:2px;">Requires J2534 or CAN FD capable hardware</div>
+        <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+          <input type="radio" name="hw-type" value="j2534"> J2534 (Professional)
+        </label>
       </div>
-
-      <!-- ISO-TP Block Size -->
-      <div>
-        <label>Block Size (BS)</label>
-        <input type="number" id="iso-block-size" value="0" min="0" max="255" style="width:100%; padding:4px;" />
-        <div style="font-size:9px; color:var(--text-faint);">0 = unlimited</div>
-      </div>
-
-      <!-- ISO-TP STmin -->
-      <div>
-        <label>STmin (ms)</label>
-        <input type="number" id="iso-stmin" value="5" min="0" max="100" style="width:100%; padding:4px;" />
-        <div style="font-size:9px; color:var(--text-faint);">Separation time between frames</div>
-      </div>
-
     </div>
 
-    <div style="font-size:9px; color:var(--text-faint); margin-top:10px; line-height:1.3;">
-      These settings control ISO-TP (UDS on CAN) behavior. Adjust for stability with your adapter and ECU.
+    <!-- J2534 DLL Path -->
+    <div id="j2534-dll-group" style="display:none; margin-top:12px;">
+      <label>J2534 DLL Path (optional)</label>
+      <input type="text" id="j2534-dll-path" placeholder="C:\\Windows\\System32\\j2534.dll or leave empty for auto-detect" 
+             style="width:100%; padding:8px; margin-top:4px;">
+      <div style="font-size:11px; color:#888; margin-top:4px;">
+        Common: OpenPort 2.0, Tactrix, or system J2534 DLL
+      </div>
+    </div>
+
+    <!-- Advanced CAN / ISO-TP Settings (collapsible) -->
+    <details style="margin-top:16px; border:1px solid #333; border-radius:6px; overflow:hidden;">
+      <summary style="padding:10px 14px; background:#222; cursor:pointer; font-weight:600; font-size:13px;">
+        ⚙️ Advanced CAN / ISO-TP Settings
+      </summary>
+      <div style="padding:14px; background:#1a1a1a; font-size:12px;">
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+          <div>
+            <label style="display:flex; align-items:center; gap:6px;">
+              <input type="checkbox" id="enable-can-fd" />
+              <span><strong>Enable CAN FD</strong></span>
+            </label>
+          </div>
+          <div>
+            <label>Block Size (BS)</label>
+            <input type="number" id="iso-block-size" value="0" style="width:100%; padding:4px;">
+          </div>
+          <div>
+            <label>STmin (ms)</label>
+            <input type="number" id="iso-stmin" value="5" style="width:100%; padding:4px;">
+          </div>
+        </div>
+      </div>
+    </details>
+
+    <div style="margin-top:20px; display:flex; gap:10px; justify-content:flex-end;">
+      <button id="btn-modal-cancel" class="btn">Cancel</button>
+      <button id="btn-modal-connect" class="btn btn-primary">Connect</button>
     </div>
   </div>
-</details>
+</div>
+
+<script src="main.js"></script>
+</body>
+</html>
