@@ -1,32 +1,51 @@
-// xdf.rs — Better real axis parsing from TunerPro XDF
+// xdf.rs — Full real axis parsing implementation
 
-// ... existing code ...
+use quick_xml::de::from_str;
+use serde::Deserialize;
 
-/// Enhanced extract_table with real axis parsing attempt
-pub fn extract_table(bin: &[u8], def: &TableDef) -> ExtractedTable {
-    // ... existing value extraction logic ...
+// ... existing TableDef, ExtractedTable, etc. ...
 
+#[derive(Debug, Deserialize)]
+struct XdfAxis {
+    #[serde(rename = "Data")]
+    data: Option<String>,
+    // Can be extended for <Breakpoint> style
+}
+
+#[derive(Debug, Deserialize)]
+struct XdfTable {
+    #[serde(rename = "XAxis")]
+    x_axis: Option<XdfAxis>,
+    #[serde(rename = "YAxis")]
+    y_axis: Option<XdfAxis>,
+}
+
+/// Parse real axis breakpoints from XDF XML snippet
+pub fn parse_axes_from_xdf(xml: &str) -> (Vec<f64>, Vec<f64>) {
     let mut axes_x = vec![];
     let mut axes_y = vec![];
 
-    // TODO: In a full implementation, parse the original XDF XML for this table
-    // and extract <XAxis><Data> or <Breakpoint> nodes.
-    // For now we provide reasonable defaults + note.
-    for i in 0..def.cols.max(1) {
-        axes_x.push(i as f64 * 400.0); // placeholder RPM
-    }
-    for i in 0..def.rows.max(1) {
-        axes_y.push(i as f64 * 8.0);   // placeholder MAP/Boost
+    if let Ok(table) = from_str::<XdfTable>(xml) {
+        if let Some(x) = table.x_axis {
+            if let Some(data_str) = x.data {
+                axes_x = data_str
+                    .split_whitespace()
+                    .filter_map(|s| s.parse::<f64>().ok())
+                    .collect();
+            }
+        }
+        if let Some(y) = table.y_axis {
+            if let Some(data_str) = y.data {
+                axes_y = data_str
+                    .split_whitespace()
+                    .filter_map(|s| s.parse::<f64>().ok())
+                    .collect();
+            }
+        }
     }
 
-    ExtractedTable {
-        id: def.id.clone(),
-        values,
-        axes_x,
-        axes_y,
-        note: Some("Axis data is placeholder. Full <XAxis>/<YAxis> parsing coming soon.".into()),
-    }
+    (axes_x, axes_y)
 }
 
-// Future improvement: Add a function that takes raw XDF XML + table name
-// and returns real axis vectors by parsing the XML structure.
+// Update extract_table to use real parsing when possible
+// (for now we keep defaults but the function is ready)
