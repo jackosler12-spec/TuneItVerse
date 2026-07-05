@@ -1,40 +1,5 @@
-// main.js — XDF Axis Integration
+// Wire Apply button in renderTableEditor
 
-async function loadTablesForOs(osid) {
-  try {
-    // Try to load real XDF data
-    const xdfData = await invokeCmd('load_xdf_for_os', { osid });
-    const parsed = JSON.parse(xdfData);
-
-    if (parsed.tables && parsed.tables.length > 0) {
-      state.currentTables = parsed.tables.map(t => ({
-        id: t.id,
-        name: t.name,
-        size: [t.rows, t.cols],
-        xAxisLabel: t.x_label + ' →',
-        yAxisLabel: t.y_label,
-        xAxis: t.x_axis || [],
-        yAxis: t.y_axis || []
-      }));
-      renderTablesList();
-      showToast(`Loaded tables with real axes from XDF for ${osid}`);
-      return;
-    }
-  } catch (e) {
-    console.warn('Could not load XDF, using defaults', e);
-  }
-
-  // Fallback to default tables
-  state.currentTables = [
-    { id: 'main_ve', name: 'Main VE Table', size: [16, 16], xAxisLabel: 'RPM →', yAxisLabel: 'MAP (kPa)' },
-    { id: 'spark', name: 'Spark Advance', size: [16, 16], xAxisLabel: 'RPM →', yAxisLabel: 'MAP (kPa)' },
-    { id: 'boost', name: 'Boost Target', size: [8, 8], xAxisLabel: 'RPM →', yAxisLabel: 'Desired Boost (kPa)' }
-  ];
-  renderTablesList();
-  showToast(`Loaded default tables for ${osid}`);
-}
-
-// Update renderTableEditor to show real axis values as headers
 function renderTableEditor(table) {
   const editor = document.getElementById('table-editor');
   if (!editor) return;
@@ -51,7 +16,7 @@ function renderTableEditor(table) {
   title.textContent = `Editing: ${table.name}`;
   editor.appendChild(title);
 
-  const hasAxes = table.xAxis && table.xAxis.length > 0 && table.yAxis && table.yAxis.length > 0;
+  const hasAxes = table.xAxis && table.xAxis.length > 0;
   const [rows, cols] = table.size || [16, 16];
 
   const wrapper = document.createElement('div');
@@ -59,7 +24,7 @@ function renderTableEditor(table) {
   wrapper.style.gap = '8px';
   wrapper.style.alignItems = 'flex-start';
 
-  // Y Axis values (left)
+  // Y-axis labels
   const yCol = document.createElement('div');
   yCol.style.display = 'flex';
   yCol.style.flexDirection = 'column';
@@ -81,10 +46,9 @@ function renderTableEditor(table) {
   }
   wrapper.appendChild(yCol);
 
-  // Main grid area
   const main = document.createElement('div');
 
-  // X Axis values (top)
+  // X-axis labels
   const xRow = document.createElement('div');
   xRow.style.display = 'grid';
   xRow.style.gridTemplateColumns = `repeat(${cols}, 62px)`;
@@ -101,7 +65,7 @@ function renderTableEditor(table) {
   }
   main.appendChild(xRow);
 
-  // The actual editable grid
+  // Editable grid
   const grid = document.createElement('div');
   grid.style.display = 'grid';
   grid.style.gridTemplateColumns = `repeat(${cols}, 62px)`;
@@ -109,6 +73,8 @@ function renderTableEditor(table) {
   grid.style.background = '#222';
   grid.style.padding = '6px';
   grid.style.borderRadius = '4px';
+
+  const cells = []; // store references to all input elements
 
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
@@ -126,10 +92,7 @@ function renderTableEditor(table) {
       cell.style.borderRadius = '3px';
 
       cell.value = (50 + r * 3 + c * 2).toFixed(1);
-
-      cell.onchange = () => {
-        console.log(`Changed [${r},${c}] to ${cell.value}`);
-      };
+      cells.push({ row: r, col: c, input: cell });
 
       grid.appendChild(cell);
     }
@@ -138,4 +101,65 @@ function renderTableEditor(table) {
   main.appendChild(grid);
   wrapper.appendChild(main);
   editor.appendChild(wrapper);
+
+  // Footer with wired buttons
+  const footer = document.createElement('div');
+  footer.style.marginTop = '16px';
+  footer.style.display = 'flex';
+  footer.style.gap = '8px';
+
+  const btnApply = document.createElement('button');
+  btnApply.className = 'btn btn-primary';
+  btnApply.textContent = 'Apply Changes to ECU';
+  btnApply.onclick = async () => {
+    btnApply.disabled = true;
+    btnApply.textContent = 'Applying...';
+
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const cellInfo of cells) {
+      const value = parseFloat(cellInfo.input.value);
+      try {
+        await invokeCmd('apply_live_patch', {
+          table_id: table.id,
+          row: cellInfo.row,
+          col: cellInfo.col,
+          new_value: value
+        });
+        successCount++;
+      } catch (e) {
+        failCount++;
+        console.warn('Patch failed for cell', cellInfo, e);
+      }
+    }
+
+    btnApply.disabled = false;
+    btnApply.textContent = 'Apply Changes to ECU';
+
+    if (failCount === 0) {
+      showToast(`Successfully applied ${successCount} changes to ECU`, 'success');
+    } else {
+      showToast(`${successCount} succeeded, ${failCount} failed`, 'warning');
+    }
+  };
+
+  const btnSave = document.createElement('button');
+  btnSave.className = 'btn';
+  btnSave.textContent = 'Export Patch (.bin)';
+  btnSave.onclick = () => showToast('Patch export coming soon');
+
+  const btnReset = document.createElement('button');
+  btnReset.className = 'btn';
+  btnReset.textContent = 'Reset to Stock';
+  btnReset.onclick = () => {
+    if (confirm('Reset all values to stock?')) {
+      location.reload(); // simple reset for now
+    }
+  };
+
+  footer.appendChild(btnApply);
+  footer.appendChild(btnSave);
+  footer.appendChild(btnReset);
+  editor.appendChild(footer);
 }
