@@ -20,19 +20,11 @@
         "minWidth": 1100,
         "minHeight": 720,
         "resizable": true,
-        "fullscreen": false,
-        "transparent": false,
         "center": true
       }
     ],
     "security": {
-      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' http://localhost:* ws://localhost:*;",
-      "dangerousDisableAssetCspModification": false
-    },
-    "trayIcon": {
-      "icon": "icons/icon.ico",
-      "tooltip": "TuneItVerse - ECU Tuning",
-      "menuOnLeftClick": true
+      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' http://localhost:* ws://localhost:*;"
     }
   },
   "bundle": {
@@ -50,15 +42,9 @@
         "installMode": "currentUser",
         "languages": ["English"],
         "compression": "lzma",
-        "displayLanguageSelector": false,
-        "startMenuFolder": "JRTuners",
-        "headerImage": null,
-        "sidebarImage": null,
         "installerIcon": "icons/icon.ico",
-        "uninstallerIcon": "icons/icon.ico",
-        "webviewInstallMode": "embedBootstrapper"
+        "uninstallerIcon": "icons/icon.ico"
       }
     }
-  },
-  "plugins": {}
+  }
 }
