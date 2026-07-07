@@ -20,103 +20,205 @@
   </div>
   <div class="nav-status">
     <span id="connection-status">Disconnected</span>
-    <button id="btn-connect" class="btn btn-primary">Connect ECU</button>
+    <button id="btn-connect-top" class="btn btn-primary">Connect ECU</button>
   </div>
 </nav>
 
 <!-- Main Content Areas -->
+
+<!-- DASHBOARD -->
 <div id="view-dashboard" class="content">
-  <h1>Dashboard</h1>
-  <p>Welcome to TuneItVerse — the next-generation open tuning platform.</p>
+  <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px;">
+    <div class="pro-badge" style="background:#0a0; color:#000; padding:2px 8px; border-radius:3px; font-size:11px; font-weight:700;">PRO</div>
+    <h1 style="margin:0; font-size:22px;">TuneItVerse</h1>
+    <span style="color:#666; font-size:12px;">v0.2 • Full ECU Tuning Platform</span>
+  </div>
+
+  <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px,1fr)); gap:12px;">
+    <div class="panel" style="padding:12px;">
+      <strong>Quick Start</strong><br>
+      <button id="dash-tables-btn" class="btn" style="margin-top:8px;">Open Tables / Maps</button>
+      <button id="dash-flash-btn" class="btn" style="margin-top:6px;">Guided Flash</button>
+      <button id="dash-connect-btn" class="btn" style="margin-top:6px;">Connect ECU</button>
+    </div>
+    <div class="panel" style="padding:12px; font-size:12px;">
+      <strong>Connection Status</strong><br>
+      <span id="dash-conn-hint">Disconnected. Use Connect tab.</span>
+      <div id="dash-quick-status" style="margin-top:8px; font-family:monospace; font-size:11px;"></div>
+    </div>
+    <div class="panel" style="padding:12px; font-size:12px;">
+      <strong>Features</strong><br>
+      Real XDF parsing • 3-col editor (Grid/3D/Hex) • Live patch • Guided flash with kernel • Multi-protocol (VPW/CAN/KWP/Consult) • DTC • Full Rust backend.
+    </div>
+  </div>
 </div>
 
+<!-- CONNECT -->
 <div id="view-connect" class="content content--hidden">
   <h2>ECU Connection</h2>
-  <!-- Connect modal content will be shown via JS or inline -->
-</div>
-
-<div id="view-live" class="content content--hidden">
-  <h2>Live Data</h2>
-  <button id="btn-start-log">Start Logging</button>
-  <button id="btn-stop-log">Stop</button>
-  <canvas id="live-chart" width="600" height="200"></canvas>
-  <div id="kpi-rpm">--</div>
-  <div id="kpi-map">--</div>
-</div>
-
-<div id="view-tables" class="content content--hidden">
-  <h2>Tables / Maps</h2>
-  <div id="tables-list"></div>
-  <div id="table-editor"></div>
-</div>
-
-<div id="view-flash" class="content content--hidden">
-  <h2>Flash / Guided Pipeline</h2>
-  <button onclick="runGuidedPipeline()">Run Guided Flash</button>
-  <pre id="flash-log"></pre>
-</div>
-
-<div id="view-scripts" class="content content--hidden">
-  <h2>Python ECU Scripts</h2>
-  <button id="btn-refresh-scripts">Refresh Custom Scripts</button>
-  <div id="custom-scripts-list"></div>
-</div>
-
-<!-- Professional Connect Modal -->
-<div id="connect-modal" class="modal hidden">
-  <div class="modal-content">
-    <h2>Connect to ECU</h2>
+  <div class="panel" style="max-width:600px;">
+    <div class="form-group">
+      <label>Serial Port</label>
+      <div style="display:flex; gap:8px;">
+        <select id="port-select" style="flex:1; padding:6px;"></select>
+        <button id="btn-refresh-ports" class="btn btn-sm">Refresh</button>
+      </div>
+    </div>
 
     <div class="form-group">
-      <label>Hardware Interface</label>
-      <div style="display: flex; gap: 16px; margin-top: 8px;">
-        <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
-          <input type="radio" name="hw-type" value="elm" checked> ELM327 / OBDLink
-        </label>
-        <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
-          <input type="radio" name="hw-type" value="j2534"> J2534 (Professional)
-        </label>
+      <label>Baud Rate</label>
+      <select id="baud-select" style="width:100%; padding:6px;">
+        <option value="10400">10400 (VPW)</option>
+        <option value="9600">9600 (Consult)</option>
+        <option value="115200" selected>115200 (ELM/CAN)</option>
+        <option value="500000">500000 (CAN FD)</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label>Protocol / Interface</label>
+      <div style="display:flex; gap:16px; margin-top:4px;">
+        <label><input type="radio" name="proto" value="auto" checked> Auto</label>
+        <label><input type="radio" name="proto" value="vpw"> VPW/J1850</label>
+        <label><input type="radio" name="proto" value="can"> CAN 500k</label>
+        <label><input type="radio" name="proto" value="kwp"> KWP</label>
+        <label><input type="radio" name="proto" value="consult"> Consult</label>
       </div>
     </div>
 
-    <!-- J2534 DLL Path -->
-    <div id="j2534-dll-group" style="display:none; margin-top:12px;">
-      <label>J2534 DLL Path (optional)</label>
-      <input type="text" id="j2534-dll-path" placeholder="C:\\Windows\\System32\\j2534.dll or leave empty for auto-detect" 
-             style="width:100%; padding:8px; margin-top:4px;">
-      <div style="font-size:11px; color:#888; margin-top:4px;">
-        Common: OpenPort 2.0, Tactrix, or system J2534 DLL
+    <div class="form-group">
+      <label>Hardware</label>
+      <div style="display:flex; gap:16px;">
+        <label><input type="radio" name="hw" value="elm" checked> ELM327 / Serial</label>
+        <label><input type="radio" name="hw" value="j2534"> J2534</label>
       </div>
     </div>
 
-    <!-- Advanced CAN / ISO-TP Settings (collapsible) -->
-    <details style="margin-top:16px; border:1px solid #333; border-radius:6px; overflow:hidden;">
-      <summary style="padding:10px 14px; background:#222; cursor:pointer; font-weight:600; font-size:13px;">
-        ⚙️ Advanced CAN / ISO-TP Settings
-      </summary>
-      <div style="padding:14px; background:#1a1a1a; font-size:12px;">
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
-          <div>
-            <label style="display:flex; align-items:center; gap:6px;">
-              <input type="checkbox" id="enable-can-fd" />
-              <span><strong>Enable CAN FD</strong></span>
-            </label>
-          </div>
-          <div>
-            <label>Block Size (BS)</label>
-            <input type="number" id="iso-block-size" value="0" style="width:100%; padding:4px;">
-          </div>
-          <div>
-            <label>STmin (ms)</label>
-            <input type="number" id="iso-stmin" value="5" style="width:100%; padding:4px;">
-          </div>
-        </div>
-      </div>
-    </details>
+    <div id="j2534-group" style="display:none; margin-top:8px;">
+      <label>J2534 DLL / Device (optional)</label>
+      <input type="text" id="j2534-path" placeholder="Leave empty for default" style="width:100%; padding:6px;">
+    </div>
 
-    <div style="margin-top:20px; display:flex; gap:10px; justify-content:flex-end;">
-      <button id="btn-modal-cancel" class="btn">Cancel</button>
-      <button id="btn-modal-connect" class="btn btn-primary">Connect</button>
+    <div style="margin-top:16px; display:flex; gap:8px;">
+      <button id="btn-do-connect" class="btn btn-primary">Connect</button>
+      <button id="btn-do-disconnect" class="btn btn-danger">Disconnect</button>
+      <button id="btn-auto-detect" class="btn">Auto Detect</button>
+    </div>
+
+    <div id="connect-log" style="margin-top:12px; font-family:monospace; font-size:11px; white-space:pre-wrap; background:#111; padding:8px; min-height:60px; border:1px solid #333;"></div>
+  </div>
+</div>
+
+<!-- LIVE DATA -->
+<div id="view-live" class="content content--hidden">
+  <h2>Live Data</h2>
+  <div style="display:flex; gap:8px; margin-bottom:8px;">
+    <button id="btn-start-log">Start Logging / Poll</button>
+    <button id="btn-stop-log">Stop</button>
+    <button id="btn-read-once">Read Once</button>
+    <span id="live-status" style="margin-left:12px; color:#0c0;"></span>
+  </div>
+  <canvas id="live-chart" width="640" height="180" style="border:1px solid #333; background:#111;"></canvas>
+  <div style="display:flex; gap:16px; margin-top:8px; font-size:14px;">
+    <div>RPM: <strong id="kpi-rpm">--</strong></div>
+    <div>MAP: <strong id="kpi-map">--</strong></div>
+    <div>ECT: <strong id="kpi-ect">--</strong></div>
+    <div>TPS: <strong id="kpi-tps">--</strong></div>
+  </div>
+  <div id="live-pids" style="margin-top:8px; font-size:12px; font-family:monospace;"></div>
+</div>
+
+<!-- TABLES / MAPS (PRO 3-col) -->
+<div id="view-tables" class="content content--hidden">
+  <div class="toolbar" style="padding:8px 12px; border-bottom:1px solid var(--border-subtle); display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+    <button id="btn-load-bin" class="btn btn-primary">Load .BIN</button>
+    <button id="btn-load-xdf" class="btn">Load XDF / XML</button>
+    <button id="btn-demo-tables" class="btn">Demo Tables</button>
+    <span id="tables-status" style="margin-left:12px; font-size:12px; color:var(--text-muted);">No BIN/XDF loaded. Load .bin + XDF or use Demo.</span>
+    <button id="btn-save-patched" class="btn" style="margin-left:auto;" disabled>Save Patched BIN</button>
+  </div>
+
+  <div class="tables-layout">
+    <div class="tables-list-panel">
+      <div class="table-filters">
+        <button class="chip-filter active" data-filter="all">All</button>
+        <button class="chip-filter" data-filter="1d">1D</button>
+        <button class="chip-filter" data-filter="2d">2D</button>
+        <button class="chip-filter" data-filter="3d">3D</button>
+      </div>
+      <div id="tables-list" class="tables-list"></div>
+      <div class="tables-list-footer">Select table to load into editor. Edits patch in-memory BIN.</div>
+    </div>
+
+    <div class="tables-editor-panel">
+      <div class="rw-tabs" id="editor-tabs">
+        <button class="editor-tab active" data-tab="grid">Grid</button>
+        <button class="editor-tab" data-tab="3d">3D Visual</button>
+        <button class="editor-tab" data-tab="hex">Hex Dump</button>
+      </div>
+      <div id="editor-content" style="flex:1; overflow:auto; padding:8px; background:var(--surface-1);"></div>
+      <div style="padding:6px 8px; font-size:11px; color:var(--text-faint); border-top:1px solid var(--border-subtle);">
+        Edit → Apply Patch (updates loaded BIN). Use Save when done.
+      </div>
+    </div>
+
+    <div class="tables-side-panel" id="tables-side-panel">
+      <div style="padding:10px 12px; font-weight:600; border-bottom:1px solid var(--border-subtle);">Table Info</div>
+      <div id="side-meta" style="padding:10px 12px; font-size:12px; line-height:1.35;"></div>
+      <div style="padding:10px 12px; border-top:1px solid var(--border-subtle);">
+        <div style="font-weight:600; margin-bottom:4px;">Tuning Advisor</div>
+        <div id="side-advice" style="font-size:11px; color:var(--text-muted); min-height:60px;"></div>
+      </div>
+      <div style="padding:10px 12px; border-top:1px solid var(--border-subtle); font-size:11px;">
+        <strong>Checksum / Notes</strong><br>
+        <span id="side-checksum">Select table for details.</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- FLASH -->
+<div id="view-flash" class="content content--hidden">
+  <h2>Flash / Guided Pipeline</h2>
+  <div style="margin-bottom:8px;">
+    <button id="btn-show-risk" class="btn btn-danger">Show Risk Confirmation &amp; Run Guided Flash</button>
+  </div>
+
+  <div id="risk-section" style="display:none; border:1px solid #c33; padding:10px; margin-bottom:8px; background:#1a0a0a;">
+    <strong style="color:#f66;">RISK ACKNOWLEDGEMENT (check all)</strong><br>
+    <label><input type="checkbox" id="risk-backup"> I have a verified backup of the current ECU calibration</label><br>
+    <label><input type="checkbox" id="risk-power"> Stable power supply + battery charger connected</label><br>
+    <label><input type="checkbox" id="risk-ground"> Proper grounding and no open circuits</label><br>
+    <label><input type="checkbox" id="risk-understand"> I understand this can brick the ECU if interrupted</label><br>
+    <button id="btn-run-flash" class="btn btn-danger" disabled style="margin-top:8px;">PROCEED WITH GUIDED FLASH</button>
+  </div>
+
+  <div>Progress: <span id="flash-progress">0%</span></div>
+  <pre id="flash-log" style="background:#111; padding:8px; min-height:120px; white-space:pre-wrap; font-size:11px; border:1px solid #333;"></pre>
+</div>
+
+<!-- SCRIPTS -->
+<div id="view-scripts" class="content content--hidden">
+  <h2>Python ECU Scripts / Templates</h2>
+  <button id="btn-refresh-scripts">Refresh Templates</button>
+  <div id="custom-scripts-list" style="margin-top:8px;"></div>
+  <div style="margin-top:8px; font-size:11px; color:#888;">Templates from backend. Run via external or extend with custom Python.</div>
+</div>
+
+<!-- RISK MODAL (full) -->
+<div id="risk-modal" class="modal hidden">
+  <div class="modal-content" style="max-width:520px;">
+    <h2 style="color:#c33;">⚠️ FLASH RISK CONFIRMATION</h2>
+    <p>By proceeding you accept full responsibility. Incorrect flash can permanently damage the ECU.</p>
+    <div style="margin:12px 0;">
+      <label><input type="checkbox" id="rm-risk1"> Full backup performed and verified</label><br>
+      <label><input type="checkbox" id="rm-risk2"> Vehicle on charger, engine off, stable 12V+</label><br>
+      <label><input type="checkbox" id="rm-risk3"> Interface securely connected, no interruptions</label><br>
+      <label><input type="checkbox" id="rm-risk4"> I have read and understand all risks</label>
+    </div>
+    <div style="display:flex; gap:8px; justify-content:flex-end;">
+      <button id="rm-cancel" class="btn">Cancel</button>
+      <button id="rm-proceed" class="btn btn-danger" disabled>PROCEED</button>
     </div>
   </div>
 </div>
