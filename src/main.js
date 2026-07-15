@@ -31,6 +31,18 @@ async function invokeCmd(cmd, args = {}) {
     if (cmd === 'connect_ecu') return 'Connected (mock)';
     if (cmd === 'disconnect_ecu') return 'Disconnected';
     if (cmd === 'list_supported_protocols') return ['auto','vpw','can','kwp','consult'];
+    if (cmd === 'auto_load_tables_for_bin') {
+      // Mock for auto XDF load based on BIN size/family
+      const len = args.bin_bytes ? args.bin_bytes.length : 0;
+      if (len === 524288) {
+        return JSON.stringify([
+          { id: 've-main', name: 'Main VE Table', description: 'Volumetric Efficiency main map - 16x16 for LS1 P01', rows: 16, cols: 16, addr: '0x20000', data_type: 'UBYTE', math: 'x*0.5', units: '%' },
+          { id: 'spark-advance', name: 'Spark Advance', description: 'Base spark timing map', rows: 12, cols: 14, addr: '0x22000', data_type: 'UBYTE', math: '(x-40)/2', units: 'deg BTDC' },
+          { id: 'idle-rpm', name: 'Idle Target RPM', description: 'Target idle speed vs temp', rows: 1, cols: 8, addr: '0x1A00', data_type: 'UWORD', math: 'x', units: 'RPM' }
+        ]);
+      }
+      return JSON.stringify([]);
+    }
     return null;
   } catch (e) {
     console.error('invokeCmd error', cmd, e);
@@ -124,7 +136,6 @@ async function doConnect() {
   try {
     let res;
     if (hw === 'j2534') {
-      // J2534 path (if backend supports via protocol or separate)
       res = await invokeCmd('connect_ecu', { port_name: sel ? sel.value : 'J2534', baud: 500000, protocol: 'j2534' });
     } else {
       res = await invokeCmd('connect_ecu', { port_name: sel ? sel.value : 'COM3', baud, protocol });
@@ -169,7 +180,6 @@ function setupConnect() {
   const ad = document.getElementById('btn-auto-detect');
   if (ad) ad.onclick = autoDetect;
 
-  // hw change show/hide j2534
   const hwEls = document.querySelectorAll('input[name="hw"]');
   hwEls.forEach(r => r.addEventListener('change', () => {
     const g = document.getElementById('j2534-group');
@@ -192,7 +202,6 @@ function updateLiveUI(data) {
   const pids = document.getElementById('live-pids');
   if (pids) pids.innerHTML = Object.entries(obj).map(([k,v]) => `${k}: ${v}`).join(' | ');
 
-  // simple canvas
   const c = document.getElementById('live-chart');
   if (c) {
     const ctx = c.getContext('2d');
@@ -226,7 +235,7 @@ function stopLive() {
 
 function setupLive() {
   const s = document.getElementById('btn-start-log'); if (s) s.onclick = startLive;
-  const p = document.getElementById('btn-stop-log'); if (p) p.onclick = stopLive;
+  const p = document.getElementById('btn-stop-log'); if (p) s.onclick = stopLive;
   const o = document.getElementById('btn-read-once'); if (o) o.onclick = readOnce;
 }
 
@@ -270,8 +279,23 @@ async function loadBinFile() {
     const f = e.target.files[0]; if (!f) return;
     currentBin = new Uint8Array(await f.arrayBuffer());
     const st = document.getElementById('tables-status');
-    if (st) st.textContent = `BIN loaded: ${f.name} (${currentBin.length} bytes)`;
-    try { await invokeCmd('discover_maps_from_bin', { bin_bytes: Array.from(currentBin), family: 'P01' }); } catch {}
+    if (st) st.textContent = `BIN loaded: ${f.name} (${currentBin.length} bytes) - detecting ECU and loading matching XDF...`;
+    try { 
+      await invokeCmd('discover_maps_from_bin', { bin_bytes: Array.from(currentBin), family: currentBin.length === 524288 ? 'P01_0411' : 'unknown' }); 
+    } catch {}
+    // AUTO LOAD CORRESPONDING XDF / TABLES for the BIN (key fix for functionality)
+    try {
+      const tablesRes = await invokeCmd('auto_load_tables_for_bin', { bin_bytes: Array.from(currentBin) });
+      if (tablesRes) {
+        currentTables = typeof tablesRes === 'string' ? JSON.parse(tablesRes) : tablesRes;
+        renderTablesList();
+        if (st) st.textContent = `BIN loaded + auto XDF tables loaded (${currentTables.length} maps/tables matched to parameters)`;
+      }
+    } catch (err) {
+      // Fallback to demo if auto fails
+      loadDemoTables();
+      if (st) st.textContent = `BIN loaded (${currentBin.length} bytes). Auto XDF not available for this ECU - using demo tables. Load custom XDF if needed.`;
+    }
   };
   inp.click();
 }
@@ -286,7 +310,7 @@ async function loadXdfFile() {
       currentTables = typeof res === 'string' ? JSON.parse(res) : res;
       renderTablesList();
       const st = document.getElementById('tables-status');
-      if (st) st.textContent = `XDF loaded (${currentTables.length} tables)`;
+      if (st) st.textContent = `XDF loaded (${currentTables.length} tables) - maps now represent real ECU parameters`;
     } catch (err) { alert('XDF parse: ' + err); }
   };
   inp.click();
@@ -299,7 +323,7 @@ function loadDemoTables() {
     { id:'idle', name:'Idle RPM', description:'Target idle', rows:1, cols:6, addr:'0x1A00', data_type:'UWORD', math:'x', units:'RPM' }
   ];
   renderTablesList();
-  const st = document.getElementById('tables-status'); if (st) st.textContent = 'Demo tables loaded';
+  const st = document.getElementById('tables-status'); if (st) st.textContent = 'Demo tables loaded (use for testing; load real XDF for your ECU)';
 }
 
 function renderTablesList() {
@@ -452,7 +476,6 @@ function showRiskModal() {
 function setupFlash() {
   const show = document.getElementById('btn-show-risk');
   if (show) show.onclick = showRiskModal;
-  // also wire the direct button if present
   const direct = document.querySelector('#view-flash button');
   if (direct && direct.id !== 'btn-show-risk') direct.onclick = showRiskModal;
 }
@@ -482,15 +505,13 @@ function setupAll() {
   setupFlash();
   setupScripts();
 
-  // initial loads
   loadPorts();
   startStatus();
   setTimeout(refreshScripts, 800);
 
-  // demo tables hint
   setTimeout(() => {
     const st = document.getElementById('tables-status');
-    if (st && currentTables.length === 0) st.textContent = 'Use Demo Tables or load .BIN + XDF for full editor.';
+    if (st && currentTables.length === 0) st.textContent = 'Load your .BIN file - matching XDF/tables will auto-load for supported ECUs (P01, EDC16, etc.).';
   }, 1500);
 }
 
