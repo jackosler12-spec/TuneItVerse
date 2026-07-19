@@ -6,8 +6,7 @@
   "build": {
     "frontendDist": "../src",
     "beforeBuildCommand": "",
-    "beforeDevCommand": "",
-    "features": ["custom-protocol"]
+    "beforeDevCommand": ""
   },
   "app": {
     "withGlobalTauri": true,
