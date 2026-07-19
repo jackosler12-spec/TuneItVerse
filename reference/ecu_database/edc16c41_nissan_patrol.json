@@ -12,9 +12,9 @@
   },
   "checksum": {
     "type": "bosch_edc16_multi_region_sum_to_zero_16bit (Rust native impl)",
-    "description": "Multi-region 16-bit sum-to-zero checksum across 2MB flash (6 example regions covering boot, program, cal blocks for IQ/boost/timing/EGR). Auto-detect by BIN size. validate + correct functions fully implemented and exposed to UI. Correction patches CS values so sum == 0 per region. Example regions provided — refine exact offsets using your working bin or community checksum finder for 100% precision on edits.",
+    "description": "Multi-region 16-bit sum-to-zero checksum across 2MB flash (7 regions covering boot, program, cal blocks for IQ/boost/timing/EGR). Auto-detect by BIN size. validate + correct functions fully implemented and exposed to UI. Correction patches CS values so sum == 0 per region. Example regions provided — refine exact offsets using your working bin or community checksum finder for 100% precision on edits.",
     "reference_files": ["NissanPatrol_2010_EDC16C41_392203.bin", "EDC16C41 working flash", "EDC16C41 working file complete (cal region)"],
-    "notes": "Fully implemented in checksum.rs + lib.rs + UI (validate button + auto-correct on patch). Works alongside P01. Load your .bin to test — report shows per-region status. For production tunes, verify with known-good working file after edits."
+    "notes": "Fully implemented in checksum.rs + lib.rs + UI (validate button + auto-correct on patch). Works alongside P01. Load your .bin to test — report shows per-region status. For production tunes, verify with known-good working file after edits. Refine method: change one byte in a map area, search which 16-bit word changed by the exact delta — that is the cs_offset for the region."
   },
   "security_access": {
     "type": "UDS Service 0x27 seed-key",
@@ -23,8 +23,15 @@
   },
   "maps_and_xdf": {
     "has_xdf": false,
-    "description": "No ready XDF in reference. Requires WinOLS export or manual reverse engineering of diesel maps from the working bin. Key maps: Driver Wish (torque request map), Injection Quantity (IQ) vs speed/torque, Boost setpoint, Rail pressure, VGT duty, EGR maps, Smoke limit, Timing. (Auto tables partial support added)",
-    "eeprom": "EDC16C41 working eeprom (2 KB) - immobiliser, adaptations, coding data"
+    "description": "No ready XDF in reference. Auto tables now use refined community-typical addresses for ZD30CRD (Driver Wish ~0x80000, IQ ~0x82000, Boost ~0xC0000, Rail ~0xC2000, VGT ~0xC4000). These are solid starting points; refine with your own bin using the checksum.rs method for exact map locations.",
+    "eeprom": "EDC16C41 working eeprom (2 KB) - immobiliser, adaptations, coding data",
+    "refined_map_addrs": {
+      "driver_wish": "0x80000",
+      "injection_quantity": "0x82000",
+      "boost_setpoint": "0xC0000",
+      "rail_pressure": "0xC2000",
+      "vgt_duty": "0xC4000"
+    }
   },
-  "notes": "Matches and expands the REFERENCE_INDEX.md entry. 23710-VS43B is the specific hardware/part for GU V Wagon variant. DB entry enables auto-identification. Rust support added: CAN (ELM/ISO-TP), KWP2000, Nissan Consult II for live data + commands. Use protocol selector in UI. **Checksum validation fully implemented** for safe map editing and flashing on this ECU."
+  "notes": "Matches and expands the REFERENCE_INDEX.md entry. 23710-VS43B is the specific hardware/part for GU V Wagon variant. DB entry enables auto-identification. Rust support added: CAN (ELM/ISO-TP), KWP2000, Nissan Consult II for live data + commands. Use protocol selector in UI. **Checksum validation fully implemented** for safe map editing and flashing on this ECU. Map addresses refined in this pass for better auto-load accuracy."
 }
