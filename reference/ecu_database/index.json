@@ -1,0 +1,32 @@
+{
+  "version": "1.0",
+  "updated": "2026-07-19",
+  "description": "Master index of TuneItVerse ECU database entries. Used by backend loader and frontend for discovery.",
+  "families": [
+    {
+      "id": "P01_0411",
+      "file": "p01_0411.json",
+      "display_name": "Holden LS1 / GM P01 0411 PCM",
+      "bin_size_bytes": 524288,
+      "primary_protocol": "VPW",
+      "status": "full"
+    },
+    {
+      "id": "EDC16C41",
+      "file": "edc16c41_nissan_patrol.json",
+      "display_name": "Bosch EDC16C41 Nissan Patrol GU V Wagon",
+      "bin_size_bytes": 2097152,
+      "primary_protocol": "CAN/KWP",
+      "status": "full-checksum + maps partial"
+    },
+    {
+      "id": "GM_P59",
+      "file": "gm_p59.json",
+      "display_name": "GM P59 PCM (Truck/SUV)",
+      "bin_size_bytes": 524288,
+      "primary_protocol": "VPW",
+      "status": "metadata + checksum notes"
+    }
+  ],
+  "notes": "Add new family JSON + entry here. Backend ecu_database.rs embeds the JSON files via include_str!."
+}
