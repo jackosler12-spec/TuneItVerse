@@ -11,10 +11,10 @@
     "calibration_region": "Separate working calibration file available in reference"
   },
   "checksum": {
-    "type": "bosch_edc16_multi_region_sum_to_zero_16bit (Rust native impl)",
-    "description": "Multi-region 16-bit sum-to-zero checksum across 2MB flash (7 regions covering boot, program, cal blocks for IQ/boost/timing/EGR). Auto-detect by BIN size. validate + correct functions fully implemented and exposed to UI. Correction patches CS values so sum == 0 per region. Example regions provided — refine exact offsets using your working bin or community checksum finder for 100% precision on edits.",
-    "reference_files": ["NissanPatrol_2010_EDC16C41_392203.bin", "EDC16C41 working flash", "EDC16C41 working file complete (cal region)"],
-    "notes": "Fully implemented in checksum.rs + lib.rs + UI (validate button + auto-correct on patch). Works alongside P01. Load your .bin to test — report shows per-region status. For production tunes, verify with known-good working file after edits. Refine method: change one byte in a map area, search which 16-bit word changed by the exact delta — that is the cs_offset for the region."
+    "type": "bosch_edc16_multi_region_sum_to_zero_16bit (Rust native impl) + note on real multipoint CRC32",
+    "description": "7 refined regions across 2MB flash focused on diesel map areas: Boot/Low OS (0x00000-0x1FFFF), Main Program (0x20000-0x7FFFF), Primary Cal - Driver Wish/IQ/Timing/Rail (0x80000-0xBFFFF), Secondary Cal - Boost/VGT/EGR/Smoke (0xC0000-0xFFFFF), Extended Maps (0x100000-0x13FFFF), Adaptations (0x140000-0x17FFFF), End/Security (0x180000-0x1FFFFF). Additive 16-bit sum-to-zero is the current practical DIY path. Real production EDC16 commonly uses multipoint CRC32 (WinOLS plugin style). Auto-detect by BIN size. validate + correct fully implemented in UI.",
+    "reference_files": ["NissanPatrol_2010_EDC16C41_392203.bin", "EDC16C41 working flash", "EDC16C41 working file complete (cal region)", "WinOLS (Nissan (nissan egr off+fault delete) - 392203).bin"],
+    "notes": "Refine exact cs_offset on your working bin: change one map byte, find the 16-bit word that compensated by the inverse amount. That is the true location for that region. Future: add CRC32 multipoint when exact C41 polynomials confirmed."
   },
   "security_access": {
     "type": "UDS Service 0x27 seed-key",
@@ -23,7 +23,7 @@
   },
   "maps_and_xdf": {
     "has_xdf": false,
-    "description": "No ready XDF in reference. Auto tables now use refined community-typical addresses for ZD30CRD (Driver Wish ~0x80000, IQ ~0x82000, Boost ~0xC0000, Rail ~0xC2000, VGT ~0xC4000). These are solid starting points; refine with your own bin using the checksum.rs method for exact map locations.",
+    "description": "No ready XDF in reference. Auto tables use refined community-typical addresses for ZD30CRD (Driver Wish ~0x80000, IQ ~0x82000, Boost ~0xC0000, Rail ~0xC2000, VGT ~0xC4000). These are solid starting points; refine with your own bin.",
     "eeprom": "EDC16C41 working eeprom (2 KB) - immobiliser, adaptations, coding data",
     "refined_map_addrs": {
       "driver_wish": "0x80000",
@@ -33,5 +33,5 @@
       "vgt_duty": "0xC4000"
     }
   },
-  "notes": "Matches and expands the REFERENCE_INDEX.md entry. 23710-VS43B is the specific hardware/part for GU V Wagon variant. DB entry enables auto-identification. Rust support added: CAN (ELM/ISO-TP), KWP2000, Nissan Consult II for live data + commands. Use protocol selector in UI. **Checksum validation fully implemented** for safe map editing and flashing on this ECU. Map addresses refined in this pass for better auto-load accuracy."
+  "notes": "Matches and expands the REFERENCE_INDEX.md entry. 23710-VS43B is the specific hardware/part for GU V Wagon variant. DB entry enables auto-identification. Rust support added: CAN (ELM/ISO-TP), KWP2000, Nissan Consult II for live data + commands. Use protocol selector in UI. **Checksum regions refined** for better coverage of the maps you actually edit on the Patrol."
 }
