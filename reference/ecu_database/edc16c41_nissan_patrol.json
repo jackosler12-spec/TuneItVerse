@@ -11,10 +11,10 @@
     "calibration_region": "Separate working calibration file available in reference"
   },
   "checksum": {
-    "type": "bosch_edc16_multi_region_sum_to_zero_16bit (Rust native impl) + note on real multipoint CRC32",
-    "description": "7 refined regions across 2MB flash focused on diesel map areas: Boot/Low OS (0x00000-0x1FFFF), Main Program (0x20000-0x7FFFF), Primary Cal - Driver Wish/IQ/Timing/Rail (0x80000-0xBFFFF), Secondary Cal - Boost/VGT/EGR/Smoke (0xC0000-0xFFFFF), Extended Maps (0x100000-0x13FFFF), Adaptations (0x140000-0x17FFFF), End/Security (0x180000-0x1FFFFF). Additive 16-bit sum-to-zero is the current practical DIY path. Real production EDC16 commonly uses multipoint CRC32 (WinOLS plugin style). Auto-detect by BIN size. validate + correct fully implemented in UI.",
+    "type": "bosch_edc16_multipoint_crc32 (primary) + additive16 fallback",
+    "description": "Primary: 7 multipoint CRC32 regions (IEEE 0xEDB88320 poly, init/xor 0xFFFFFFFF) aligned to diesel map blocks. CS treated as final 4 bytes of each region. Correction forces region CRC to 0. Secondary: additive 16-bit sum-to-zero retained. Matches WinOLS EDC16 plugin concept (multipoint + compatibility test CS). Exact poly/block tables still proprietary — verify against WinOLS-corrected bin for production use.",
     "reference_files": ["NissanPatrol_2010_EDC16C41_392203.bin", "EDC16C41 working flash", "EDC16C41 working file complete (cal region)", "WinOLS (Nissan (nissan egr off+fault delete) - 392203).bin"],
-    "notes": "Refine exact cs_offset on your working bin: change one map byte, find the 16-bit word that compensated by the inverse amount. That is the true location for that region. Future: add CRC32 multipoint when exact C41 polynomials confirmed."
+    "notes": "WinOLS EDC16 plugin features: auto-search, multipoint CRC correction, compatibility-test CS (can patch correction value at map end instead of full recompute), manufacturer keys (Nissan Patrol supported since ~2007), EEPROM block handling. To lock exact match: diff original vs WinOLS-corrected pair and update CRC32_REGIONS / target."
   },
   "security_access": {
     "type": "UDS Service 0x27 seed-key",
@@ -33,5 +33,5 @@
       "vgt_duty": "0xC4000"
     }
   },
-  "notes": "Matches and expands the REFERENCE_INDEX.md entry. 23710-VS43B is the specific hardware/part for GU V Wagon variant. DB entry enables auto-identification. Rust support added: CAN (ELM/ISO-TP), KWP2000, Nissan Consult II for live data + commands. Use protocol selector in UI. **Checksum regions refined** for better coverage of the maps you actually edit on the Patrol."
+  "notes": "Matches and expands the REFERENCE_INDEX.md entry. 23710-VS43B is the specific hardware/part for GU V Wagon variant. DB entry enables auto-identification. Rust support added: CAN (ELM/ISO-TP), KWP2000, Nissan Consult II for live data + commands. Use protocol selector in UI. **Multipoint CRC32 now primary** for EDC16C41."
 }
