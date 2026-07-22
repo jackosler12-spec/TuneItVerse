@@ -1,7 +1,17 @@
 // checksum.rs — Enhanced with multi-ECU support including Bosch EDC16C41
 // P01/GM style 16-bit sum-to-zero (fully implemented and tested)
-// EDC16C41: Refined multi-region sum-to-zero implementation (updated offsets for better coverage of typical cal/map areas in ZD30CRD bins)
-// Used for validation and auto-correction in table editor + guided flash pipeline.
+// EDC16C41: Refined multi-region additive (16-bit sum-to-zero) for practical DIY use on ZD30CRD / 392203 / VS43B bins
+//
+// IMPORTANT NOTES FOR EDC16C41:
+// Real production EDC16 family commonly uses multipoint CRC32 (and sometimes compatibility-test CS).
+// The additive 16-bit regions below are a practical, transparent starting point that works for many
+// map edits and keeps the bin consistent. For 100% flash-ready results on every tool:
+//   1. Load a known-good working .bin (reference/EDC16C41 working flash or your own dump)
+//   2. Change ONE byte in a map (e.g. boost or IQ cell)
+//   3. Diff against original — the word that changed by the inverse amount is your cs_offset
+//   4. Update the matching RegionDescriptor and re-test with validate + correct
+// WinOLS has dedicated EDC16 plugins (incl. Nissan Patrol EDC16C41 support since ~2007).
+// Future: add CRC32 multipoint path when exact polynomials/block tables for C41 are confirmed.
 
 use serde::{Serialize, Deserialize};
 
@@ -33,8 +43,8 @@ pub struct CorrectedCal {
 }
 
 pub const BLOCK_SIZE: usize = 0x10000;
-pub const CAL_IMAGE_SIZE: usize = BLOCK_SIZE * 2;
-pub const EDC16_FLASH_SIZE: usize = 0x200000;
+pub const CAL_IMAGE_SIZE: usize = BLOCK_SIZE * 2; // 128 KB for P01
+pub const EDC16_FLASH_SIZE: usize = 0x200000; // 2 MB typical for EDC16C41
 
 #[derive(Debug, Clone)]
 pub struct RegionDescriptor {
@@ -56,28 +66,28 @@ pub const P01_REGIONS: [RegionDescriptor; 8] = [
     RegionDescriptor { name: "Header/ID", start: 0xFC00, end: 0xFFFF, cs_offset: 0xFFFE },
 ];
 
-// REFINED EDC16C41 regions (updated for your ZD30CRD / 392203 / VS43B bins)
-// These offsets are refined based on common Bosch EDC16 flash layout:
-// - Large aligned blocks (256KB/512KB typical for map storage)
-// - CS words at even end-of-block addresses (XXXXE for 16-bit)
-// - Focused on areas containing editable maps (IQ, boost, timing, EGR, limits)
-// 
-// How to further refine for 100% accuracy on YOUR exact bin:
-// 1. Take a known-good working .bin (e.g. the one in reference/)
-// 2. In a hex editor or Python script, change ONE byte in a map area (e.g. +1 in a boost or IQ cell)
-// 3. Search for which 16-bit word changed by exactly -1 (or the delta)
-// 4. That word's offset is the cs_offset for the region containing your edit.
-// 5. Update the start/end to cover the logical map block.
-// Common in EDC16C41 to have 4-8 independent checksum regions.
-// The current set covers the full 2MB well for typical edits.
+// REFINED EDC16C41 regions (ZD30CRD / 392203 / VS43B focused)
+// Layout aligns with typical Bosch EDC16 2 MB flash:
+//   low area = boot + core code
+//   ~0x80000+ = primary diesel calibration maps (Driver Wish, IQ, timing, rail, boost)
+//   higher = secondary limits / EGR / smoke / adaptations + security
+// CS words placed at even end-of-block addresses (common pattern).
+// These give good practical coverage for the maps you will actually edit.
 pub const EDC16_REGIONS: [RegionDescriptor; 7] = [
-    RegionDescriptor { name: "Bootloader / OS Core", start: 0x00000, end: 0x3FFFF, cs_offset: 0x3FFFE },
-    RegionDescriptor { name: "Main Program Code", start: 0x40000, end: 0x7FFFF, cs_offset: 0x7FFFE },
-    RegionDescriptor { name: "Primary Cal (Driver Wish / IQ / Timing)", start: 0x80000, end: 0xBFFFF, cs_offset: 0xBFFFE },
-    RegionDescriptor { name: "Secondary Cal (Boost / Rail / VGT / EGR)", start: 0xC0000, end: 0xFFFFF, cs_offset: 0xFFFFE },
-    RegionDescriptor { name: "Extended Maps & Smoke Limits", start: 0x100000, end: 0x13FFFF, cs_offset: 0x13FFFE },
-    RegionDescriptor { name: "Adaptations / Misc / Coding", start: 0x140000, end: 0x17FFFF, cs_offset: 0x17FFFE },
-    RegionDescriptor { name: "End / Security / Global Checksum Area", start: 0x180000, end: 0x1FFFFF, cs_offset: 0x1FFFFE },
+    // Boot + low-level OS / vectors
+    RegionDescriptor { name: "Bootloader / Low OS", start: 0x00000, end: 0x1FFFF, cs_offset: 0x1FFFE },
+    // Main program code
+    RegionDescriptor { name: "Main Program Code", start: 0x20000, end: 0x7FFFF, cs_offset: 0x7FFFE },
+    // Primary diesel maps (most editable: Driver Wish, IQ, injection timing, rail pressure)
+    RegionDescriptor { name: "Primary Cal - Driver Wish / IQ / Timing / Rail", start: 0x80000, end: 0xBFFFF, cs_offset: 0xBFFFE },
+    // Boost, VGT, EGR, smoke / torque limiters
+    RegionDescriptor { name: "Secondary Cal - Boost / VGT / EGR / Smoke Limits", start: 0xC0000, end: 0xFFFFF, cs_offset: 0xFFFFE },
+    // Extended maps & additional limiters
+    RegionDescriptor { name: "Extended Maps & Limiters", start: 0x100000, end: 0x13FFFF, cs_offset: 0x13FFFE },
+    // Adaptations, coding, immobiliser related
+    RegionDescriptor { name: "Adaptations / Coding / Misc", start: 0x140000, end: 0x17FFFF, cs_offset: 0x17FFFE },
+    // Final / security / global area
+    RegionDescriptor { name: "End / Security / Global CS Area", start: 0x180000, end: 0x1FFFFF, cs_offset: 0x1FFFFE },
 ];
 
 fn read_u16_be(data: &[u8], off: usize) -> u16 {
@@ -106,7 +116,10 @@ fn validate_region(block: &[u8], region: &RegionDescriptor) -> bool {
 }
 
 fn correct_region(block: &mut [u8], region: &RegionDescriptor) -> Result<u16, String> {
-    if region.end - region.start < 1 { return Err("region too small".into()); }
+    if region.end.saturating_sub(region.start) < 2 {
+        return Err("region too small".into());
+    }
+    // Exclude the CS word itself from the sum
     let sum_excl = region_sum(block, region.start, region.end.saturating_sub(2));
     let new_cs = 0u16.wrapping_sub(sum_excl);
     write_u16_be(block, region.cs_offset, new_cs);
@@ -116,7 +129,7 @@ fn correct_region(block: &mut [u8], region: &RegionDescriptor) -> Result<u16, St
     Ok(new_cs)
 }
 
-// P01 specific (original)
+// ---------- P01 path (unchanged) ----------
 fn validate_p01_checksums(data: &[u8]) -> Result<ChecksumReport, String> {
     if data.len() != CAL_IMAGE_SIZE {
         return Err(format!("Expected {} bytes for P01, got {}", CAL_IMAGE_SIZE, data.len()));
@@ -143,45 +156,16 @@ fn validate_p01_checksums(data: &[u8]) -> Result<ChecksumReport, String> {
             });
         }
     }
-    let all_valid = failed_count == 0;
-    Ok(ChecksumReport { regions, valid_count, fixed_count: 0, failed_count, all_valid, ecu_family: "P01_0411".to_string() })
+    Ok(ChecksumReport {
+        regions,
+        valid_count,
+        fixed_count: 0,
+        failed_count,
+        all_valid: failed_count == 0,
+        ecu_family: "P01_0411".to_string(),
+    })
 }
 
-// REFINED EDC16C41 (uses updated regions above)
-fn validate_edc16_checksums(data: &[u8]) -> Result<ChecksumReport, String> {
-    if data.len() != EDC16_FLASH_SIZE {
-        return Err(format!("Expected {} bytes for EDC16C41, got {}", EDC16_FLASH_SIZE, data.len()));
-    }
-    let mut regions = vec![];
-    let mut valid_count = 0;
-    let mut failed_count = 0;
-    for region in &EDC16_REGIONS {
-        let was_valid = validate_region(data, region);
-        let original_cs = read_u16_be(data, region.cs_offset);
-        if was_valid { valid_count += 1; } else { failed_count += 1; }
-        regions.push(RegionResult {
-            name: region.name.to_string(),
-            block: 0,
-            cs_offset: region.cs_offset,
-            original_cs,
-            corrected_cs: original_cs,
-            was_valid,
-            is_valid: was_valid,
-        });
-    }
-    let all_valid = failed_count == 0;
-    Ok(ChecksumReport { regions, valid_count, fixed_count: 0, failed_count, all_valid, ecu_family: "EDC16C41".to_string() })
-}
-
-pub fn validate_checksums(data: &[u8]) -> Result<ChecksumReport, String> {
-    match data.len() {
-        CAL_IMAGE_SIZE => validate_p01_checksums(data),
-        EDC16_FLASH_SIZE => validate_edc16_checksums(data),
-        _ => Err(format!("Unsupported BIN size for checksum validation: {} bytes. Supported: P01 128KB or EDC16 2MB", data.len())),
-    }
-}
-
-// P01 correct (original)
 fn correct_p01_checksums(data: &[u8]) -> Result<CorrectedCal, String> {
     if data.len() != CAL_IMAGE_SIZE {
         return Err(format!("Expected {} bytes, got {}", CAL_IMAGE_SIZE, data.len()));
@@ -204,7 +188,10 @@ fn correct_p01_checksums(data: &[u8]) -> Result<CorrectedCal, String> {
             } else {
                 let block_mut = &mut buf[block_offset..block_offset + BLOCK_SIZE];
                 match correct_region(block_mut, region) {
-                    Ok(new_cs) => { fixed_count += 1; (new_cs, true) }
+                    Ok(new_cs) => {
+                        fixed_count += 1;
+                        (new_cs, true)
+                    }
                     Err(e) => {
                         failed_count += 1;
                         return Err(format!("Block {} region '{}': {}", block_idx, region.name, e));
@@ -216,18 +203,57 @@ fn correct_p01_checksums(data: &[u8]) -> Result<CorrectedCal, String> {
                 block: block_idx as u8,
                 cs_offset: cs_abs,
                 original_cs,
-                corrected_cs: original_cs,
+                corrected_cs,
                 was_valid,
                 is_valid,
             });
         }
     }
-    let all_valid = failed_count == 0;
-    let report = ChecksumReport { regions: results, valid_count, fixed_count, failed_count, all_valid, ecu_family: "P01_0411".to_string() };
-    Ok(CorrectedCal { data: buf, report })
+    Ok(CorrectedCal {
+        data: buf,
+        report: ChecksumReport {
+            regions: results,
+            valid_count,
+            fixed_count,
+            failed_count,
+            all_valid: failed_count == 0,
+            ecu_family: "P01_0411".to_string(),
+        },
+    })
 }
 
-// REFINED EDC16 correct
+// ---------- REFINED EDC16C41 path ----------
+fn validate_edc16_checksums(data: &[u8]) -> Result<ChecksumReport, String> {
+    if data.len() != EDC16_FLASH_SIZE {
+        return Err(format!("Expected {} bytes for EDC16C41, got {}", EDC16_FLASH_SIZE, data.len()));
+    }
+    let mut regions = vec![];
+    let mut valid_count = 0;
+    let mut failed_count = 0;
+    for region in &EDC16_REGIONS {
+        let was_valid = validate_region(data, region);
+        let original_cs = read_u16_be(data, region.cs_offset);
+        if was_valid { valid_count += 1; } else { failed_count += 1; }
+        regions.push(RegionResult {
+            name: region.name.to_string(),
+            block: 0,
+            cs_offset: region.cs_offset,
+            original_cs,
+            corrected_cs: original_cs,
+            was_valid,
+            is_valid: was_valid,
+        });
+    }
+    Ok(ChecksumReport {
+        regions,
+        valid_count,
+        fixed_count: 0,
+        failed_count,
+        all_valid: failed_count == 0,
+        ecu_family: "EDC16C41".to_string(),
+    })
+}
+
 fn correct_edc16_checksums(data: &[u8]) -> Result<CorrectedCal, String> {
     if data.len() != EDC16_FLASH_SIZE {
         return Err(format!("Expected {} bytes for EDC16, got {}", EDC16_FLASH_SIZE, data.len()));
@@ -245,7 +271,10 @@ fn correct_edc16_checksums(data: &[u8]) -> Result<CorrectedCal, String> {
             (original_cs, true)
         } else {
             match correct_region(&mut buf, region) {
-                Ok(new_cs) => { fixed_count += 1; (new_cs, true) }
+                Ok(new_cs) => {
+                    fixed_count += 1;
+                    (new_cs, true)
+                }
                 Err(e) => {
                     failed_count += 1;
                     return Err(format!("Region '{}': {}", region.name, e));
@@ -257,14 +286,34 @@ fn correct_edc16_checksums(data: &[u8]) -> Result<CorrectedCal, String> {
             block: 0,
             cs_offset: region.cs_offset,
             original_cs,
-            corrected_cs: original_cs,
+            corrected_cs,
             was_valid,
             is_valid,
         });
     }
-    let all_valid = failed_count == 0;
-    let report = ChecksumReport { regions: results, valid_count, fixed_count, failed_count, all_valid, ecu_family: "EDC16C41".to_string() };
-    Ok(CorrectedCal { data: buf, report })
+    Ok(CorrectedCal {
+        data: buf,
+        report: ChecksumReport {
+            regions: results,
+            valid_count,
+            fixed_count,
+            failed_count,
+            all_valid: failed_count == 0,
+            ecu_family: "EDC16C41".to_string(),
+        },
+    })
+}
+
+// ---------- Public API ----------
+pub fn validate_checksums(data: &[u8]) -> Result<ChecksumReport, String> {
+    match data.len() {
+        CAL_IMAGE_SIZE => validate_p01_checksums(data),
+        EDC16_FLASH_SIZE => validate_edc16_checksums(data),
+        _ => Err(format!(
+            "Unsupported BIN size for checksum validation: {} bytes. Supported: P01 128KB or EDC16 2MB",
+            data.len()
+        )),
+    }
 }
 
 pub fn correct_checksums(data: &[u8]) -> Result<CorrectedCal, String> {
@@ -281,7 +330,10 @@ pub fn correct_and_validate_checksums(data: &[u8]) -> Result<CorrectedCal, Strin
         return Ok(CorrectedCal {
             data: data.to_vec(),
             report: ChecksumReport {
-                regions: pre.regions.into_iter().map(|mut r| { r.corrected_cs = r.original_cs; r }).collect(),
+                regions: pre.regions.into_iter().map(|mut r| {
+                    r.corrected_cs = r.original_cs;
+                    r
+                }).collect(),
                 valid_count: pre.valid_count,
                 fixed_count: 0,
                 failed_count: 0,
@@ -298,11 +350,17 @@ pub fn validate_bin_checksums_summary(data: &[u8]) -> Result<String, String> {
     let mut summary = format!("Checksum validation for {} ({} bytes)\n", report.ecu_family, data.len());
     summary += &format!("Regions checked: {}\n", report.regions.len());
     summary += &format!("Valid: {} | Fixed needed: {} | Failed: {}\n", report.valid_count, report.fixed_count, report.failed_count);
-    summary += if report.all_valid { "✅ All checksums VALID\n" } else { "⚠️ Some checksums INVALID - use correct_checksums() to fix\n" };
+    summary += if report.all_valid {
+        "✅ All checksums VALID\n"
+    } else {
+        "⚠️ Some checksums INVALID - use correct_checksums() to fix\n"
+    };
     for r in &report.regions {
         let status = if r.is_valid { "✅" } else { "❌" };
-        summary += &format!("  {} Block{} @0x{:06X}: orig=0x{:04X} corr=0x{:04X} (was valid: {})\n",
-            status, r.block, r.cs_offset, r.original_cs, r.corrected_cs, r.was_valid);
+        summary += &format!(
+            "  {} @0x{:06X}: orig=0x{:04X} corr=0x{:04X} (was valid: {})\n",
+            status, r.cs_offset, r.original_cs, r.corrected_cs, r.was_valid
+        );
     }
     Ok(summary)
 }
@@ -311,18 +369,6 @@ pub fn validate_bin_checksums_summary(data: &[u8]) -> Result<String, String> {
 mod tests {
     use super::*;
     fn zero_image_p01() -> Vec<u8> { vec![0u8; CAL_IMAGE_SIZE] }
-    fn valid_block() -> Vec<u8> {
-        let mut block = vec![0u8; BLOCK_SIZE];
-        for region in &P01_REGIONS { let _ = correct_region(&mut block, region); }
-        block
-    }
-    fn valid_image_p01() -> Vec<u8> {
-        let b = valid_block();
-        let mut img = Vec::with_capacity(CAL_IMAGE_SIZE);
-        img.extend_from_slice(&b);
-        img.extend_from_slice(&b);
-        img
-    }
     #[test]
     fn validate_rejects_bad_size() {
         assert!(validate_checksums(&vec![0u8; 100]).is_err());
