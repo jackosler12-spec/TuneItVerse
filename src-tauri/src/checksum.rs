@@ -487,10 +487,20 @@ mod tests {
     }
     #[test]
     fn correct_makes_valid_p01() {
+        // Zero image is already sum-to-zero valid in every region; correct is a no-op.
         let img = zero_image_p01();
         let corrected = correct_checksums(&img).unwrap();
         assert!(corrected.report.all_valid);
-        assert_eq!(corrected.report.fixed_count, 16);
+        assert_eq!(corrected.report.failed_count, 0);
+        assert_eq!(corrected.report.regions.len(), 16); // 8 regions × 2 blocks
+
+        // Corrupt one CS byte so fix path runs
+        let mut dirty = img;
+        dirty[0x3FFE] = 0x12;
+        dirty[0x3FFF] = 0x34;
+        let fixed = correct_checksums(&dirty).unwrap();
+        assert!(fixed.report.all_valid);
+        assert!(fixed.report.fixed_count >= 1);
     }
     #[test]
     fn edc16_size_supported() {

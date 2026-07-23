@@ -91,6 +91,92 @@ function setupNav() {
   const d1 = document.getElementById('dash-tables-btn'); if (d1) d1.onclick = () => showView('tables');
   const d2 = document.getElementById('dash-flash-btn'); if (d2) d2.onclick = () => showView('flash');
   const d3 = document.getElementById('dash-connect-btn'); if (d3) d3.onclick = () => showView('connect');
+  const d4 = document.getElementById('dash-dtc-btn'); if (d4) d4.onclick = () => showView('diagnostics');
+}
+
+// ==================== DIAGNOSTICS / DTC ====================
+function dtcTypeLabel(rec) {
+  if (rec.is_permanent) return 'Permanent';
+  if (rec.is_pending) return 'Pending';
+  return 'Stored';
+}
+
+function renderDtcRows(result) {
+  const tbody = document.getElementById('dtc-tbody');
+  const summary = document.getElementById('dtc-summary');
+  if (!tbody) return;
+  const rows = [];
+  const pushGroup = (list) => {
+    (list || []).forEach((rec) => {
+      rows.push(rec);
+    });
+  };
+  pushGroup(result.stored);
+  pushGroup(result.pending);
+  pushGroup(result.permanent);
+  if (summary) {
+    summary.textContent = `Total ${result.total ?? rows.length} — stored ${result.stored?.length ?? 0}, pending ${result.pending?.length ?? 0}, permanent ${result.permanent?.length ?? 0}`;
+  }
+  if (rows.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="3" style="padding:8px; color:#0a0;">No DTCs reported.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = rows.map((rec) => {
+    const code = rec.code || '????';
+    const type = dtcTypeLabel(rec);
+    const desc = (rec.description || '').replace(/</g, '&lt;');
+    return `<tr style="border-bottom:1px solid #222;"><td style="padding:4px 8px; color:#f66;">${code}</td><td style="padding:4px 8px;">${type}</td><td style="padding:4px 8px;">${desc}</td></tr>`;
+  }).join('');
+}
+
+async function readDtcs() {
+  const st = document.getElementById('dtc-status');
+  if (st) st.textContent = 'Reading DTCs...';
+  try {
+    const raw = await invokeCmd('read_dtcs_cmd');
+    const result = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    renderDtcRows(result || { stored: [], pending: [], permanent: [], total: 0 });
+    if (st) st.textContent = 'Read complete';
+  } catch (e) {
+    if (st) st.textContent = 'Error: ' + e;
+    const tbody = document.getElementById('dtc-tbody');
+    if (tbody) tbody.innerHTML = `<tr><td colspan="3" style="padding:8px; color:#f66;">${String(e)}</td></tr>`;
+  }
+}
+
+async function readFreezeFrame() {
+  const st = document.getElementById('dtc-status');
+  const pre = document.getElementById('freeze-frame');
+  if (st) st.textContent = 'Reading freeze frame...';
+  try {
+    const raw = await invokeCmd('read_freeze_frame_cmd');
+    const result = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    if (pre) pre.textContent = JSON.stringify(result, null, 2);
+    if (st) st.textContent = 'Freeze frame OK';
+  } catch (e) {
+    if (pre) pre.textContent = String(e);
+    if (st) st.textContent = 'Freeze frame error: ' + e;
+  }
+}
+
+async function clearDtcs() {
+  if (!confirm('Clear all DTCs and reset readiness monitors? This cannot be undone.')) return;
+  const st = document.getElementById('dtc-status');
+  if (st) st.textContent = 'Clearing DTCs...';
+  try {
+    const raw = await invokeCmd('clear_dtcs_cmd');
+    const result = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    if (st) st.textContent = result.message || (result.success ? 'Cleared' : 'Clear failed');
+    await readDtcs();
+  } catch (e) {
+    if (st) st.textContent = 'Clear error: ' + e;
+  }
+}
+
+function setupDiagnostics() {
+  document.getElementById('btn-read-dtcs')?.addEventListener('click', readDtcs);
+  document.getElementById('btn-read-freeze')?.addEventListener('click', readFreezeFrame);
+  document.getElementById('btn-clear-dtcs')?.addEventListener('click', clearDtcs);
 }
 
 // ==================== CONNECT ====================
@@ -565,6 +651,7 @@ function setupAll() {
   setupNav();
   setupConnect();
   setupLive();
+  setupDiagnostics();
   setupTablesUI();
   setupFlash();
   setupScripts();
