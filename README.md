@@ -58,12 +58,9 @@ Notes:
 - This repo combines a new Tauri/Rust implementation with legacy C# reference assets. If you're adding device support, prefer contributing Rust-side implementations in `src-tauri/src/`.
 - Please add tests or sample logs when adding protocol changes.
 
+## Current status
+
+See [COMPLETION.md](COMPLETION.md) for an honest feature matrix. Core offline edit + diagnostics are under active completion; J2534, full flash safety, and multi-ECU coverage are incomplete.
+
 ## License & contact
-No LICENSE file detected in this repository; please contact the maintainers (JRTuners) for licensing and redistribution questions.
-
----
-
-If you want, I can also:
-- Add a short `docs/` Quick Start with screenshots and common device setup steps,
-- Add a CONTRIBUTING.md with build instructions for each OS,
-- Or open small issues for missing items (e.g., add a LICENSE, clarify Tauri prerequisites).
+MIT License — see [LICENSE](LICENSE). Project contact: JRTuners / repository maintainers.

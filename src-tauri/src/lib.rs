@@ -603,6 +603,24 @@ fn write_ecu_frame(state: State<AppState>, data: Vec<u8>) -> Result<String, Stri
 
 // ─── DTC Commands ──────────────────────────────────────────────────────────
 
+/// Read stored / pending / permanent DTCs (Modes 03 / 07 / 0A).
+#[tauri::command]
+fn read_dtcs_cmd(state: State<AppState>) -> Result<String, String> {
+    let mut port_guard = state.port.lock().map_err(|e| e.to_string())?;
+    let port = port_guard.as_mut().ok_or("No connection — call connect_ecu first")?;
+    let result = crate::dtc::read_dtcs(port)?;
+    serde_json::to_string(&result).map_err(|e| e.to_string())
+}
+
+/// Read freeze-frame snapshot for the first stored DTC (Mode 02).
+#[tauri::command]
+fn read_freeze_frame_cmd(state: State<AppState>) -> Result<String, String> {
+    let mut port_guard = state.port.lock().map_err(|e| e.to_string())?;
+    let port = port_guard.as_mut().ok_or("No connection — call connect_ecu first")?;
+    let result = crate::dtc::read_freeze_frame(port)?;
+    serde_json::to_string(&result).map_err(|e| e.to_string())
+}
+
 /// Clear all DTCs from the ECU (OBD-II Mode 04).
 #[tauri::command]
 fn clear_dtcs_cmd(state: State<AppState>) -> Result<String, String> {
@@ -611,7 +629,7 @@ fn clear_dtcs_cmd(state: State<AppState>) -> Result<String, String> {
     // Get prior count for the result
     let prior = crate::dtc::read_dtcs(port).map(|r| r.total).unwrap_or(0);
     let result = crate::dtc::clear_dtcs(port, prior)?;
-    Ok(format!(r#"{{"success":{},"cleared_count":{},"message":"{}"}}"#, result.success, result.cleared_count, result.message))
+    serde_json::to_string(&result).map_err(|e| e.to_string())
 }
 
 // ─── PCM Backup ────────────────────────────────────────────────────────────
@@ -833,6 +851,8 @@ pub fn run() {
             guided_flash_pipeline,
             get_recovery_prompt,
             // DTC
+            read_dtcs_cmd,
+            read_freeze_frame_cmd,
             clear_dtcs_cmd,
             // Live data
             read_ecu_data,

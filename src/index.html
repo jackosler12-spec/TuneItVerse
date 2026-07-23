@@ -14,6 +14,7 @@
     <a href="#" class="nav-item active" data-view="dashboard">Dashboard</a>
     <a href="#" class="nav-item" data-view="connect">Connect</a>
     <a href="#" class="nav-item" data-view="live">Live Data</a>
+    <a href="#" class="nav-item" data-view="diagnostics">Diagnostics / DTC</a>
     <a href="#" class="nav-item" data-view="tables">Tables / Maps</a>
     <a href="#" class="nav-item" data-view="flash">Flash</a>
     <a href="#" class="nav-item" data-view="scripts">Python Scripts</a>
@@ -39,6 +40,7 @@
       <strong>Quick Start</strong><br>
       <button id="dash-tables-btn" class="btn" style="margin-top:8px;">Open Tables / Maps</button>
       <button id="dash-flash-btn" class="btn" style="margin-top:6px;">Guided Flash</button>
+      <button id="dash-dtc-btn" class="btn" style="margin-top:6px;">Diagnostics / DTC</button>
       <button id="dash-connect-btn" class="btn" style="margin-top:6px;">Connect ECU</button>
     </div>
     <div class="panel" style="padding:12px; font-size:12px;">
@@ -126,6 +128,43 @@
     <div>TPS: <strong id="kpi-tps">--</strong></div>
   </div>
   <div id="live-pids" style="margin-top:8px; font-size:12px; font-family:monospace;"></div>
+</div>
+
+<!-- DIAGNOSTICS / DTC -->
+<div id="view-diagnostics" class="content content--hidden">
+  <h2>Diagnostics / DTCs</h2>
+  <p style="font-size:12px; color:var(--text-muted); max-width:720px;">
+    Reads stored (Mode 03), pending (Mode 07), and permanent (Mode 0A) codes over the active serial connection.
+    Clear uses Mode 04 and resets readiness monitors. Requires a live ECU link — no mock codes.
+  </p>
+  <div style="display:flex; gap:8px; flex-wrap:wrap; margin:12px 0;">
+    <button id="btn-read-dtcs" class="btn btn-primary">Read DTCs</button>
+    <button id="btn-read-freeze" class="btn">Read Freeze Frame</button>
+    <button id="btn-clear-dtcs" class="btn btn-danger">Clear DTCs</button>
+  </div>
+  <div id="dtc-status" style="font-size:12px; color:#0c0; margin-bottom:8px;">Idle</div>
+  <div class="panel" style="padding:12px; margin-bottom:12px;">
+    <strong>Codes</strong>
+    <div id="dtc-summary" style="font-size:12px; margin:6px 0; color:var(--text-muted);">No read yet.</div>
+    <div style="overflow:auto;">
+      <table id="dtc-table" style="width:100%; border-collapse:collapse; font-size:12px; font-family:var(--font-mono);">
+        <thead>
+          <tr style="text-align:left; border-bottom:1px solid #333;">
+            <th style="padding:4px 8px;">Code</th>
+            <th style="padding:4px 8px;">Type</th>
+            <th style="padding:4px 8px;">Description</th>
+          </tr>
+        </thead>
+        <tbody id="dtc-tbody">
+          <tr><td colspan="3" style="padding:8px; color:#666;">Connect ECU and click Read DTCs.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="panel" style="padding:12px;">
+    <strong>Freeze Frame</strong>
+    <pre id="freeze-frame" style="background:#111; padding:8px; min-height:80px; white-space:pre-wrap; font-size:11px; border:1px solid #333; margin-top:8px;">—</pre>
+  </div>
 </div>
 
 <!-- TABLES / MAPS (PRO 3-col) -->

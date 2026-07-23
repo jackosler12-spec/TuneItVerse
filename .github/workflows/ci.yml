@@ -1,0 +1,52 @@
+# TuneItVerse CI — Rust backend check/test + Node install sanity
+name: TuneItVerse CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  rust:
+    name: Cargo check & test
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: src-tauri
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: cargo check
+        run: cargo check --locked
+
+      - name: cargo test (lib unit tests)
+        run: cargo test --lib -- --nocapture
+
+  node:
+    name: npm install & scripts
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: npm ci
+        run: npm ci
+
+      - name: npm test (sanity)
+        run: npm test
+
+      - name: tauri CLI present
+        run: npx tauri --version
