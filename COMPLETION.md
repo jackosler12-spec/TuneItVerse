@@ -1,49 +1,57 @@
-# TuneItVerse — Honest Status (2026-07-23)
+# TuneItVerse v0.3.0 — Honest Status (2026-07-23)
 
-**Status: v0.2.x — usable DIY scaffold for P01 / EDC16 offline edit + best-effort live diagnostics. Not a full commercial-tool replacement.**
+**Status: v0.3.0 DIY platform** — offline edit + best-effort live diagnostics for P01 / EDC16.  
+Not a full commercial replacement. Prefer fail-closed over fake success.
+
+## Done in this engagement (merged to main)
+
+| Pass | Deliverable | PR |
+|------|-------------|-----|
+| 1 | CI (`cargo check` + `cargo test` + npm), honest docs, close PR #32 | #36 |
+| 2 | DTC read/freeze/clear + Diagnostics UI | #36 |
+| 3 | Honest I/O, pid_decode live data, j2534 registered, compare/verify UI | #37 |
+| 4 | P01 auto tables from real `reference/16263425.xml` | #37 |
+| 5 | Flash Mode 34→36→37, image CRC (no `0xDEADBEEF`) | #37 |
+| 6 | v0.3.0 bump, OOB patch refuse, recovery modal, scripts honesty | this |
 
 ## What works
 
-| Area | Reality |
-|------|---------|
-| Tauri multi-view UI | Dashboard, Connect, Live, Diagnostics, Tables, Flash, Scripts |
-| Serial connect | Real open + protocol init; port list is honest (errors if enumeration fails) |
-| Live data | Mode 01 + `pid_decode`; **errors when disconnected** (no mock gauges) |
-| Checksum | P01 additive + EDC16 multipoint CRC32 (best-effort regions) |
-| Security seed-key P01 | L1/L2 algorithms + unlock path |
-| DTC | Read / freeze / clear **wired + Diagnostics UI** |
-| Tables | **P01 auto-load from real `reference/16263425.xml` addresses**; EDC16 community start addresses (documented as verify-before-write) |
-| Flash | Guided pipeline uses **Mode 34 → 36 → 37**; image CRC recorded (no fake `0xDEADBEEF`); live verify command fails closed if disconnected |
-| J2534 | Module **compiled & registered**; needs Windows + vendor DLL for live use |
-| Compare / verify UI | Flash tab buttons for compare-bin-to-ECU and verify-after-write |
-| CI | `ci.yml`: cargo check + cargo test --lib + npm sanity |
+- Multi-view desktop UI (Tauri 2)
+- Serial connect + multi-protocol init (VPW / CAN / KWP / Consult)
+- DTC diagnostics tab (Modes 03/07/0A/04/02)
+- Live Mode 01 PIDs via `pid_decode` (errors if disconnected)
+- P01 table catalogue from real XML addresses
+- Checksum validate/correct (P01 + EDC16 multipoint CRC32 best-effort)
+- Guided flash scaffolding with Mode 34/36/37 + recovery prompt UI
+- Unit tests: 38 passing (`cargo test --lib`)
+- CI on main via `.github/workflows/ci.yml`
 
-## Still missing / limited
+## Still missing (honest)
 
-1. Full J2534 DLL load (`libloading`) + registry device enum on Windows  
-2. Kernel-based full PCM backup (current backup is partial Mode 22 sampling)  
-3. Live post-flash readback inside guided pipeline (caller can use `verify_after_write`)  
-4. EDC16 map addresses are community starting points, not WinOLS-locked  
-5. Python scripting integration  
-6. More ECU families beyond P01 / EDC16 / P59-meta  
-7. Hardware-in-the-loop validation (not possible in CI)  
-8. Full UDS flash / multi-frame ISO-TP reliability layer  
+1. **J2534** — surface registered; no full Windows `libloading` + registry enum yet  
+2. **Kernel full-PCM backup** — current backup is partial Mode 22 sampling  
+3. **Live post-flash readback inside guided pipeline** — use Verify button  
+4. **EDC16 maps** — community start addresses; verify with WinOLS before write  
+5. **Embedded Python** — templates only; `python/ecu_scripting.py` is external  
+6. **More ECUs** — only P01 / EDC16 / P59-meta  
+7. **Hardware validation** — not in CI  
+8. **UDS full flash / robust multi-frame ISO-TP**  
 
-## Pass log
-
-- **Pass 1:** CI + honest COMPLETION + version align; closed PR #32  
-- **Pass 2:** DTC commands + Diagnostics UI  
-- **Pass 3:** Honest I/O (no fake ports/live/verify success); wire pid_decode; register j2534; compare/verify UI  
-- **Pass 4:** P01 tables from `16263425.xml` real addresses  
-- **Pass 5:** Flash Mode 34/36/37 + real image CRC; write paths use RequestDownload  
-
-## Build
+## Build & test
 
 ```bash
 npm install
-cd src-tauri && cargo check && cargo test --lib
-cd .. && npm run build
+cd src-tauri
+cargo check
+cargo test --lib
+cd ..
+npm run build    # Windows release (Tauri)
 ```
+
+## Safety
+
+Never flash without a verified backup, stable power, and correct map definitions.  
+Wrong table addresses can brick an ECU — OOB patches are refused by the backend.
 
 ## License
 

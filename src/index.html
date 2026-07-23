@@ -9,7 +9,7 @@
 
 <!-- Top Navigation -->
 <nav class="top-nav">
-  <div class="nav-brand">TuneItVerse <span class="version">v0.2</span></div>
+  <div class="nav-brand">TuneItVerse <span class="version">v0.3</span></div>
   <div class="nav-links">
     <a href="#" class="nav-item active" data-view="dashboard">Dashboard</a>
     <a href="#" class="nav-item" data-view="connect">Connect</a>
@@ -32,7 +32,7 @@
   <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px;">
     <div class="pro-badge" style="background:#0a0; color:#000; padding:2px 8px; border-radius:3px; font-size:11px; font-weight:700;">PRO</div>
     <h1 style="margin:0; font-size:22px;">TuneItVerse</h1>
-    <span style="color:#666; font-size:12px;">v0.2 • Full ECU Tuning Platform</span>
+    <span style="color:#666; font-size:12px;">v0.3 • DIY ECU Tuning Platform</span>
   </div>
 
   <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px,1fr)); gap:12px;">
@@ -242,9 +242,22 @@
 <!-- SCRIPTS -->
 <div id="view-scripts" class="content content--hidden">
   <h2>Python ECU Scripts / Templates</h2>
+  <p style="font-size:12px; color:var(--text-muted); max-width:720px;">
+    Logging PID templates come from the Rust backend. The sample file
+    <code>python/ecu_scripting.py</code> is a standalone helper for offline experiments —
+    it is <strong>not</strong> executed inside the desktop app yet (no embedded Python runtime).
+  </p>
   <button id="btn-refresh-scripts">Refresh Templates</button>
   <div id="custom-scripts-list" style="margin-top:8px;"></div>
-  <div style="margin-top:8px; font-size:11px; color:#888;">Templates from backend. Run via external or extend with custom Python.</div>
+</div>
+
+<!-- RECOVERY PROMPT -->
+<div id="recovery-modal" class="modal hidden">
+  <div class="modal-panel" style="max-width:520px; background:var(--surface); border:1px solid #c33; padding:16px;">
+    <h3 style="color:#f66; margin-top:0;">Recovery assistance</h3>
+    <div id="recovery-body" style="font-size:12px; white-space:pre-wrap;"></div>
+    <button id="recovery-close" class="btn" style="margin-top:12px;">Close</button>
+  </div>
 </div>
 
 <!-- RISK MODAL (full) -->

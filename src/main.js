@@ -641,6 +641,26 @@ function setupFlash() {
         do_write: true
       };
       const res = await invokeCmd('guided_flash_pipeline', { request_json: JSON.stringify(req) });
+      try {
+        const parsed = typeof res === 'string' ? JSON.parse(res) : res;
+        if (parsed && parsed.recovery_prompt) {
+          const rm = document.getElementById('recovery-modal');
+          const body = document.getElementById('recovery-body');
+          if (body) {
+            const p = parsed.recovery_prompt;
+            body.textContent = [
+              p.message || '',
+              '',
+              ...(p.steps || []).map((s, i) => `${i + 1}. ${s}`),
+              '',
+              p.grounding_required ? 'Grounding assist may be required for locked P01.' : '',
+              p.kernel_to_upload ? `Kernel: ${p.kernel_to_upload}` : '',
+              p.reference_notes || ''
+            ].filter(Boolean).join('\n');
+          }
+          rm?.classList.remove('hidden');
+        }
+      } catch (_) { /* non-JSON result */ }
       if (log) log.textContent += (typeof res === 'string' ? res : JSON.stringify(res, null, 2)) + '\n';
       if (prog) prog.textContent = '100%';
     } catch (e) {
@@ -651,6 +671,9 @@ function setupFlash() {
   // Modal too
   const modal = document.getElementById('risk-modal');
   document.getElementById('rm-cancel')?.addEventListener('click', () => modal?.classList.add('hidden'));
+  document.getElementById('recovery-close')?.addEventListener('click', () => {
+    document.getElementById('recovery-modal')?.classList.add('hidden');
+  });
   ['rm-risk1','rm-risk2','rm-risk3','rm-risk4'].forEach(id => {
     document.getElementById(id)?.addEventListener('change', () => {
       const all = ['rm-risk1','rm-risk2','rm-risk3','rm-risk4'].every(i => document.getElementById(i)?.checked);
