@@ -1,6 +1,9 @@
 // j2534.rs — J2534 PassThru support for professional interfaces (DrewTech, Tactrix, etc.)
 // Expanded in next-pass: proper filtering, 29-bit CAN, ISO15765, basic connect/disconnect.
 // Real DLLs are loaded at runtime on Windows; this provides the safe Rust FFI surface.
+// Field names match the C PASSTHRU_MSG layout (not Rust snake_case).
+
+#![allow(non_snake_case)]
 
 use std::os::raw::{c_char, c_long, c_ulong, c_void};
 use std::ptr;
@@ -14,7 +17,7 @@ pub const J2534_FLAG_ISO15765_FRAME_PAD: c_ulong = 0x00000040;
 pub const J2534_FLAG_CAN_ID_BOTH: c_ulong = 0x00000800;
 
 #[repr(C)]
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy)]
 pub struct PASSTHRU_MSG {
     pub ProtocolID: c_ulong,
     pub RxStatus: c_ulong,
@@ -23,6 +26,20 @@ pub struct PASSTHRU_MSG {
     pub DataSize: c_ulong,
     pub ExtraDataIndex: c_ulong,
     pub Data: [u8; 4128],
+}
+
+impl Default for PASSTHRU_MSG {
+    fn default() -> Self {
+        Self {
+            ProtocolID: 0,
+            RxStatus: 0,
+            TxFlags: 0,
+            Timestamp: 0,
+            DataSize: 0,
+            ExtraDataIndex: 0,
+            Data: [0u8; 4128],
+        }
+    }
 }
 
 type PassThruOpen = unsafe extern "C" fn(*const c_char, *mut c_ulong) -> c_long;

@@ -219,9 +219,12 @@
 <!-- FLASH -->
 <div id="view-flash" class="content content--hidden">
   <h2>Flash / Guided Pipeline</h2>
-  <div style="margin-bottom:8px;">
+  <div style="margin-bottom:8px; display:flex; gap:8px; flex-wrap:wrap;">
     <button id="btn-show-risk" class="btn btn-danger">Show Risk Confirmation &amp; Run Guided Flash</button>
+    <button id="btn-compare-bin" class="btn">Compare Loaded BIN to ECU</button>
+    <button id="btn-verify-write" class="btn">Verify After Write</button>
   </div>
+  <pre id="compare-result" style="background:#111; padding:8px; min-height:40px; white-space:pre-wrap; font-size:11px; border:1px solid #333; display:none;"></pre>
 
   <div id="risk-section" style="display:none; border:1px solid #c33; padding:10px; margin-bottom:8px; background:#1a0a0a;">
     <strong style="color:#f66;">RISK ACKNOWLEDGEMENT (check all)</strong><br>

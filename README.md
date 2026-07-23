@@ -60,7 +60,15 @@ Notes:
 
 ## Current status
 
-See [COMPLETION.md](COMPLETION.md) for an honest feature matrix. Core offline edit + diagnostics are under active completion; J2534, full flash safety, and multi-ECU coverage are incomplete.
+See [COMPLETION.md](COMPLETION.md) for an honest feature matrix.
+
+**Working today (best-effort, DIY):** serial connect, DTC diagnostics UI, live Mode-01 PIDs, P01 table auto-load from real XML addresses, checksum correct, guided flash Mode 34/36/37 scaffolding.
+
+**Still incomplete:** real J2534 DLL binding, kernel full-PCM backup, WinOLS-perfect EDC16 maps/CS, multi-ECU breadth, hardware validation.
+
+### CI
+
+Push/PR to `main` runs `.github/workflows/ci.yml` (`cargo check`, `cargo test --lib`, `npm test` sanity).
 
 ## License & contact
 MIT License — see [LICENSE](LICENSE). Project contact: JRTuners / repository maintainers.
