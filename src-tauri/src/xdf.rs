@@ -325,11 +325,23 @@ pub fn extract_table_from_bin(bin_bytes: Vec<u8>, table: TableDef) -> Result<Ext
 
 #[tauri::command]
 pub fn patch_table_into_bin(req: PatchRequest) -> Result<PatchResult, String> {
+    let base = cal_base_for_bytes(req.bin_bytes.len());
+    let addr = parse_addr(&req.table.addr);
+    let is_word = req.table.data_type.to_uppercase().contains("WORD");
+    let esz = if is_word { 2 } else { 1 };
+    let rows = req.new_values.len();
+    let cols = req.new_values.first().map(|r| r.len()).unwrap_or(0);
+    let need = base + addr + rows * cols * esz;
+    if need > req.bin_bytes.len() {
+        return Err(format!(
+            "Refuse patch: table '{}' needs offset 0x{:X}..0x{:X} but BIN is only {} bytes (addr {} + cal base 0x{:X}). Wrong definition or wrong image size.",
+            req.table.name, base + addr, need, req.bin_bytes.len(), req.table.addr, base
+        ));
+    }
     let patched = patch_table(req.bin_bytes, &req.table, &req.new_values);
-    // Optionally auto-correct here or let caller do it (we surface the bytes)
     Ok(PatchResult {
         patched_bytes: patched,
         checksum_report: None,
-        message: format!("Patched table {} at {}", req.table.name, req.table.addr),
+        message: format!("Patched table {} at {} ({}x{})", req.table.name, req.table.addr, rows, cols),
     })
 }
