@@ -587,6 +587,33 @@ function setupTablesUI() {
 
 // ==================== FLASH ====================
 function setupFlash() {
+  document.getElementById('btn-compare-bin')?.addEventListener('click', async () => {
+    const pre = document.getElementById('compare-result');
+    if (pre) { pre.style.display = 'block'; pre.textContent = 'Comparing...'; }
+    if (!currentBin || !currentBin.length) {
+      if (pre) pre.textContent = 'Load a .BIN in Tables first.';
+      return;
+    }
+    try {
+      const res = await invokeCmd('compare_bin_to_ecu', { file_bytes: Array.from(currentBin) });
+      if (pre) pre.textContent = typeof res === 'string' ? res : JSON.stringify(res, null, 2);
+    } catch (e) {
+      if (pre) pre.textContent = 'Compare error: ' + e;
+    }
+  });
+  document.getElementById('btn-verify-write')?.addEventListener('click', async () => {
+    const pre = document.getElementById('compare-result');
+    if (pre) { pre.style.display = 'block'; pre.textContent = 'Verifying...'; }
+    try {
+      const args = currentBin && currentBin.length
+        ? { expected_bytes: Array.from(currentBin) }
+        : {};
+      const res = await invokeCmd('verify_after_write', args);
+      if (pre) pre.textContent = typeof res === 'string' ? res : JSON.stringify(res, null, 2);
+    } catch (e) {
+      if (pre) pre.textContent = 'Verify error: ' + e;
+    }
+  });
   const showRisk = document.getElementById('btn-show-risk');
   if (showRisk) showRisk.onclick = () => {
     const sec = document.getElementById('risk-section');

@@ -1,58 +1,48 @@
 # TuneItVerse — Honest Status (2026-07-23)
 
-**Status: PARTIAL — usable scaffold for DIY P01 / EDC16 offline edit + best-effort live diagnostics. Not a complete industry replacement for commercial tools.**
+**Status: v0.2.x — usable DIY scaffold for P01 / EDC16 offline edit + best-effort live diagnostics. Not a full commercial-tool replacement.**
 
-Previous COMPLETION.md claims of “fully operational / production-ready / no critical gaps” were **overstated**. This file tracks reality.
-
-## What works (with caveats)
+## What works
 
 | Area | Reality |
 |------|---------|
-| Tauri shell + multi-view UI | Yes — Dashboard, Connect, Live, Diagnostics, Tables, Flash, Scripts |
-| Serial connect (ELM/VPW/CAN/KWP/Consult init) | Best-effort open + protocol init; needs real adapter |
-| Checksum validate/correct | Implemented for P01 additive + EDC16 multipoint CRC32 (best-effort offsets) |
-| Security seed-key (P01 L1/L2) | Algorithm ported; needs hardware to prove |
-| DTC read / freeze / clear | **Wired end-to-end (Pass 2)** — backend + Diagnostics tab |
-| XDF/table extract & patch | Parser + extract/patch path present |
-| Guided flash UI + orchestration | Scaffold with real serial frames; **verify/safety incomplete** (Pass 5 target) |
-| ECU DB | P01, EDC16C41, GM_P59 metadata embedded |
+| Tauri multi-view UI | Dashboard, Connect, Live, Diagnostics, Tables, Flash, Scripts |
+| Serial connect | Real open + protocol init; port list is honest (errors if enumeration fails) |
+| Live data | Mode 01 + `pid_decode`; **errors when disconnected** (no mock gauges) |
+| Checksum | P01 additive + EDC16 multipoint CRC32 (best-effort regions) |
+| Security seed-key P01 | L1/L2 algorithms + unlock path |
+| DTC | Read / freeze / clear **wired + Diagnostics UI** |
+| Tables | **P01 auto-load from real `reference/16263425.xml` addresses**; EDC16 community start addresses (documented as verify-before-write) |
+| Flash | Guided pipeline uses **Mode 34 → 36 → 37**; image CRC recorded (no fake `0xDEADBEEF`); live verify command fails closed if disconnected |
+| J2534 | Module **compiled & registered**; needs Windows + vendor DLL for live use |
+| Compare / verify UI | Flash tab buttons for compare-bin-to-ECU and verify-after-write |
+| CI | `ci.yml`: cargo check + cargo test --lib + npm sanity |
 
-## Critical gaps remaining
+## Still missing / limited
 
-1. **Table auto-load addresses are placeholders** for many maps — risk of wrong-offset patches until Pass 4.
-2. **J2534** — module exists but is a stub (not fully bound to vendor DLLs).
-3. **Flash pipeline** — Mode 34/erase/verify incomplete; placeholder verify CRC historically.
-4. **pid_decode.rs** largely unused by live data path.
-5. **Mock/fake data** on disconnect or failed reads (being removed in Pass 3).
-6. **Python scripting** — stub only.
-7. **ECU breadth** — only three families; P59 metadata-only.
-8. **Hardware validation** — not performed in CI; requires vehicle/bench.
+1. Full J2534 DLL load (`libloading`) + registry device enum on Windows  
+2. Kernel-based full PCM backup (current backup is partial Mode 22 sampling)  
+3. Live post-flash readback inside guided pipeline (caller can use `verify_after_write`)  
+4. EDC16 map addresses are community starting points, not WinOLS-locked  
+5. Python scripting integration  
+6. More ECU families beyond P01 / EDC16 / P59-meta  
+7. Hardware-in-the-loop validation (not possible in CI)  
+8. Full UDS flash / multi-frame ISO-TP reliability layer  
 
 ## Pass log
 
-### Pass 1 — CI & truth (this branch)
-- Replaced broken Node-only CI with `ci.yml`: `cargo check`, `cargo test --lib`, npm sanity.
-- Disabled npm-publish (desktop app, not a package).
-- Aligned `Cargo.toml` version to `0.2.0`.
-- Closed obsolete PR #32.
-- Rewrote this status file honestly.
-
-### Pass 2 — DTC end-to-end
-- Registered `read_dtcs_cmd`, `read_freeze_frame_cmd`, `clear_dtcs_cmd`.
-- Added Diagnostics / DTC view in UI (read / freeze / clear).
-
-### Planned
-- Pass 3: Honest I/O, wire pid_decode, register j2534, compare UI
-- Pass 4: Real P01 map addresses from reference XML
-- Pass 5: Flash Mode 34/36/37 + real verify
-- Pass 6: README / release polish → v0.3.0
+- **Pass 1:** CI + honest COMPLETION + version align; closed PR #32  
+- **Pass 2:** DTC commands + Diagnostics UI  
+- **Pass 3:** Honest I/O (no fake ports/live/verify success); wire pid_decode; register j2534; compare/verify UI  
+- **Pass 4:** P01 tables from `16263425.xml` real addresses  
+- **Pass 5:** Flash Mode 34/36/37 + real image CRC; write paths use RequestDownload  
 
 ## Build
 
 ```bash
 npm install
 cd src-tauri && cargo check && cargo test --lib
-cd .. && npm run build   # full Tauri release (Windows)
+cd .. && npm run build
 ```
 
 ## License

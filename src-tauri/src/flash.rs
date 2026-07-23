@@ -171,18 +171,43 @@ where
     }
     result.steps_completed.push("Risks confirmed".to_string());
 
-    // Step 5: Real write (chunked send using port and vpw for P01 cal after L2 / kernel)
-    result.logs.push("Executing real flash write using port...".to_string());
-    // Real chunked write for the tuned_bin (cal image) framed properly
+    // Step 5: Mode 34 RequestDownload → Mode 36 TransferData → Mode 37 TransferExit
+    if request.tuned_bin.is_empty() {
+        result.error = Some("Empty tuned_bin — nothing to flash".into());
+        return Ok(result);
+    }
+    result.logs.push("Executing flash write: Mode 34 / 36 / 37...".to_string());
+    let cal_addr: u32 = if request.ecu_family.contains("EDC16") {
+        0x0008_0000
+    } else {
+        0x0002_0000
+    };
+    let req34 = build_mode34_request(cal_addr, request.tuned_bin.len() as u32);
+    if let Err(e) = send_frame(port, &req34) {
+        result.error = Some(format!("Mode34 RequestDownload failed: {}", e));
+        if request.enable_recovery_prompts {
+            result.recovery_prompt = Some(get_recovery_prompt(request.ecu_family.clone(), "mode34 failed".into()));
+        }
+        return Ok(result);
+    }
+    std::thread::sleep(std::time::Duration::from_millis(20));
+    result.logs.push(format!("Mode34 accepted (addr 0x{:08X}, {} bytes)", cal_addr, request.tuned_bin.len()));
+
     let chunk_size = 128;
+    let total = request.tuned_bin.len();
     for (i, chunk) in request.tuned_bin.chunks(chunk_size).enumerate() {
         let frame = build_mode36_chunk(chunk);
         match send_frame(port, &frame) {
             Ok(_) => {
-                on_progress(FlashProgress { bytes_done: (i * chunk_size) as u32, bytes_total: request.tuned_bin.len() as u32, percent: ((i * chunk_size * 100) / request.tuned_bin.len()) as u8 });
+                let done = ((i + 1) * chunk_size).min(total);
+                on_progress(FlashProgress {
+                    bytes_done: done as u32,
+                    bytes_total: total as u32,
+                    percent: ((done * 100) / total.max(1)) as u8,
+                });
             }
             Err(e) => {
-                result.error = Some(e);
+                result.error = Some(format!("Mode36 chunk {} failed: {}", i, e));
                 if request.enable_recovery_prompts {
                     result.recovery_prompt = Some(get_recovery_prompt(request.ecu_family.clone(), "write failed".into()));
                 }
@@ -191,24 +216,44 @@ where
         }
         std::thread::sleep(std::time::Duration::from_millis(3));
     }
-    // final 37 exit
     let exit_frame = build_mode37_request();
-    let _ = send_frame(port, &exit_frame);
+    if let Err(e) = send_frame(port, &exit_frame) {
+        result.error = Some(format!("Mode37 TransferExit failed: {}", e));
+        return Ok(result);
+    }
+    let crc_written = crc32_ieee(&request.tuned_bin);
     result.flash_write_result = Some(FlashWriteResult {
         bytes_written: request.tuned_bin.len() as u32,
-        blocks_written: (request.tuned_bin.len() / chunk_size) as u32,
-        crc32_written: 0,
+        blocks_written: ((request.tuned_bin.len() + chunk_size - 1) / chunk_size) as u32,
+        crc32_written: crc_written,
     });
-    result.logs.push("Write frames sent via port (real path active)".to_string());
-    result.steps_completed.push("Flash write completed".to_string());
+    result.logs.push(format!("Write complete (CRC32 written image = 0x{:08X})", crc_written));
+    result.steps_completed.push("Flash write completed (34/36/37)".to_string());
 
-    // Step 6: Verify (real readback would go here)
-    result.verification_crc = Some(0xDEADBEEF); // would be real crc
-    result.steps_completed.push("Post-flash verification passed".to_string());
-    result.logs.push("Guided pipeline completed with real port operations!".to_string());
+    // Step 6: Post-flash CRC of written image (live Mode 22 full readback is slow; report image CRC).
+    // Callers should also invoke verify_after_write for live readback when available.
+    result.verification_crc = Some(crc_written);
+    result.steps_completed.push("Post-flash image CRC recorded".to_string());
+    result.logs.push("Guided pipeline completed. Run verify_after_write for live readback CRC.".to_string());
     result.success = true;
 
     Ok(result)
+}
+
+/// IEEE CRC32 (same poly as common flash verify tools).
+fn crc32_ieee(data: &[u8]) -> u32 {
+    let mut crc: u32 = 0xFFFF_FFFF;
+    for &byte in data {
+        crc ^= byte as u32;
+        for _ in 0..8 {
+            if crc & 1 != 0 {
+                crc = (crc >> 1) ^ 0xEDB8_8320;
+            } else {
+                crc >>= 1;
+            }
+        }
+    }
+    !crc
 }
 
 pub fn get_recovery_prompt(ecu_family: String, error_context: String) -> RecoveryPrompt {

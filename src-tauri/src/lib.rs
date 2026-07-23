@@ -16,6 +16,7 @@ mod pid_decode;
 mod security;
 mod vpw;
 mod xdf;
+mod j2534;
 
 mod can;
 mod kwp;
@@ -24,7 +25,7 @@ mod consult;
 use crate::ecu_database::{EcuDbEntry, get_ecu_by_family, list_supported_ecu_families};
 use crate::flash::GuidedFlashRequest;
 use crate::vpw::{build_mode22_request, request_response, build_mode36_chunk, build_mode37_request, send_frame};
-use crate::xdf::{parse_xdf_definitions, extract_table_from_bin, patch_table_into_bin, TableDef};
+use crate::xdf::{parse_xdf_definitions, extract_table_from_bin, patch_table_into_bin, parse_table_definitions, TableDef};
 use crate::can::{elm_init_can_500k, uds_request};
 use crate::kwp::{kwp_fast_init, kwp_request_response, build_kwp_request};
 use crate::consult::{consult_init, consult_read_basic_diesel_data};
@@ -83,10 +84,9 @@ impl Default for AppState {
 
 #[tauri::command]
 fn list_serial_ports() -> Result<Vec<String>, String> {
-    match serialport::available_ports() {
-        Ok(ports) => Ok(ports.into_iter().map(|p| p.port_name).collect()),
-        Err(_) => Ok(vec!["COM3".into(), "COM5".into(), "COM10".into()])
-    }
+    serialport::available_ports()
+        .map(|ports| ports.into_iter().map(|p| p.port_name).collect())
+        .map_err(|e| format!("Failed to enumerate serial ports: {}", e))
 }
 
 #[tauri::command]
@@ -144,14 +144,15 @@ fn read_properties(state: State<AppState>) -> Result<String, String> {
             Ok(resp) if resp.len() >= 4 => {
                 format!("{:02X}{:02X}{:02X}{:02X}", resp[0], resp[1], resp[2], resp[3])
             }
-            _ => "12225074".to_string(),
+            Ok(_) => "UNKNOWN".to_string(),
+            Err(e) => format!("READ_FAIL:{}", e),
         };
         let req_vin: Vec<u8> = vec![0x68, 0x6A, 0xF1, 0x09, 0x02, 0x00];
         let vin = match request_response(port, &req_vin) {
             Ok(resp) if resp.len() >= 17 => {
-                String::from_utf8(resp[..17].to_vec()).unwrap_or_else(|_| "UNKNOWN".to_string())
+                String::from_utf8(resp[..17].to_vec()).unwrap_or_else(|_| "UNREADABLE".to_string())
             }
-            _ => "1G1YY26E695100001".to_string(),
+            _ => "UNAVAILABLE".to_string(),
         };
         let ecu_info = get_ecu_by_family("P01_0411")
             .map(|e| (e.display_name, e.protocol))
@@ -175,61 +176,56 @@ fn read_properties(state: State<AppState>) -> Result<String, String> {
 
 // ─── Live Data ─────────────────────────────────────────────────────────────
 
-/// Read live ECU data (RPM, MAP, TPS, ECT, IAT, Spark, INJ, STFT, BATT).
-/// Uses real PID reads when connected; falls back to realistic mock for dev.
+/// Read live ECU data (RPM, MAP, TPS, ECT, IAT, Spark, STFT, BATT).
+/// Uses OBD Mode 01 + pid_decode. Requires an active connection — no mock values.
 #[tauri::command]
 fn read_ecu_data(state: State<AppState>) -> Result<String, String> {
     let mut port_guard = state.port.lock().map_err(|e| e.to_string())?;
-    if let Some(port) = port_guard.as_mut() {
-        let pid_map: &[(&str, u8)] = &[
-            ("rpm_raw", 0x0C),
-            ("map",     0x0B),
-            ("tps",     0x11),
-            ("ect",     0x05),
-            ("iat",     0x0F),
-            ("spark",   0x0E),
-            ("stft_b1", 0x06),
-            ("batt",    0x42),
-        ];
-        let mut values: std::collections::HashMap<&str, f64> = std::collections::HashMap::new();
-        for (name, pid) in pid_map {
-            let mut req = vec![0x68u8, 0x6A, 0xF1, 0x01, *pid, 0x00];
-            let len = req.len();
-            let cs = req[..len-1].iter().fold(0u8, |a, &b| a.wrapping_add(b));
-            req[len-1] = cs;
-            if let Ok(resp) = request_response(port, &req) {
-                if !resp.is_empty() {
-                    let a = resp[0] as f64;
-                    let b = if resp.len() > 1 { resp[1] as f64 } else { 0.0 };
-                    let decoded = match *pid {
-                        0x0C => (a * 256.0 + b) / 4.0,
-                        0x0B => a,
-                        0x11 => a * 100.0 / 255.0,
-                        0x05 | 0x0F => a - 40.0,
-                        0x0E => a / 2.0 - 64.0,
-                        0x06 => (a - 128.0) * 100.0 / 128.0,
-                        0x42 => a / 10.0,
-                        _ => a,
-                    };
-                    values.insert(name, decoded);
-                }
+    let port = port_guard
+        .as_mut()
+        .ok_or_else(|| "Not connected — call connect_ecu first".to_string())?;
+
+    // (json_key, mode01_pid_byte, pid_decode id)
+    let pid_map: &[(&str, u8, u16)] = &[
+        ("rpm",   0x0C, 0x000C),
+        ("map",   0x0B, 0x000B),
+        ("tps",   0x11, 0x0011),
+        ("ect",   0x05, 0x0005),
+        ("iat",   0x0F, 0x000F),
+        ("spark", 0x0E, 0x000E),
+        ("stft",  0x06, 0x0006),
+        ("batt",  0x42, 0x0042),
+    ];
+    let mut out = serde_json::Map::new();
+    let mut any = false;
+    for (key, pid_byte, pid_id) in pid_map {
+        let mut req = vec![0x68u8, 0x6A, 0xF1, 0x01, *pid_byte, 0x00];
+        let len = req.len();
+        let cs = req[..len - 1].iter().fold(0u8, |a, &b| a.wrapping_add(b));
+        req[len - 1] = cs;
+        if let Ok(resp) = request_response(port, &req) {
+            // Mode 01 response payload is often after SID/PID; use trailing data bytes
+            let raw = if resp.len() >= 2 { &resp[resp.len().saturating_sub(2)..] } else { resp.as_slice() };
+            let decoded = crate::pid_decode::decode_pid(*pid_id, raw);
+            if let Some(v) = decoded.value {
+                out.insert((*key).into(), serde_json::json!(v));
+                any = true;
             }
         }
-        let rpm = values.get("rpm_raw").cloned().unwrap_or(0.0);
-        let map = values.get("map").cloned().unwrap_or(0.0);
-        let tps = values.get("tps").cloned().unwrap_or(0.0);
-        let ect = values.get("ect").cloned().unwrap_or(0.0);
-        let iat = values.get("iat").cloned().unwrap_or(0.0);
-        let spark = values.get("spark").cloned().unwrap_or(0.0);
-        let stft = values.get("stft_b1").cloned().unwrap_or(0.0);
-        let batt = values.get("batt").cloned().unwrap_or(13.8);
-        let inj_ms = if rpm > 100.0 { (map / rpm * 120.0 * 0.085).clamp(0.5, 20.0) } else { 0.0 };
-        return Ok(format!(
-            r#"{{"rpm":{:.0},"map":{:.1},"tps":{:.1},"ect":{:.1},"iat":{:.1},"spark":{:.1},"inj_ms":{:.2},"stft":{:.2},"batt":{:.1}}}"#,
-            rpm, map, tps, ect, iat, spark, inj_ms, stft, batt
-        ));
     }
-    Ok(r#"{"rpm":1450,"map":48,"tps":18,"ect":87,"iat":33,"spark":24,"inj_ms":3.8,"stft":0.5,"batt":13.9}"#.into())
+    if !any {
+        return Err("No PID responses received — check adapter/protocol and that the ECU is powered".into());
+    }
+    // Derived inj estimate only when we have rpm+map
+    let rpm = out.get("rpm").and_then(|v| v.as_f64()).unwrap_or(0.0);
+    let map = out.get("map").and_then(|v| v.as_f64()).unwrap_or(0.0);
+    let inj_ms = if rpm > 100.0 {
+        (map / rpm * 120.0 * 0.085).clamp(0.5, 20.0)
+    } else {
+        0.0
+    };
+    out.insert("inj_ms".into(), serde_json::json!(inj_ms));
+    serde_json::to_string(&out).map_err(|e| e.to_string())
 }
 
 // ─── BIN Validation & Checksum ─────────────────────────────────────────────
@@ -286,84 +282,45 @@ fn correct_bin_checksums(data: Vec<u8>) -> Result<Vec<u8>, String> {
 
 // ─── AUTO LOAD TABLES FOR BIN (key feature) ────────────────────────────────
 
-/// Auto-detect ECU family from BIN size and return curated high-quality TableDef list
-/// so that uploading a .bin immediately populates matching maps with real addresses/math.
+/// Embedded P01/OS-16263425 TableData definitions (real cal-relative addresses).
+const P01_TABLE_XML: &str = include_str!("../../reference/16263425.xml");
+
+/// Auto-detect ECU family from BIN size and return TableDef list with real addresses.
+/// P01/P59 sizes load `reference/16263425.xml`. EDC16 uses documented community starting addresses.
 #[tauri::command]
 fn auto_load_tables_for_bin(bin_bytes: Vec<u8>) -> Result<String, String> {
     let len = bin_bytes.len();
     let tables: Vec<TableDef> = if len == 524288 || len == 131072 {
-        // P01_0411 / GM curated tables
-        vec![
-            TableDef {
-                id: "ve-main".into(),
-                name: "Main VE Table".into(),
-                category: Some("Fuel".into()),
-                description: "Volumetric Efficiency main map - 16x16 for LS1 P01. Critical for fueling accuracy.".into(),
-                rows: 16,
-                cols: 16,
-                addr: "0x0000".into(),
-                data_type: "UBYTE".into(),
-                math: "x*0.5".into(),
-                units: "%".into(),
-                row_major: true,
-                msb: true,
-            },
-            TableDef {
-                id: "spark-advance".into(),
-                name: "Spark Advance".into(),
-                category: Some("Ignition".into()),
-                description: "Base spark timing map. Units deg BTDC. Watch knock retard.".into(),
-                rows: 12,
-                cols: 14,
-                addr: "0x2000".into(),
-                data_type: "UBYTE".into(),
-                math: "(x-40)/2".into(),
-                units: "deg BTDC".into(),
-                row_major: true,
-                msb: true,
-            },
-            TableDef {
-                id: "idle-rpm".into(),
-                name: "Idle Target RPM".into(),
-                category: Some("Idle".into()),
-                description: "Target idle speed vs coolant temp".into(),
-                rows: 1,
-                cols: 8,
-                addr: "0x1A00".into(),
-                data_type: "UWORD".into(),
-                math: "x".into(),
-                units: "RPM".into(),
-                row_major: true,
-                msb: true,
-            },
-            TableDef {
-                id: "pe-enrich".into(),
-                name: "Power Enrichment".into(),
-                category: Some("Fuel".into()),
-                description: "WOT fuel enrichment multiplier".into(),
-                rows: 8,
-                cols: 8,
-                addr: "0x3000".into(),
-                data_type: "UBYTE".into(),
-                math: "x*0.01".into(),
-                units: "factor".into(),
-                row_major: true,
-                msb: true,
-            },
-        ]
+        let mut parsed = parse_table_definitions(P01_TABLE_XML);
+        // Prefer engine-relevant tables first; keep full set for completeness.
+        parsed.sort_by(|a, b| {
+            let score = |t: &TableDef| {
+                let c = t.category.as_deref().unwrap_or("").to_ascii_lowercase();
+                let n = t.name.to_ascii_lowercase();
+                if c.contains("spark") || n.contains("spark") || n.contains("knock") { 0 }
+                else if c.contains("fuel") || n.contains("fuel") || n.contains("ve") { 1 }
+                else if c.contains("idle") { 2 }
+                else { 3 }
+            };
+            score(a).cmp(&score(b)).then_with(|| a.name.cmp(&b.name))
+        });
+        if parsed.is_empty() {
+            return Err("Failed to parse reference/16263425.xml table definitions".into());
+        }
+        parsed
     } else if len == 2097152 {
-        // EDC16C41 Nissan ZD30 curated diesel maps
+        // Addresses from ecu_database/edc16c41_nissan_patrol.json refined_map_addrs (community starting points).
         vec![
             TableDef {
                 id: "driver-wish".into(),
                 name: "Driver Wish (Torque Request)".into(),
                 category: Some("Torque".into()),
-                description: "Driver requested torque map vs pedal/RPM. Core for power delivery.".into(),
+                description: "Community starting address 0x80000 — verify against your bin/WinOLS before write.".into(),
                 rows: 16,
                 cols: 16,
                 addr: "0x80000".into(),
                 data_type: "UWORD".into(),
-                math: "x*0.1".into(),
+                math: "X*0.1".into(),
                 units: "Nm".into(),
                 row_major: true,
                 msb: true,
@@ -372,12 +329,12 @@ fn auto_load_tables_for_bin(bin_bytes: Vec<u8>) -> Result<String, String> {
                 id: "inj-quantity".into(),
                 name: "Injection Quantity".into(),
                 category: Some("Fuel".into()),
-                description: "IQ main map - fuel quantity vs torque/speed".into(),
+                description: "Community starting address 0x82000 — verify before write.".into(),
                 rows: 16,
                 cols: 16,
                 addr: "0x82000".into(),
                 data_type: "UWORD".into(),
-                math: "x*0.01".into(),
+                math: "X*0.01".into(),
                 units: "mm3".into(),
                 row_major: true,
                 msb: true,
@@ -386,12 +343,12 @@ fn auto_load_tables_for_bin(bin_bytes: Vec<u8>) -> Result<String, String> {
                 id: "boost-setpoint".into(),
                 name: "Boost Setpoint".into(),
                 category: Some("Boost".into()),
-                description: "Target boost pressure map".into(),
+                description: "Community starting address 0xC0000 — verify before write.".into(),
                 rows: 12,
                 cols: 12,
                 addr: "0xC0000".into(),
                 data_type: "UWORD".into(),
-                math: "x*0.1".into(),
+                math: "X*0.1".into(),
                 units: "mbar".into(),
                 row_major: true,
                 msb: true,
@@ -400,12 +357,12 @@ fn auto_load_tables_for_bin(bin_bytes: Vec<u8>) -> Result<String, String> {
                 id: "rail-pressure".into(),
                 name: "Rail Pressure Setpoint".into(),
                 category: Some("Fuel".into()),
-                description: "Common rail pressure target".into(),
+                description: "Community starting address 0xC2000 — verify before write.".into(),
                 rows: 12,
                 cols: 12,
                 addr: "0xC2000".into(),
                 data_type: "UWORD".into(),
-                math: "x".into(),
+                math: "X".into(),
                 units: "bar".into(),
                 row_major: true,
                 msb: true,
@@ -414,19 +371,22 @@ fn auto_load_tables_for_bin(bin_bytes: Vec<u8>) -> Result<String, String> {
                 id: "vgt-duty".into(),
                 name: "VGT Duty Cycle".into(),
                 category: Some("Boost".into()),
-                description: "Variable geometry turbo actuator duty".into(),
+                description: "Community starting address 0xC4000 — verify before write.".into(),
                 rows: 10,
                 cols: 10,
                 addr: "0xC4000".into(),
                 data_type: "UBYTE".into(),
-                math: "x*0.5".into(),
+                math: "X*0.5".into(),
                 units: "%".into(),
                 row_major: true,
                 msb: true,
             },
         ]
     } else {
-        vec![]
+        return Err(format!(
+            "Unsupported BIN size {} — expected 131072/524288 (P01) or 2097152 (EDC16C41)",
+            len
+        ));
     };
     serde_json::to_string(&tables).map_err(|e| e.to_string())
 }
@@ -478,11 +438,14 @@ fn compare_bin_to_ecu(state: State<AppState>, file_bytes: Vec<u8>) -> Result<Str
 
 // ─── Flash Write Commands ──────────────────────────────────────────────────
 
-/// Write calibration BIN via Mode 34/36/37 after L2 unlock.
+/// Write calibration BIN via Mode 34 (RequestDownload) → 36 (TransferData) → 37 after L2 unlock.
 #[tauri::command]
 fn write_calibration_cmd(state: State<AppState>, file_bytes: Vec<u8>) -> Result<String, String> {
     let mut port_guard = state.port.lock().map_err(|e| e.to_string())?;
     let port = port_guard.as_mut().ok_or("No connection — call connect_ecu first")?;
+    if file_bytes.is_empty() {
+        return Err("Empty calibration image".into());
+    }
     if file_bytes.len() == crate::checksum::CAL_IMAGE_SIZE {
         match crate::checksum::correct_and_validate_checksums(&file_bytes) {
             Err(e) => return Err(format!("Pre-write checksum failed: {}", e)),
@@ -493,76 +456,103 @@ fn write_calibration_cmd(state: State<AppState>, file_bytes: Vec<u8>) -> Result<
         }
     }
     crate::security::unlock_level2(port).map_err(|e| format!("L2 unlock failed: {}", e))?;
+    let cal_addr: u32 = 0x0002_0000;
+    let req34 = crate::vpw::build_mode34_request(cal_addr, file_bytes.len() as u32);
+    send_frame(port, &req34).map_err(|e| format!("Mode34 RequestDownload failed: {}", e))?;
+    std::thread::sleep(std::time::Duration::from_millis(20));
     let chunk_size = 128;
     let mut blocks = 0u32;
     for chunk in file_bytes.chunks(chunk_size) {
         let frame = crate::vpw::build_mode36_chunk(chunk);
-        send_frame(port, &frame).map_err(|e| format!("Write chunk failed at block {}: {}", blocks, e))?;
+        send_frame(port, &frame).map_err(|e| format!("Mode36 write failed at block {}: {}", blocks, e))?;
         std::thread::sleep(std::time::Duration::from_millis(3));
         blocks += 1;
     }
     let exit = crate::vpw::build_mode37_request();
-    let _ = send_frame(port, &exit);
+    send_frame(port, &exit).map_err(|e| format!("Mode37 TransferExit failed: {}", e))?;
     Ok(format!(
-        r#"{{"success":true,"message":"Calibration written ({} bytes, {} blocks)","bytes":{},"blocks":{}}}"#,
-        file_bytes.len(), blocks, file_bytes.len(), blocks
+        r#"{{"success":true,"message":"Calibration written via 34/36/37 ({} bytes, {} blocks) at 0x{:08X}","bytes":{},"blocks":{}}}"#,
+        file_bytes.len(), blocks, cal_addr, file_bytes.len(), blocks
     ))
 }
 
-/// Write full OS + calibration image.
+/// Write full OS + calibration image (Mode 34/36/37).
 #[tauri::command]
 fn write_os_calibration(state: State<AppState>, file_bytes: Vec<u8>) -> Result<String, String> {
     let mut port_guard = state.port.lock().map_err(|e| e.to_string())?;
     let port = port_guard.as_mut().ok_or("No connection — call connect_ecu first")?;
+    if file_bytes.is_empty() {
+        return Err("Empty OS+cal image".into());
+    }
     crate::security::unlock_level2(port).map_err(|e| format!("L2 unlock failed: {}", e))?;
+    let load_addr: u32 = 0x0000_0000;
+    let req34 = crate::vpw::build_mode34_request(load_addr, file_bytes.len() as u32);
+    send_frame(port, &req34).map_err(|e| format!("Mode34 RequestDownload failed: {}", e))?;
+    std::thread::sleep(std::time::Duration::from_millis(20));
     let chunk_size = 128;
     let mut blocks = 0u32;
     for chunk in file_bytes.chunks(chunk_size) {
         let frame = crate::vpw::build_mode36_chunk(chunk);
-        send_frame(port, &frame).map_err(|e| format!("OS write chunk failed at block {}: {}", blocks, e))?;
+        send_frame(port, &frame).map_err(|e| format!("OS Mode36 failed at block {}: {}", blocks, e))?;
         std::thread::sleep(std::time::Duration::from_millis(3));
         blocks += 1;
     }
     let exit = crate::vpw::build_mode37_request();
-    let _ = send_frame(port, &exit);
+    send_frame(port, &exit).map_err(|e| format!("Mode37 TransferExit failed: {}", e))?;
     Ok(format!(
-        r#"{{"success":true,"message":"OS+Cal written ({} bytes, {} blocks)","bytes":{},"blocks":{}}}"#,
+        r#"{{"success":true,"message":"OS+Cal written via 34/36/37 ({} bytes, {} blocks)","bytes":{},"blocks":{}}}"#,
         file_bytes.len(), blocks, file_bytes.len(), blocks
     ))
 }
 
-/// Post-flash verification: read back cal region and compare CRC.
+/// Post-flash verification: read back cal region and compare CRC. Requires connection.
 #[tauri::command]
 fn verify_after_write(state: State<AppState>, expected_bytes: Option<Vec<u8>>) -> Result<String, String> {
     let mut port_guard = state.port.lock().map_err(|e| e.to_string())?;
-    if let Some(port) = port_guard.as_mut() {
-        let cal_base: u32 = 0x0002_0000;
-        let read_len = expected_bytes.as_ref().map(|b| b.len()).unwrap_or(0x20000).min(0x20000);
-        let mut readback = Vec::with_capacity(read_len);
-        let chunk = 128usize;
-        for i in 0..(read_len / chunk) {
-            let addr = cal_base + (i as u32 * chunk as u32);
-            let req = build_mode22_request(((addr >> 8) & 0xFF) as u8, (addr & 0xFF) as u8);
-            match request_response(port, &req) {
-                Ok(resp) => readback.extend_from_slice(&resp[..resp.len().min(chunk)]),
-                Err(_) => readback.extend(vec![0u8; chunk]),
+    let port = port_guard
+        .as_mut()
+        .ok_or_else(|| "Not connected — cannot verify without live ECU".to_string())?;
+    let cal_base: u32 = 0x0002_0000;
+    let read_len = expected_bytes.as_ref().map(|b| b.len()).unwrap_or(0x20000).min(0x20000);
+    if read_len == 0 {
+        return Err("Nothing to verify".into());
+    }
+    let mut readback = Vec::with_capacity(read_len);
+    let chunk = 128usize;
+    let mut read_errors = 0u32;
+    for i in 0..(read_len / chunk) {
+        let addr = cal_base + (i as u32 * chunk as u32);
+        let req = build_mode22_request(((addr >> 8) & 0xFF) as u8, (addr & 0xFF) as u8);
+        match request_response(port, &req) {
+            Ok(resp) => readback.extend_from_slice(&resp[..resp.len().min(chunk)]),
+            Err(_) => {
+                read_errors += 1;
+                readback.extend(vec![0u8; chunk]);
             }
         }
-        let crc_readback = crc32_simple(&readback);
-        let (matches, crc_expected) = if let Some(ref expected) = expected_bytes {
-            let crc_exp = crc32_simple(expected);
-            (crc_readback == crc_exp, crc_exp)
-        } else {
-            (true, crc_readback)
-        };
-        return Ok(format!(
-            r#"{{"success":{},"message":"{}","crc_written":"0x{:08X}","crc_readback":"0x{:08X}"}}"#,
-            matches,
-            if matches { "Verification passed" } else { "CRC mismatch — reflash may be needed" },
-            crc_expected, crc_readback
-        ));
     }
-    Ok(r#"{"success":true,"message":"Verification passed (not connected — use guided pipeline for live verify)","crc_written":"0x00000000","crc_readback":"0x00000000"}"#.into())
+    let crc_readback = crc32_simple(&readback);
+    let (matches, crc_expected) = if let Some(ref expected) = expected_bytes {
+        let slice = &expected[..expected.len().min(read_len)];
+        let crc_exp = crc32_simple(slice);
+        (crc_readback == crc_exp && read_errors == 0, crc_exp)
+    } else {
+        (read_errors == 0, crc_readback)
+    };
+    Ok(format!(
+        r#"{{"success":{},"message":"{}","crc_written":"0x{:08X}","crc_readback":"0x{:08X}","read_errors":{}}}"#,
+        matches,
+        if matches {
+            "Verification passed"
+        } else if read_errors > 0 {
+            "Readback incomplete — verification unreliable"
+        } else {
+            "CRC mismatch — reflash may be needed"
+        },
+        crc_expected,
+        crc_readback,
+        read_errors
+    ))
 }
 
 fn crc32_simple(data: &[u8]) -> u32 {
@@ -732,11 +722,15 @@ fn auto_detect_protocol(state: State<AppState>, port_name: String) -> Result<Str
 
 #[tauri::command]
 fn discover_maps_from_bin(bin_bytes: Vec<u8>, family: String) -> Result<String, String> {
-    let suggestions = format!(
-        "Discovered {} potential maps for {} (using reference/ tableseek patterns + XDF ingest). Use tables UI to confirm.",
-        bin_bytes.len() / 100, family
-    );
-    Ok(suggestions)
+    // Reuse auto-load definitions so discovery returns real TableDef JSON, not a marketing string.
+    let tables_json = auto_load_tables_for_bin(bin_bytes)?;
+    let tables: Vec<TableDef> = serde_json::from_str(&tables_json).unwrap_or_default();
+    Ok(serde_json::json!({
+        "family": family,
+        "count": tables.len(),
+        "tables": tables,
+        "note": "From embedded reference definitions (P01: 16263425.xml; EDC16: community start addresses)."
+    }).to_string())
 }
 
 #[tauri::command]
@@ -875,6 +869,9 @@ pub fn run() {
             read_nissan_consult_data,
             send_can_uds,
             send_kwp_request,
+            // J2534 surface (requires Windows + vendor DLL for live use)
+            j2534::j2534_list_devices,
+            j2534::j2534_connect,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
