@@ -1,5 +1,6 @@
 // TuneItVerse - lib.rs
 // FULL RESTORE 2026-07-19: Complete working version with all commands + plugin init for successful cargo tauri build
+// FIXED 2026-07-23: trailing semicolons on Ok(...) + format! argument count
 #![allow(unused_imports, dead_code, unused_variables, unused_mut)]
 
 use std::sync::Mutex;
@@ -241,7 +242,7 @@ fn validate_bin(file_bytes: Vec<u8>) -> Result<String, String> {
     Ok(format!(
         r#"{{"detected_family":"{}","checksum_ok":true,"compatible":{},"compatibility":"{}","message":"Validated - use validate_checksums for full report"}}"#,
         family, compatible, if compatible { "Compatible" } else { "Incompatible size" }
-    ));
+    ))
 }
 
 #[tauri::command]
@@ -469,8 +470,10 @@ fn compare_bin_to_ecu(state: State<AppState>, file_bytes: Vec<u8>) -> Result<Str
     } else { true };
     Ok(format!(
         r#"{{"compatible":{},"compatibility":"{}","diff_regions":0,"summary":"{}"}}"#,
-        checksum_ok, if checksum_ok { "Checksum valid" } else { "Checksum invalid" }
-    ));
+        checksum_ok,
+        if checksum_ok { "Checksum valid" } else { "Checksum invalid" },
+        if checksum_ok { "Checksum valid (not connected)" } else { "Checksum invalid (not connected)" }
+    ))
 }
 
 // ─── Flash Write Commands ──────────────────────────────────────────────────
@@ -503,7 +506,7 @@ fn write_calibration_cmd(state: State<AppState>, file_bytes: Vec<u8>) -> Result<
     Ok(format!(
         r#"{{"success":true,"message":"Calibration written ({} bytes, {} blocks)","bytes":{},"blocks":{}}}"#,
         file_bytes.len(), blocks, file_bytes.len(), blocks
-    ));
+    ))
 }
 
 /// Write full OS + calibration image.
@@ -525,7 +528,7 @@ fn write_os_calibration(state: State<AppState>, file_bytes: Vec<u8>) -> Result<S
     Ok(format!(
         r#"{{"success":true,"message":"OS+Cal written ({} bytes, {} blocks)","bytes":{},"blocks":{}}}"#,
         file_bytes.len(), blocks, file_bytes.len(), blocks
-    ));
+    ))
 }
 
 /// Post-flash verification: read back cal region and compare CRC.
@@ -595,7 +598,7 @@ fn write_ecu_frame(state: State<AppState>, data: Vec<u8>) -> Result<String, Stri
     Ok(format!(
         r#"{{"success":true,"message":"Kernel uploaded ({} bytes) to 0x{:08X} + executed","bytes":{}}}"#,
         data.len(), load_addr, data.len()
-    ));
+    ))
 }
 
 // ─── DTC Commands ──────────────────────────────────────────────────────────
