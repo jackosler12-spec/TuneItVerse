@@ -1,0 +1,35 @@
+{
+  "ecu_family": "MED17_COMMON",
+  "display_name": "Bosch MED17 (VW/Audi/Seat/Skoda common gasoline turbo)",
+  "part_numbers_or_os_ids": ["MED17.5", "MED17.1", "0261xxxxxx common HW", "many OS variants like 8K0 907 115"],
+  "vehicles": ["VW Golf GTI MK6/MK7", "Audi A3/A4 2.0TFSI", "Seat Leon Cupra", "Skoda Octavia vRS", "Many EA888 gen1/2/3 applications"],
+  "hardware": "Bosch MED17.x gasoline direct injection ECU",
+  "protocol": "CAN @ 500kbps + UDS (ISO 15765 / ISO-TP multi-frame)",
+  "bin_size_bytes": 2097152,
+  "flash_memory_map": {
+    "full_flash": "2MB typical (calibration + OS in flash, adaptations in EEPROM)",
+    "cal_region": "Often 0x10000+ for maps, verify with your dump"
+  },
+  "checksum": {
+    "type": "bosch_med17_crc32_multiregion + additive fallback",
+    "description": "Multiple CRC32 regions (poly 0xEDB88320) over map blocks + OS. Correction values patched at end of regions. Public algorithms in tuning community (similar to WinOLS MED17 plugin). Always verify corrected bin with original CS before flash.",
+    "reference_files": ["public example bins from personal dumps only"],
+    "routine": "Rust implementation planned in checksum.rs extend_edc_med family; current best-effort in multipoint_crc"
+  },
+  "security_access": {
+    "type": "UDS 0x27 Security Access (multiple levels)",
+    "reference": "security.rs + common public seed/key tables for MED17 (level 1 diagnostic, level 2 extended, level 3 flash/programming)",
+    "levels": ["Level 1: OBD diagnostics / DTC / live data", "Level 2: Calibration read/write", "Level 3: Flash programming / kernel upload"]
+  },
+  "maps_and_xdf": {
+    "has_xdf": false,
+    "description": "No bundled XDF. Use community addresses or TunerPro/WinOLS to define: Ignition timing (main/spark advance), Fuel (lambda/VE/IQ equiv), Boost (wastegate/target), VVT, Knock control, etc. Typical start: timing ~0x20000-0x30000 range, boost ~0xC0000. Refine per OS ID.",
+    "refined_map_addrs": {
+      "ignition_timing": "0x28000 (example, verify)",
+      "fuel_ve": "0x30000",
+      "boost_target": "0xC8000",
+      "vvt_intake": "0xA0000"
+    }
+  },
+  "notes": "Added in v0.4.0 to expand beyond P01/EDC16. MED17 is very common in modern VW group cars. Protocol: full UDS via CAN in Rust (iso_tp + kwp extensions). Security access uses public known algorithms (extend security.rs with MED17 specific if needed). Checksum: multipoint CRC similar to EDC16. **For personal use only - always bench read your own ECU first, never flash unverified bins.** Use with cheap OBDLink or J2534 interface."
+}
