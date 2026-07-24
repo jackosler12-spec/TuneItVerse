@@ -1,12 +1,10 @@
 //! ecu_database.rs — Backend database of known ECUs for TuneItVerse
 //!
-//! Loads embedded JSON definitions for P01_0411, EDC16C41, and GM P59 (and future ECUs).
+//! Loads embedded JSON definitions for P01_0411, EDC16C41, GM P59, MED17_COMMON (and future).
 //! Provides lookup by family / OS ID so the app can auto-configure checksum,
 //! security, maps, and protocol on ECU connect or bin load.
 //!
-//! Integrates the reference/ files (bins, XDF, kernels, checksum notes) via metadata.
-//! P01 is already deeply integrated in checksum.rs / security.rs / flash.rs etc.
-//! EDC16C41 support is metadata + stub for future CAN/UDS + checksum implementation.
+//! Now with 4 families in v0.4.0. Scalable: add new JSON + const include + push.
 
 use serde::{Deserialize, Serialize};
 
@@ -34,6 +32,7 @@ pub struct MapsXdfInfo {
     pub kernel_for_flash: Option<String>,
     pub additional_defs: Option<Vec<String>>,
     pub eeprom: Option<String>,
+    pub refined_map_addrs: Option<serde_json::Value>,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, Default)]
@@ -53,10 +52,11 @@ pub struct EcuDbEntry {
     pub notes: String,
 }
 
-/// Embedded JSONs (reference/ folder at repo root)
+/// Embedded JSONs (reference/ folder at repo root) - v0.4.0 expanded
 const P01_JSON: &str = include_str!("../../reference/ecu_database/p01_0411.json");
 const EDC16_JSON: &str = include_str!("../../reference/ecu_database/edc16c41_nissan_patrol.json");
 const P59_JSON: &str = include_str!("../../reference/ecu_database/gm_p59.json");
+const MED17_JSON: &str = include_str!("../../reference/ecu_database/med17_common.json");
 
 /// Load all known ECU entries (embedded for distributable binary)
 pub fn load_ecu_database() -> Vec<EcuDbEntry> {
@@ -71,11 +71,14 @@ pub fn load_ecu_database() -> Vec<EcuDbEntry> {
     if let Ok(entry) = serde_json::from_str::<EcuDbEntry>(P59_JSON) {
         db.push(entry);
     }
-    // Future: load more JSONs or from directory
+    if let Ok(entry) = serde_json::from_str::<EcuDbEntry>(MED17_JSON) {
+        db.push(entry);
+    }
+    // Future: load more JSONs or from directory scan (build script)
     db
 }
 
-/// Lookup by ECU family key (e.g. "P01_0411" or "EDC16C41" or "GM_P59")
+/// Lookup by ECU family key (e.g. "P01_0411" or "EDC16C41" or "MED17_COMMON")
 pub fn get_ecu_by_family(family: &str) -> Option<EcuDbEntry> {
     load_ecu_database()
         .into_iter()

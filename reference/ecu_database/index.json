@@ -1,7 +1,7 @@
 {
-  "version": "1.0",
-  "updated": "2026-07-19",
-  "description": "Master index of TuneItVerse ECU database entries. Used by backend loader and frontend for discovery.",
+  "version": "1.1",
+  "updated": "2026-07-24",
+  "description": "Master index of TuneItVerse ECU database entries. Used by backend loader and frontend for discovery. v0.4.0 expanded with MED17.",
   "families": [
     {
       "id": "P01_0411",
@@ -26,7 +26,15 @@
       "bin_size_bytes": 524288,
       "primary_protocol": "VPW",
       "status": "metadata + checksum notes"
+    },
+    {
+      "id": "MED17_COMMON",
+      "file": "med17_common.json",
+      "display_name": "Bosch MED17 (VW/Audi gasoline turbo common)",
+      "bin_size_bytes": 2097152,
+      "primary_protocol": "CAN/UDS",
+      "status": "new in v0.4.0 - metadata + protocol ready, checksum/maps community verified"
     }
   ],
-  "notes": "Add new family JSON + entry here. Backend ecu_database.rs embeds the JSON files via include_str!."
+  "notes": "Add new family JSON + entry here + update loader in ecu_database.rs. Backend supports auto-detect on connect (VIN/OS ID via PID or mode). For full map editing use XDF import or native table view (future)."
 }
