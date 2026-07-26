@@ -1,6 +1,6 @@
 [package]
 name = "TuneItVerse"
-version = "0.5.0"
+version = "0.6.0"
 description = "ECU Tuning platform for JRTuners - Industry leading open source alternative to expensive commercial tools"
 authors = ["JRTuners"]
 edition = "2021"

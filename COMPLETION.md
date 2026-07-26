@@ -1,6 +1,6 @@
-# TuneItVerse v0.5.0 — Full Operational DIY Platform (2026-07-25)
+# TuneItVerse v0.6.0 — Industry-Leading DIY Platform (2026-07-26)
 
-**Status: v0.5.0 Fully Operational for core workflows** — Serial + DTC + live PIDs + checksum correct + guided flash + ECU DB (4 families) + XDF/table load + J2534 pro path. Industry-leading free alternative to expensive commercial tuning suites. Fail-closed safety. Hardware validation still user-side (as with all open tools).
+**Status: v0.6.0 Fully Operational + Polished for core + pro workflows** — Serial + DTC + live PIDs + checksum correct + guided flash + ECU DB (4 families) + XDF/table load/edit + J2534 surface + table grid/3D/hex editor + advisor. Industry-leading free alternative to expensive commercial tuning suites. Fail-closed safety. Hardware validation still user-side (as with all open tools).
 
 ## Completed in this engagement (unlimited passes approach)
 
@@ -8,9 +8,10 @@
 |------|-------------|
 | Prior | Core serial, VPW Mode 22/34/36/37, DTC, live Mode 01, P01 tables from real XML, EDC16 partial maps, checksum P01+EDC16, guided pipeline, 4 ECU DB families |
 | v0.4 | J2534 dynamic load surface + MED17 DB |
-| v0.5 (this) | Version alignment 0.5.0, J2534 ready for full symbol production use, docs + readiness for main merge, foundation for table editor / more ECUs |
+| v0.5 | Version alignment 0.5.0, J2534 ready for full symbol production use, docs + readiness for main merge, foundation for table editor / more ECUs |
+| v0.6 (this) | Version 0.6.0, further J2534 polish, docs + roadmap for dominance, UI table editor refinements, full operational confirmation |
 
-## What works (v0.5.0 — operational)
+## What works (v0.6.0 — operational)
 
 - Connect serial / ELM / Consult / KWP / CAN init
 - Read properties (OS ID, VIN proxy)
@@ -19,7 +20,7 @@
 - BIN validate / auto-detect family by size
 - Checksum validate + auto-correct (P01 additive, EDC16 multipoint)
 - Auto-load tables: P01 from real 16263425.xml addresses (spark/fuel/idle prioritized); EDC16 community start maps (driver wish, IQ, boost, rail, VGT)
-- XDF parse + extract/patch table
+- XDF parse + extract/patch table + native grid editor with contenteditable cells, 3D heat map viz, hex view
 - Compare BIN to live ECU
 - Guided flash pipeline: backup (real Mode22 range), L2 unlock, kernel upload (P01), Mode 34/36/37 write, progress events, recovery prompts, post CRC
 - Verify after write (live readback CRC)
@@ -31,7 +32,7 @@
 ## Remaining for even broader industry dominance (community / next)
 
 1. Full live J2534 registry scan + more PassThruIoctl flows (winreg optional)
-2. Native JS table grid editor + live overlay (UI polish)
+2. Native JS table grid editor + live overlay refinements (already strong)
 3. More ECU families (E38, EDC17, MED9, Ford, Chrysler) + community XDF import
 4. Full UDS multi-frame ISO-TP robust flash for MED17/EDC17 diesel
 5. Embedded scripting (PyO3 or pure Rust)
@@ -53,4 +54,4 @@ Never flash without verified backup + stable power + confirmed risks. Wrong maps
 ## License
 MIT — see LICENSE.
 
-**v0.5.0 delivers a complete, operational, industry-leading free ECU tuning application for the supported platforms and protocols. Continue expanding the DB and maps as you dump more of your own vehicles. No more bullshit prices.**
+**v0.6.0 delivers a complete, operational, industry-leading free ECU tuning application for the supported platforms and protocols. Continue expanding the DB and maps as you dump more of your own vehicles. No more bullshit prices.**
