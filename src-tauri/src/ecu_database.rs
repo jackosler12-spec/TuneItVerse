@@ -1,10 +1,10 @@
 //! ecu_database.rs — Backend database of known ECUs for TuneItVerse
 //!
-//! Loads embedded JSON definitions for P01_0411, EDC16C41, GM P59, MED17_COMMON (and future).
+//! Loads embedded JSON definitions for P01_0411, EDC16C41, GM P59, MED17_COMMON, EDC17_COMMON (and future).
 //! Provides lookup by family / OS ID so the app can auto-configure checksum,
 //! security, maps, and protocol on ECU connect or bin load.
 //!
-//! Now with 4 families in v0.4.0. Scalable: add new JSON + const include + push.
+//! v0.7.0: 5 families. Scalable: add new JSON + const include + push.
 
 use serde::{Deserialize, Serialize};
 
@@ -52,11 +52,12 @@ pub struct EcuDbEntry {
     pub notes: String,
 }
 
-/// Embedded JSONs (reference/ folder at repo root) - v0.4.0 expanded
+/// Embedded JSONs (reference/ folder at repo root) - v0.7.0 expanded
 const P01_JSON: &str = include_str!("../../reference/ecu_database/p01_0411.json");
 const EDC16_JSON: &str = include_str!("../../reference/ecu_database/edc16c41_nissan_patrol.json");
 const P59_JSON: &str = include_str!("../../reference/ecu_database/gm_p59.json");
 const MED17_JSON: &str = include_str!("../../reference/ecu_database/med17_common.json");
+const EDC17_JSON: &str = include_str!("../../reference/ecu_database/edc17_common.json");
 
 /// Load all known ECU entries (embedded for distributable binary)
 pub fn load_ecu_database() -> Vec<EcuDbEntry> {
@@ -74,11 +75,14 @@ pub fn load_ecu_database() -> Vec<EcuDbEntry> {
     if let Ok(entry) = serde_json::from_str::<EcuDbEntry>(MED17_JSON) {
         db.push(entry);
     }
+    if let Ok(entry) = serde_json::from_str::<EcuDbEntry>(EDC17_JSON) {
+        db.push(entry);
+    }
     // Future: load more JSONs or from directory scan (build script)
     db
 }
 
-/// Lookup by ECU family key (e.g. "P01_0411" or "EDC16C41" or "MED17_COMMON")
+/// Lookup by ECU family key (e.g. "P01_0411" or "EDC16C41" or "EDC17_COMMON")
 pub fn get_ecu_by_family(family: &str) -> Option<EcuDbEntry> {
     load_ecu_database()
         .into_iter()
