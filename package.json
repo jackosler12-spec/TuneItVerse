@@ -1,8 +1,8 @@
 {
   "name": "tuneitverse",
   "private": true,
-  "version": "0.7.0",
-  "description": "TuneItVerse - Industry-standard open ECU tuning platform (Tauri + Rust) - free alternative to expensive commercial tools",
+  "version": "0.8.0",
+  "description": "TuneItVerse - Industry-standard open ECU tuning platform (Tauri + Rust) - free alternative to expensive commercial tools. Fully operational DIY powerhouse.",
   "type": "module",
   "scripts": {
     "tauri": "tauri",

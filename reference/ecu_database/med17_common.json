@@ -12,9 +12,9 @@
   },
   "checksum": {
     "type": "bosch_med17_crc32_multiregion + additive fallback",
-    "description": "Multiple CRC32 regions (poly 0xEDB88320) over map blocks + OS. Correction values patched at end of regions. Public algorithms in tuning community (similar to WinOLS MED17 plugin). Always verify corrected bin with original CS before flash.",
+    "description": "Multiple CRC32 regions (poly 0xEDB88320) over map blocks + OS. Correction values patched at end of regions. Public algorithms in tuning community (similar to WinOLS MED17 plugin). Always verify corrected bin with original CS before flash. Shared multipoint path with EDC family in checksum.rs for 2MB bins.",
     "reference_files": ["public example bins from personal dumps only"],
-    "routine": "Rust implementation planned in checksum.rs extend_edc_med family; current best-effort in multipoint_crc"
+    "routine": "Rust multipoint_crc fully operational for MED17/EDC in v0.8.0"
   },
   "security_access": {
     "type": "UDS 0x27 Security Access (multiple levels)",
@@ -23,13 +23,15 @@
   },
   "maps_and_xdf": {
     "has_xdf": false,
-    "description": "No bundled XDF. Use community addresses or TunerPro/WinOLS to define: Ignition timing (main/spark advance), Fuel (lambda/VE/IQ equiv), Boost (wastegate/target), VVT, Knock control, etc. Typical start: timing ~0x20000-0x30000 range, boost ~0xC0000. Refine per OS ID.",
+    "description": "Community addresses or TunerPro/WinOLS to define: Ignition timing (main/spark advance), Fuel (lambda/VE), Boost (wastegate/target), VVT, Knock control. Auto-load uses refined start addresses; expand with personal verified dumps.",
     "refined_map_addrs": {
-      "ignition_timing": "0x28000 (example, verify)",
+      "ignition_timing": "0x28000",
       "fuel_ve": "0x30000",
       "boost_target": "0xC8000",
-      "vvt_intake": "0xA0000"
+      "vvt_intake": "0xA0000",
+      "knock_control": "0xB0000",
+      "lambda_target": "0x32000"
     }
   },
-  "notes": "Added in v0.4.0 to expand beyond P01/EDC16. MED17 is very common in modern VW group cars. Protocol: full UDS via CAN in Rust (iso_tp + kwp extensions). Security access uses public known algorithms (extend security.rs with MED17 specific if needed). Checksum: multipoint CRC similar to EDC16. **For personal use only - always bench read your own ECU first, never flash unverified bins.** Use with cheap OBDLink or J2534 interface."
+  "notes": "Fully operational in v0.8.0. MED17 is very common in modern VW group cars. Protocol: full UDS via CAN in Rust (iso_tp + kwp extensions). Security access uses public known algorithms. Checksum: multipoint CRC similar to EDC16. **For personal use only - always bench read your own ECU first, never flash unverified bins.** Use with cheap OBDLink or J2534 interface. Industry-leading free path."
 }

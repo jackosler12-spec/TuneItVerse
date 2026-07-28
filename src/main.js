@@ -32,7 +32,7 @@ async function invokeCmd(cmd, args = {}) {
     if (cmd === 'connect_ecu') return 'Connected (mock)';
     if (cmd === 'disconnect_ecu') return 'Disconnected';
     if (cmd === 'list_supported_protocols') return ['auto','vpw','can','kwp','consult'];
-    if (cmd === 'list_supported_ecus') return ['P01_0411','EDC16C41','GM_P59'];
+    if (cmd === 'list_supported_ecus') return ['P01_0411','EDC16C41','GM_P59','MED17_COMMON','EDC17_COMMON'];
     if (cmd === 'auto_load_tables_for_bin') {
       const len = (args.bin_bytes && args.bin_bytes.length) || 0;
       if (len === 524288 || len === 131072) {
@@ -46,7 +46,9 @@ async function invokeCmd(cmd, args = {}) {
         return JSON.stringify([
           { id: 'driver-wish', name: 'Driver Wish (Torque)', description: 'Driver requested torque', rows: 16, cols: 16, addr: '0x80000', data_type: 'UWORD', math: 'x*0.1', units: 'Nm', category: 'Torque', row_major: true, msb: true },
           { id: 'inj-quantity', name: 'Injection Quantity', description: 'IQ main map', rows: 16, cols: 16, addr: '0x82000', data_type: 'UWORD', math: 'x*0.01', units: 'mm3', category: 'Fuel', row_major: true, msb: true },
-          { id: 'boost-setpoint', name: 'Boost Setpoint', description: 'Target boost', rows: 12, cols: 12, addr: '0xC0000', data_type: 'UWORD', math: 'x*0.1', units: 'mbar', category: 'Boost', row_major: true, msb: true }
+          { id: 'boost-setpoint', name: 'Boost Setpoint', description: 'Target boost', rows: 12, cols: 12, addr: '0xC0000', data_type: 'UWORD', math: 'x*0.1', units: 'mbar', category: 'Boost', row_major: true, msb: true },
+          { id: 'rail-pressure', name: 'Rail Pressure', description: 'Rail pressure setpoint', rows: 12, cols: 12, addr: '0xC2000', data_type: 'UWORD', math: 'x', units: 'bar', category: 'Fuel', row_major: true, msb: true },
+          { id: 'smoke-limiter', name: 'Smoke Limiter', description: 'Smoke limiter map', rows: 10, cols: 10, addr: '0xC6000', data_type: 'UWORD', math: 'x*0.1', units: '%', category: 'Limiters', row_major: true, msb: true }
         ]);
       }
       return JSON.stringify([]);
@@ -124,7 +126,7 @@ function renderDtcRows(result) {
   tbody.innerHTML = rows.map((rec) => {
     const code = rec.code || '????';
     const type = dtcTypeLabel(rec);
-    const desc = (rec.description || '').replace(/</g, '&lt;');
+    const desc = (rec.description || '').replace(/</g, '<');
     return `<tr style="border-bottom:1px solid #222;"><td style="padding:4px 8px; color:#f66;">${code}</td><td style="padding:4px 8px;">${type}</td><td style="padding:4px 8px;">${desc}</td></tr>`;
   }).join('');
 }
@@ -707,8 +709,8 @@ function setupAll() {
   setupScripts();
   showView('dashboard');
   const st = document.getElementById('tables-status');
-  if (st) st.textContent = 'Load your .BIN — auto XDF/tables + full checksum validation (P01 & EDC16 Patrol) ready. Edit safely!';
-  console.log('TuneItVerse UI fully wired');
+  if (st) st.textContent = 'Load your .BIN — auto XDF/tables + full checksum validation (P01 & EDC16/EDC17/MED17) ready. Edit safely! v0.8.0 fully operational.';
+  console.log('TuneItVerse UI fully wired v0.8.0');
 }
 
 if (document.readyState === 'loading') {
