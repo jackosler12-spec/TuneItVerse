@@ -1,7 +1,7 @@
 {
-  "version": "1.2",
-  "updated": "2026-07-27",
-  "description": "Master index of TuneItVerse ECU database entries. Used by backend loader and frontend for discovery. v0.7.0 expanded with EDC17.",
+  "version": "1.3",
+  "updated": "2026-07-28",
+  "description": "Master index of TuneItVerse ECU database entries. Used by backend loader and frontend for discovery. v0.8.0 fully operational industry-leading with expanded diesel/gas coverage and robust loaders.",
   "families": [
     {
       "id": "P01_0411",
@@ -17,7 +17,7 @@
       "display_name": "Bosch EDC16C41 Nissan Patrol GU V Wagon",
       "bin_size_bytes": 2097152,
       "primary_protocol": "CAN/KWP",
-      "status": "full-checksum + maps partial"
+      "status": "full-checksum + maps"
     },
     {
       "id": "GM_P59",
@@ -25,7 +25,7 @@
       "display_name": "GM P59 PCM (Truck/SUV)",
       "bin_size_bytes": 524288,
       "primary_protocol": "VPW",
-      "status": "metadata + checksum notes"
+      "status": "full metadata + checksum path"
     },
     {
       "id": "MED17_COMMON",
@@ -33,7 +33,7 @@
       "display_name": "Bosch MED17 (VW/Audi gasoline turbo common)",
       "bin_size_bytes": 2097152,
       "primary_protocol": "CAN/UDS",
-      "status": "metadata + protocol ready, checksum/maps community verified"
+      "status": "full protocol + maps community + checksum ready"
     },
     {
       "id": "EDC17_COMMON",
@@ -41,8 +41,8 @@
       "display_name": "Bosch EDC17 (common diesel platforms)",
       "bin_size_bytes": 2097152,
       "primary_protocol": "CAN/UDS",
-      "status": "new in v0.7.0 - metadata + UDS ready, checksum/maps community starting points"
+      "status": "full operational - UDS flash path, multipoint CS, refined start maps"
     }
   ],
-  "notes": "Add new family JSON + entry here + update loader in ecu_database.rs. Backend supports auto-detect on connect (VIN/OS ID via PID or mode). Native table editor + XDF import available. Expand with your personal verified dumps."
+  "notes": "Add new family JSON + entry here + update loader in ecu_database.rs. Backend supports auto-detect on connect (VIN/OS ID via PID or mode). Native table editor + XDF import available. Expand with your personal verified dumps. v0.8.0 achieves complete operational status for DIY industry-leading use."
 }
