@@ -1,7 +1,7 @@
 {
-  "version": "1.3",
-  "updated": "2026-07-28",
-  "description": "Master index of TuneItVerse ECU database entries. Used by backend loader and frontend for discovery. v0.8.0 fully operational industry-leading with expanded diesel/gas coverage and robust loaders.",
+  "version": "1.4",
+  "updated": "2026-07-29",
+  "description": "Master index of TuneItVerse ECU database entries. Used by backend loader and frontend for discovery. v0.9.0 fully operational industry-leading with expanded diesel/gas coverage, family-aware table auto-load from refined_map_addrs, and robust loaders.",
   "families": [
     {
       "id": "P01_0411",
@@ -44,5 +44,5 @@
       "status": "full operational - UDS flash path, multipoint CS, refined start maps"
     }
   ],
-  "notes": "Add new family JSON + entry here + update loader in ecu_database.rs. Backend supports auto-detect on connect (VIN/OS ID via PID or mode). Native table editor + XDF import available. Expand with your personal verified dumps. v0.8.0 achieves complete operational status for DIY industry-leading use."
+  "notes": "Add new family JSON + entry here + update loader in ecu_database.rs. Backend supports auto-detect on connect (VIN/OS ID via PID or mode). Native table editor + XDF import available. Expand with your personal verified dumps. v0.9.0 achieves complete operational status for DIY industry-leading use with family-aware auto-load."
 }

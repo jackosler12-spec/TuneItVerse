@@ -1,6 +1,6 @@
 # TuneItVerse
 
-TuneItVerse (JRTuners) — Industry-standard open ECU tuning platform. Free alternative to expensive commercial tools.
+TuneItVerse (JRTuners) — Industry-leading open ECU tuning platform. Free alternative to expensive commercial tools.
 
 TuneItVerse is a desktop ECU tuning and diagnostics application: a Tauri (Rust) backend with a vanilla HTML/JavaScript front-end that communicates with vehicle ECUs (CAN, VPW, ISO‑TP, serial/ELM327, J2534 and FTDI-based devices) to read/record live data, run diagnostics (DTCs/OBD2), convert and inspect binary ECU files, and perform guided flashing workflows. The repository contains the Tauri app, Rust device/protocol implementations, and a large reference set (XML/XDF/bin/databases) used by the tuner tools.
 
@@ -12,7 +12,7 @@ TuneItVerse is a desktop ECU tuning and diagnostics application: a Tauri (Rust) 
 ## How it's organized
 ```
 README.md                Project readme (this file)
-package.json             Frontend + tauri npm scripts (v0.8.0)
+package.json             Frontend + tauri npm scripts (v0.9.0)
 src/                     Web UI (index.html, main.js, styles.css)
 src-tauri/               Tauri (Rust) backend: ECU protocols, device drivers, tauri config
   Cargo.toml
@@ -63,7 +63,7 @@ Notes:
 
 See [COMPLETION.md](COMPLETION.md) for the full honest feature matrix.
 
-**v0.8.0 Fully operational for core DIY + pro workflows:** serial connect, DTC diagnostics, live Mode-01 PIDs, P01 table auto-load from real XML addresses, EDC16/EDC17/MED17 community maps, checksum correct (P01 + multipoint), guided flash Mode 34/36/37 with backup/kernel/verify + UDS ready, ECU DB (P01, EDC16C41, P59, MED17, EDC17 fully refined), J2534 production path, native table editor (grid/3D/hex).
+**v0.9.0 Fully operational for core DIY + pro workflows:** serial connect, DTC diagnostics, live Mode-01 PIDs, P01 table auto-load from real XML addresses, EDC16/EDC17/MED17 community maps (family-aware), checksum correct (P01 + multipoint), guided flash Mode 34/36/37 with backup/kernel/verify + UDS ready, ECU DB (P01, EDC16C41, P59, MED17, EDC17 fully refined), J2534 production path, native table editor (grid/3D/hex).
 
 **Expand next:** more map editors, additional ECU families, full UDS multi-frame refinements, hardware validation on your bench.
 
