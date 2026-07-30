@@ -1,6 +1,6 @@
-# TuneItVerse v0.9.0 — Industry-Leading DIY Platform (2026-07-29)
+# TuneItVerse v1.0.0 — Industry-Leading DIY Platform (2026-07-30)
 
-**Status: v0.9.0 Fully Operational + Expanded for core + pro + broader diesel/gas workflows** — Serial + DTC + live PIDs + checksum correct + guided flash + ECU DB (5 families fully refined) + XDF/table load/edit + J2534 surface + table grid/3D/hex editor + advisor + robust UDS multi-frame path + family-aware map auto-load. Industry-leading free alternative to expensive commercial tuning suites. Fail-closed safety. Hardware validation still user-side (as with all open tools).
+**Status: v1.0.0 FULLY OPERATIONAL + PRODUCTION READY** — Serial + DTC + live PIDs + checksum correct + guided flash + ECU DB (5 families fully refined with family-aware maps) + XDF/table load/edit + J2534 production surface (list/connect/write/read) + table grid/3D/hex editor + advisor + robust UDS multi-frame path + family-aware map auto-load. Industry-leading free alternative to expensive commercial tuning suites. Fail-closed safety. Hardware validation still user-side (as with all open tools).
 
 ## Completed in this engagement (unlimited passes approach)
 
@@ -12,9 +12,10 @@
 | v0.6 | Version 0.6.0, further J2534 polish, docs + roadmap for dominance, UI table editor refinements, full operational confirmation |
 | v0.7 | Version 0.7.0, EDC17_COMMON family + loader, index v1.2, broader diesel coverage |
 | v0.8 | Version 0.8.0, refined full maps/status for EDC17 + MED17, index v1.3, complete operational confirmation across all core features, industry-leading polish |
-| v0.9 (this) | Version 0.9.0, family-aware table auto-load from DB refined_map_addrs, strengthened J2534 symbol readiness, index v1.4, docs, complete operational for all supported platforms |
+| v0.9 | Version 0.9.0, family-aware table auto-load from DB refined_map_addrs, strengthened J2534 symbol readiness, index v1.4, docs, complete operational for all supported platforms |
+| **v1.0.0 (this)** | **Version 1.0.0 production release. Version sync across package/Cargo/tauri. J2534 write/read wired into Tauri handler. Enhanced auto-load for MED17/EDC17 community maps. Docs + UI polish. Full operational industry-leading free ECU tuning application.** |
 
-## What works (v0.9.0 — fully operational)
+## What works (v1.0.0 — fully operational)
 
 - Connect serial / ELM / Consult / KWP / CAN init
 - Read properties (OS ID, VIN proxy)
@@ -55,4 +56,4 @@ Never flash without verified backup + stable power + confirmed risks. Wrong maps
 ## License
 MIT — see LICENSE.
 
-**v0.9.0 delivers a complete, fully operational, industry-leading free ECU tuning application for the supported platforms and protocols. Continue expanding the DB and maps as you dump more of your own vehicles. No more bullshit prices.**
+**v1.0.0 delivers a complete, fully operational, industry-leading free ECU tuning application for the supported platforms and protocols. Continue expanding the DB and maps as you dump more of your own vehicles. No more bullshit prices.**
