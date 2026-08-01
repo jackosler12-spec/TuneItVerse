@@ -1,6 +1,7 @@
 // TuneItVerse - lib.rs
 // FULL RESTORE 2026-07-19: Complete working version with all commands + plugin init for successful cargo tauri build
 // FIXED 2026-07-23: trailing semicolons on Ok(...) + format! argument count
+// v1.1.0: J2534 write/read fully registered, family-aware table auto-load from ECU DB refined_map_addrs for all 5 families, get_ecu_info command
 #![allow(unused_imports, dead_code, unused_variables, unused_mut)]
 
 use std::sync::Mutex;
@@ -22,7 +23,7 @@ mod can;
 mod kwp;
 mod consult;
 
-use crate::ecu_database::{EcuDbEntry, get_ecu_by_family, list_supported_ecu_families};
+use crate::ecu_database::{EcuDbEntry, get_ecu_by_family, list_supported_ecu_families, get_ecu_by_os_id};
 use crate::flash::GuidedFlashRequest;
 use crate::vpw::{build_mode22_request, request_response, build_mode36_chunk, build_mode37_request, send_frame};
 use crate::xdf::{parse_xdf_definitions, extract_table_from_bin, patch_table_into_bin, parse_table_definitions, TableDef};
@@ -154,7 +155,9 @@ fn read_properties(state: State<AppState>) -> Result<String, String> {
             }
             _ => "UNAVAILABLE".to_string(),
         };
-        let ecu_info = get_ecu_by_family("P01_0411")
+        // Try DB lookup by OS ID first
+        let ecu_info = get_ecu_by_os_id(&os_id)
+            .or_else(|| get_ecu_by_family("P01_0411"))
             .map(|e| (e.display_name, e.protocol))
             .unwrap_or_else(|| ("P01 / 0411".to_string(), "GM J1850 VPW".to_string()));
         return Ok(format!(
@@ -172,6 +175,16 @@ fn read_properties(state: State<AppState>) -> Result<String, String> {
         }
     }
     Err("Not connected — call connect_ecu first".to_string())
+}
+
+/// Get full ECU DB entry by family or OS ID (for frontend configuration)
+#[tauri::command]
+fn get_ecu_info(family_or_os: String) -> Result<String, String> {
+    if let Some(e) = get_ecu_by_family(&family_or_os).or_else(|| get_ecu_by_os_id(&family_or_os)) {
+        serde_json::to_string(&e).map_err(|e| e.to_string())
+    } else {
+        Err(format!("No ECU entry for '{}'", family_or_os))
+    }
 }
 
 // ─── Live Data ─────────────────────────────────────────────────────────────
@@ -234,7 +247,7 @@ fn read_ecu_data(state: State<AppState>) -> Result<String, String> {
 fn validate_bin(file_bytes: Vec<u8>) -> Result<String, String> {
     let size = file_bytes.len();
     let compatible = size == 131072 || size == 524288 || size == 2097152;
-    let family = if size == 524288 || size == 131072 { "P01_0411 / GM" } else if size == 2097152 { "EDC16C41 / Nissan" } else { "unknown" };
+    let family = if size == 524288 || size == 131072 { "P01_0411 / GM" } else if size == 2097152 { "EDC16C41 / Nissan / MED17 / EDC17" } else { "unknown" };
     Ok(format!(
         r#"{{"detected_family":"{}","checksum_ok":true,"compatible":{},"compatibility":"{}","message":"Validated - use validate_checksums for full report"}}"#,
         family, compatible, if compatible { "Compatible" } else { "Incompatible size" }
@@ -285,10 +298,28 @@ fn correct_bin_checksums(data: Vec<u8>) -> Result<Vec<u8>, String> {
 /// Embedded P01/OS-16263425 TableData definitions (real cal-relative addresses).
 const P01_TABLE_XML: &str = include_str!("../../reference/16263425.xml");
 
+/// Helper to build TableDef from refined_map_addrs style
+fn table_from_addr(id: &str, name: &str, category: &str, addr: &str, rows: u32, cols: u32, dtype: &str, math: &str, units: &str) -> TableDef {
+    TableDef {
+        id: id.into(),
+        name: name.into(),
+        category: Some(category.into()),
+        description: format!("Community/DB refined start address {} — always verify against your personal bin before write.", addr),
+        rows: rows as usize,
+        cols: cols as usize,
+        addr: addr.into(),
+        data_type: dtype.into(),
+        math: math.into(),
+        units: units.into(),
+        row_major: true,
+        msb: true,
+    }
+}
+
 /// Auto-detect ECU family from BIN size and return TableDef list with real addresses.
-/// P01/P59 sizes load `reference/16263425.xml`. EDC16 uses documented community starting addresses.
+/// P01/P59 sizes load `reference/16263425.xml`. 2MB uses family-aware DB refined_map_addrs (EDC16/EDC17/MED17).
 #[tauri::command]
-fn auto_load_tables_for_bin(bin_bytes: Vec<u8>) -> Result<String, String> {
+fn auto_load_tables_for_bin(bin_bytes: Vec<u8>, family_hint: Option<String>) -> Result<String, String> {
     let len = bin_bytes.len();
     let tables: Vec<TableDef> = if len == 524288 || len == 131072 {
         let mut parsed = parse_table_definitions(P01_TABLE_XML);
@@ -309,82 +340,69 @@ fn auto_load_tables_for_bin(bin_bytes: Vec<u8>) -> Result<String, String> {
         }
         parsed
     } else if len == 2097152 {
-        // Addresses from ecu_database/edc16c41_nissan_patrol.json refined_map_addrs (community starting points).
+        // Family-aware from ECU DB refined_map_addrs
+        let fam = family_hint.unwrap_or_else(|| "EDC16C41".to_string()).to_uppercase();
+        let entry = get_ecu_by_family(&fam)
+            .or_else(|| get_ecu_by_family("EDC16C41"))
+            .or_else(|| get_ecu_by_family("EDC17_COMMON"))
+            .or_else(|| get_ecu_by_family("MED17_COMMON"));
+
+        if let Some(e) = entry {
+            if let Some(addrs) = e.maps_and_xdf.refined_map_addrs {
+                let mut out = Vec::new();
+                // Generic mapping from common keys
+                if let Some(a) = addrs.get("driver_wish").or_else(|| addrs.get("driver-wish")).and_then(|v| v.as_str()) {
+                    out.push(table_from_addr("driver-wish", "Driver Wish (Torque Request)", "Torque", a, 16, 16, "UWORD", "X*0.1", "Nm"));
+                }
+                if let Some(a) = addrs.get("injection_quantity").or_else(|| addrs.get("inj-quantity")).and_then(|v| v.as_str()) {
+                    out.push(table_from_addr("inj-quantity", "Injection Quantity", "Fuel", a, 16, 16, "UWORD", "X*0.01", "mm3"));
+                }
+                if let Some(a) = addrs.get("boost_setpoint").or_else(|| addrs.get("boost-setpoint")).or_else(|| addrs.get("boost_target")).and_then(|v| v.as_str()) {
+                    out.push(table_from_addr("boost-setpoint", "Boost Setpoint", "Boost", a, 12, 12, "UWORD", "X*0.1", "mbar"));
+                }
+                if let Some(a) = addrs.get("rail_pressure").or_else(|| addrs.get("rail-pressure")).and_then(|v| v.as_str()) {
+                    out.push(table_from_addr("rail-pressure", "Rail Pressure Setpoint", "Fuel", a, 12, 12, "UWORD", "X", "bar"));
+                }
+                if let Some(a) = addrs.get("vgt_duty").or_else(|| addrs.get("vgt-duty")).and_then(|v| v.as_str()) {
+                    out.push(table_from_addr("vgt-duty", "VGT Duty Cycle", "Boost", a, 10, 10, "UBYTE", "X*0.5", "%"));
+                }
+                if let Some(a) = addrs.get("smoke_limiter").or_else(|| addrs.get("smoke-limiter")).and_then(|v| v.as_str()) {
+                    out.push(table_from_addr("smoke-limiter", "Smoke Limiter", "Limiters", a, 10, 10, "UWORD", "X*0.1", "%"));
+                }
+                if let Some(a) = addrs.get("ignition_timing").or_else(|| addrs.get("ignition-timing")).and_then(|v| v.as_str()) {
+                    out.push(table_from_addr("ignition-timing", "Ignition Timing", "Ignition", a, 16, 16, "UWORD", "(X-120)/2", "deg"));
+                }
+                if let Some(a) = addrs.get("fuel_ve").or_else(|| addrs.get("fuel-ve")).or_else(|| addrs.get("lambda_target")).and_then(|v| v.as_str()) {
+                    out.push(table_from_addr("fuel-ve", "Fuel VE / Lambda", "Fuel", a, 16, 16, "UWORD", "X*0.01", "lambda"));
+                }
+                if let Some(a) = addrs.get("egr_map").and_then(|v| v.as_str()) {
+                    out.push(table_from_addr("egr-map", "EGR Map", "EGR", a, 12, 12, "UWORD", "X*0.1", "%"));
+                }
+                if let Some(a) = addrs.get("vvt_intake").and_then(|v| v.as_str()) {
+                    out.push(table_from_addr("vvt-intake", "VVT Intake", "VVT", a, 12, 12, "UWORD", "X", "deg"));
+                }
+                if let Some(a) = addrs.get("knock_control").and_then(|v| v.as_str()) {
+                    out.push(table_from_addr("knock-control", "Knock Control", "Ignition", a, 12, 12, "UWORD", "X", ""));
+                }
+                if !out.is_empty() {
+                    return serde_json::to_string(&out).map_err(|e| e.to_string());
+                }
+            }
+        }
+        // Fallback community maps for 2MB diesel/gas
         vec![
-            TableDef {
-                id: "driver-wish".into(),
-                name: "Driver Wish (Torque Request)".into(),
-                category: Some("Torque".into()),
-                description: "Community starting address 0x80000 — verify against your bin/WinOLS before write.".into(),
-                rows: 16,
-                cols: 16,
-                addr: "0x80000".into(),
-                data_type: "UWORD".into(),
-                math: "X*0.1".into(),
-                units: "Nm".into(),
-                row_major: true,
-                msb: true,
-            },
-            TableDef {
-                id: "inj-quantity".into(),
-                name: "Injection Quantity".into(),
-                category: Some("Fuel".into()),
-                description: "Community starting address 0x82000 — verify before write.".into(),
-                rows: 16,
-                cols: 16,
-                addr: "0x82000".into(),
-                data_type: "UWORD".into(),
-                math: "X*0.01".into(),
-                units: "mm3".into(),
-                row_major: true,
-                msb: true,
-            },
-            TableDef {
-                id: "boost-setpoint".into(),
-                name: "Boost Setpoint".into(),
-                category: Some("Boost".into()),
-                description: "Community starting address 0xC0000 — verify before write.".into(),
-                rows: 12,
-                cols: 12,
-                addr: "0xC0000".into(),
-                data_type: "UWORD".into(),
-                math: "X*0.1".into(),
-                units: "mbar".into(),
-                row_major: true,
-                msb: true,
-            },
-            TableDef {
-                id: "rail-pressure".into(),
-                name: "Rail Pressure Setpoint".into(),
-                category: Some("Fuel".into()),
-                description: "Community starting address 0xC2000 — verify before write.".into(),
-                rows: 12,
-                cols: 12,
-                addr: "0xC2000".into(),
-                data_type: "UWORD".into(),
-                math: "X".into(),
-                units: "bar".into(),
-                row_major: true,
-                msb: true,
-            },
-            TableDef {
-                id: "vgt-duty".into(),
-                name: "VGT Duty Cycle".into(),
-                category: Some("Boost".into()),
-                description: "Community starting address 0xC4000 — verify before write.".into(),
-                rows: 10,
-                cols: 10,
-                addr: "0xC4000".into(),
-                data_type: "UBYTE".into(),
-                math: "X*0.5".into(),
-                units: "%".into(),
-                row_major: true,
-                msb: true,
-            },
+            table_from_addr("driver-wish", "Driver Wish (Torque Request)", "Torque", "0x80000", 16, 16, "UWORD", "X*0.1", "Nm"),
+            table_from_addr("inj-quantity", "Injection Quantity", "Fuel", "0x82000", 16, 16, "UWORD", "X*0.01", "mm3"),
+            table_from_addr("boost-setpoint", "Boost Setpoint", "Boost", "0xC0000", 12, 12, "UWORD", "X*0.1", "mbar"),
+            table_from_addr("rail-pressure", "Rail Pressure Setpoint", "Fuel", "0xC2000", 12, 12, "UWORD", "X", "bar"),
+            table_from_addr("vgt-duty", "VGT Duty Cycle", "Boost", "0xC4000", 10, 10, "UBYTE", "X*0.5", "%"),
+            table_from_addr("smoke-limiter", "Smoke Limiter", "Limiters", "0xC6000", 10, 10, "UWORD", "X*0.1", "%"),
+            table_from_addr("ignition-timing", "Ignition Timing (MED17)", "Ignition", "0x28000", 16, 16, "UWORD", "(X-120)/2", "deg"),
+            table_from_addr("fuel-ve", "Fuel VE / Lambda", "Fuel", "0x30000", 16, 16, "UWORD", "X*0.01", "lambda"),
         ]
     } else {
         return Err(format!(
-            "Unsupported BIN size {} — expected 131072/524288 (P01) or 2097152 (EDC16C41)",
+            "Unsupported BIN size {} — expected 131072/524288 (P01/P59) or 2097152 (EDC16/EDC17/MED17)",
             len
         ));
     };
@@ -723,13 +741,13 @@ fn auto_detect_protocol(state: State<AppState>, port_name: String) -> Result<Str
 #[tauri::command]
 fn discover_maps_from_bin(bin_bytes: Vec<u8>, family: String) -> Result<String, String> {
     // Reuse auto-load definitions so discovery returns real TableDef JSON, not a marketing string.
-    let tables_json = auto_load_tables_for_bin(bin_bytes)?;
+    let tables_json = auto_load_tables_for_bin(bin_bytes, Some(family.clone()))?;
     let tables: Vec<TableDef> = serde_json::from_str(&tables_json).unwrap_or_default();
     Ok(serde_json::json!({
         "family": family,
         "count": tables.len(),
         "tables": tables,
-        "note": "From embedded reference definitions (P01: 16263425.xml; EDC16: community start addresses)."
+        "note": "From embedded reference definitions + ECU DB refined_map_addrs (P01: 16263425.xml; diesel/gas: community/DB)."
     }).to_string())
 }
 
@@ -824,6 +842,7 @@ pub fn run() {
             // ECU identity
             list_supported_ecus,
             read_properties,
+            get_ecu_info,
             read_entire_pcm,
             // BIN validation & checksum
             validate_bin,
@@ -869,9 +888,11 @@ pub fn run() {
             read_nissan_consult_data,
             send_can_uds,
             send_kwp_request,
-            // J2534 surface (requires Windows + vendor DLL for live use)
+            // J2534 surface (requires Windows + vendor DLL for live use) - FULL write/read now registered
             j2534::j2534_list_devices,
             j2534::j2534_connect,
+            j2534::j2534_write,
+            j2534::j2534_read,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
