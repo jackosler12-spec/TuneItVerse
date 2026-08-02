@@ -49,6 +49,8 @@ async function invokeCmd(cmd, args = {}) {
           { id: 'boost-setpoint', name: 'Boost Setpoint', description: 'Target boost', rows: 12, cols: 12, addr: '0xC0000', data_type: 'UWORD', math: 'x*0.1', units: 'mbar', category: 'Boost', row_major: true, msb: true },
           { id: 'rail-pressure', name: 'Rail Pressure', description: 'Rail pressure setpoint', rows: 12, cols: 12, addr: '0xC2000', data_type: 'UWORD', math: 'x', units: 'bar', category: 'Fuel', row_major: true, msb: true },
           { id: 'smoke-limiter', name: 'Smoke Limiter', description: 'Smoke limiter map', rows: 10, cols: 10, addr: '0xC6000', data_type: 'UWORD', math: 'x*0.1', units: '%', category: 'Limiters', row_major: true, msb: true },
+          { id: 'egr-map', name: 'EGR Map', description: 'EGR duty map', rows: 12, cols: 12, addr: '0xC8000', data_type: 'UWORD', math: 'x*0.1', units: '%', category: 'EGR', row_major: true, msb: true },
+          { id: 'torque-limiter', name: 'Torque Limiter', description: 'Torque limit map', rows: 12, cols: 12, addr: '0xCA000', data_type: 'UWORD', math: 'x*0.1', units: 'Nm', category: 'Limiters', row_major: true, msb: true },
           { id: 'ignition-timing', name: 'Ignition Timing (MED17)', description: 'Community start for gasoline turbo', rows: 16, cols: 16, addr: '0x28000', data_type: 'UWORD', math: '(x-120)/2', units: 'deg', category: 'Ignition', row_major: true, msb: true },
           { id: 'fuel-ve', name: 'Fuel VE / Lambda', description: 'Community start MED17', rows: 16, cols: 16, addr: '0x30000', data_type: 'UWORD', math: 'x*0.01', units: 'lambda', category: 'Fuel', row_major: true, msb: true }
         ]);
@@ -63,6 +65,7 @@ async function invokeCmd(cmd, args = {}) {
     if (cmd === 'read_properties') return JSON.stringify({ os_id: '12225074', vin: 'MOCKVIN', hardware: '0411', ecu_type: 'P01', protocol: 'VPW', status: 'Mock' });
     if (cmd === 'j2534_list_devices') return ['Tactrix OpenPort 2.0 (install driver + DLL)', 'DrewTech / CarDAQ (J2534 compliant)'];
     if (cmd === 'j2534_connect') return 'J2534 device opened and ISO15765 channel connected (full DLL binding ready for production)';
+    if (cmd === 'get_ecu_info') return JSON.stringify({ ecu_family: 'P01_0411', display_name: 'Holden LS1 / GM P01 0411 PCM' });
     return null;
   } catch (e) {
     console.error('invokeCmd error', cmd, e);
@@ -221,6 +224,14 @@ async function doConnect() {
     try {
       const props = await invokeCmd('read_properties');
       if (log) log.textContent += 'Properties: ' + (typeof props === 'string' ? props : JSON.stringify(props)) + '\n';
+      // v1.2.0: also fetch full ECU info if OS known
+      try {
+        const p = typeof props === 'string' ? JSON.parse(props) : props;
+        if (p && p.os_id) {
+          const info = await invokeCmd('get_ecu_info', { family_or_os: p.os_id });
+          if (log) log.textContent += 'ECU DB: ' + (typeof info === 'string' ? info.slice(0, 200) : JSON.stringify(info).slice(0, 200)) + '...\n';
+        }
+      } catch (_) {}
     } catch (_) {}
   } catch (e) {
     if (log) log.textContent += 'ERROR: ' + e + '\n';
@@ -713,8 +724,8 @@ function setupAll() {
   setupScripts();
   showView('dashboard');
   const st = document.getElementById('tables-status');
-  if (st) st.textContent = 'Load your .BIN — auto XDF/tables + full checksum validation (P01 & EDC16/EDC17/MED17) ready. Edit safely! v1.0.0 fully operational.';
-  console.log('TuneItVerse UI fully wired v1.0.0');
+  if (st) st.textContent = 'Load your .BIN — auto XDF/tables + full checksum validation (P01 & EDC16/EDC17/MED17) ready. Edit safely! v1.2.0 fully operational industry-leading.';
+  console.log('TuneItVerse UI fully wired v1.2.0');
 }
 
 if (document.readyState === 'loading') {

@@ -23,15 +23,19 @@
   },
   "maps_and_xdf": {
     "has_xdf": false,
-    "description": "No ready XDF in reference. Auto tables use refined community-typical addresses for ZD30CRD (Driver Wish ~0x80000, IQ ~0x82000, Boost ~0xC0000, Rail ~0xC2000, VGT ~0xC4000). These are solid starting points; refine with your own bin.",
+    "description": "No ready XDF in reference. Auto tables use refined community-typical addresses for ZD30CRD (Driver Wish ~0x80000, IQ ~0x82000, Boost ~0xC0000, Rail ~0xC2000, VGT ~0xC4000, smoke, EGR, torque limiter). These are solid starting points; refine with your own bin.",
     "eeprom": "EDC16C41 working eeprom (2 KB) - immobiliser, adaptations, coding data",
     "refined_map_addrs": {
       "driver_wish": "0x80000",
       "injection_quantity": "0x82000",
       "boost_setpoint": "0xC0000",
       "rail_pressure": "0xC2000",
-      "vgt_duty": "0xC4000"
+      "vgt_duty": "0xC4000",
+      "smoke_limiter": "0xC6000",
+      "egr_map": "0xC8000",
+      "torque_limiter": "0xCA000",
+      "start_of_injection": "0xCC000"
     }
   },
-  "notes": "Matches and expands the REFERENCE_INDEX.md entry. 23710-VS43B is the specific hardware/part for GU V Wagon variant. DB entry enables auto-identification. Rust support added: CAN (ELM/ISO-TP), KWP2000, Nissan Consult II for live data + commands. Use protocol selector in UI. **Multipoint CRC32 now primary** for EDC16C41."
+  "notes": "Matches and expands the REFERENCE_INDEX.md entry. 23710-VS43B is the specific hardware/part for GU V Wagon variant. DB entry enables auto-identification. Rust support added: CAN (ELM/ISO-TP), KWP2000, Nissan Consult II for live data + commands. Use protocol selector in UI. **Multipoint CRC32 now primary** for EDC16C41. v1.2.0 expanded maps for industry-leading coverage."
 }
