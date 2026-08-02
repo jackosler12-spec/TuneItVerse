@@ -2,6 +2,7 @@
 // FULL RESTORE 2026-07-19: Complete working version with all commands + plugin init for successful cargo tauri build
 // FIXED 2026-07-23: trailing semicolons on Ok(...) + format! argument count
 // v1.1.0: J2534 write/read fully registered, family-aware table auto-load from ECU DB refined_map_addrs for all 5 families, get_ecu_info command
+// v1.2.1: Completed missing torque_limiter + start_of_injection handlers in auto_load so DB refined_map_addrs are fully honored (industry-leading map coverage)
 #![allow(unused_imports, dead_code, unused_variables, unused_mut)]
 
 use std::sync::Mutex;
@@ -384,12 +385,19 @@ fn auto_load_tables_for_bin(bin_bytes: Vec<u8>, family_hint: Option<String>) -> 
                 if let Some(a) = addrs.get("knock_control").and_then(|v| v.as_str()) {
                     out.push(table_from_addr("knock-control", "Knock Control", "Ignition", a, 12, 12, "UWORD", "X", ""));
                 }
+                // v1.2.1: Complete the expanded maps claimed in COMPLETION + JSON
+                if let Some(a) = addrs.get("torque_limiter").or_else(|| addrs.get("torque-limiter")).and_then(|v| v.as_str()) {
+                    out.push(table_from_addr("torque-limiter", "Torque Limiter", "Limiters", a, 12, 12, "UWORD", "X*0.1", "Nm"));
+                }
+                if let Some(a) = addrs.get("start_of_injection").or_else(|| addrs.get("soi")).or_else(|| addrs.get("start-of-injection")).and_then(|v| v.as_str()) {
+                    out.push(table_from_addr("soi", "Start of Injection", "Injection", a, 12, 12, "UWORD", "X*0.1", "deg"));
+                }
                 if !out.is_empty() {
                     return serde_json::to_string(&out).map_err(|e| e.to_string());
                 }
             }
         }
-        // Fallback community maps for 2MB diesel/gas
+        // Fallback community maps for 2MB diesel/gas (now includes torque + SOI)
         vec![
             table_from_addr("driver-wish", "Driver Wish (Torque Request)", "Torque", "0x80000", 16, 16, "UWORD", "X*0.1", "Nm"),
             table_from_addr("inj-quantity", "Injection Quantity", "Fuel", "0x82000", 16, 16, "UWORD", "X*0.01", "mm3"),
@@ -397,6 +405,9 @@ fn auto_load_tables_for_bin(bin_bytes: Vec<u8>, family_hint: Option<String>) -> 
             table_from_addr("rail-pressure", "Rail Pressure Setpoint", "Fuel", "0xC2000", 12, 12, "UWORD", "X", "bar"),
             table_from_addr("vgt-duty", "VGT Duty Cycle", "Boost", "0xC4000", 10, 10, "UBYTE", "X*0.5", "%"),
             table_from_addr("smoke-limiter", "Smoke Limiter", "Limiters", "0xC6000", 10, 10, "UWORD", "X*0.1", "%"),
+            table_from_addr("egr-map", "EGR Map", "EGR", "0xC8000", 12, 12, "UWORD", "X*0.1", "%"),
+            table_from_addr("torque-limiter", "Torque Limiter", "Limiters", "0xCA000", 12, 12, "UWORD", "X*0.1", "Nm"),
+            table_from_addr("soi", "Start of Injection", "Injection", "0xCC000", 12, 12, "UWORD", "X*0.1", "deg"),
             table_from_addr("ignition-timing", "Ignition Timing (MED17)", "Ignition", "0x28000", 16, 16, "UWORD", "(X-120)/2", "deg"),
             table_from_addr("fuel-ve", "Fuel VE / Lambda", "Fuel", "0x30000", 16, 16, "UWORD", "X*0.01", "lambda"),
         ]
