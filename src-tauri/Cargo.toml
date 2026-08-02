@@ -1,7 +1,7 @@
 [package]
 name = "TuneItVerse"
-version = "1.2.0"
-description = "ECU Tuning platform for JRTuners - Industry leading open source alternative to expensive commercial tools. Fully operational v1.2.0 with complete J2534 + family-aware maps + expanded recovery"
+version = "1.3.0"
+description = "ECU Tuning platform for JRTuners - Industry leading open source alternative to expensive commercial tools. Fully operational v1.3.0 with complete refined_map_addrs (torque_limiter + SOI) + J2534 + family-aware maps + expanded recovery"
 authors = ["JRTuners"]
 edition = "2021"
 
