@@ -1,8 +1,8 @@
 {
   "name": "tuneitverse",
   "private": true,
-  "version": "1.2.1",
-  "description": "TuneItVerse - Industry-leading open ECU tuning platform (Tauri + Rust) - free alternative to expensive commercial tools. Fully operational DIY powerhouse for P01, EDC16, EDC17, MED17, P59 and expanding. v1.2.1 complete J2534 + DB-driven maps (torque/SOI handlers) + enhanced recovery + UI polish.",
+  "version": "1.3.0",
+  "description": "TuneItVerse - Industry-leading open ECU tuning platform (Tauri + Rust) - free alternative to expensive commercial tools. Fully operational DIY powerhouse for P01, EDC16, EDC17, MED17, P59 and expanding. v1.3.0 complete J2534 + DB-driven maps (torque/SOI handlers) + enhanced recovery + UI polish + full operational confirmed.",
   "type": "module",
   "scripts": {
     "tauri": "tauri",
