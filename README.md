@@ -12,7 +12,7 @@ TuneItVerse is a desktop ECU tuning and diagnostics application: a Tauri (Rust) 
 ## How it's organized
 ```
 README.md                Project readme (this file)
-package.json             Frontend + tauri npm scripts (v1.2.1)
+package.json             Frontend + tauri npm scripts (v1.3.0)
 src/                     Web UI (index.html, main.js, styles.css)
 src-tauri/               Tauri (Rust) backend: ECU protocols, device drivers, tauri config
   Cargo.toml
@@ -63,7 +63,7 @@ Notes:
 
 See [COMPLETION.md](COMPLETION.md) for the full honest feature matrix.
 
-**v1.2.1 Fully operational for core DIY + pro workflows:** serial connect, DTC diagnostics, live Mode-01 PIDs, P01 table auto-load from real XML addresses, EDC16/EDC17/MED17 community maps (fully family-aware from DB refined_map_addrs expanded + torque/SOI handlers complete), checksum correct (P01 + multipoint), guided flash Mode 34/36/37 with backup/kernel/verify + UDS ready, ECU DB (P01, EDC16C41, P59, MED17, EDC17 fully refined) + get_ecu_info, **J2534 production path (list/connect/write/read fully registered)**, native table editor (grid/3D/hex).
+**v1.3.0 Fully operational for core DIY + pro workflows:** serial connect, DTC diagnostics, live Mode-01 PIDs, P01 table auto-load from real XML addresses, EDC16/EDC17/MED17 community maps (fully family-aware from DB refined_map_addrs expanded + torque/SOI handlers complete), checksum correct (P01 + multipoint), guided flash Mode 34/36/37 with backup/kernel/verify + UDS ready, ECU DB (P01, EDC16C41, P59, MED17, EDC17 fully refined) + get_ecu_info, **J2534 production path (list/connect/write/read fully registered)**, native table editor (grid/3D/hex).
 
 **Expand next:** more map editors, additional ECU families, full UDS multi-frame refinements, hardware validation on your bench.
 
