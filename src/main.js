@@ -224,7 +224,7 @@ async function doConnect() {
     try {
       const props = await invokeCmd('read_properties');
       if (log) log.textContent += 'Properties: ' + (typeof props === 'string' ? props : JSON.stringify(props)) + '\n';
-      // v1.3.0: also fetch full ECU info if OS known
+      // v1.5.0: also fetch full ECU info if OS known
       try {
         const p = typeof props === 'string' ? JSON.parse(props) : props;
         if (p && p.os_id) {
@@ -724,8 +724,8 @@ function setupAll() {
   setupScripts();
   showView('dashboard');
   const st = document.getElementById('tables-status');
-  if (st) st.textContent = 'Load your .BIN — auto XDF/tables + full checksum validation (P01 & EDC16/EDC17/MED17) ready. Edit safely! v1.3.0 fully operational industry-leading.';
-  console.log('TuneItVerse UI fully wired v1.3.0');
+  if (st) st.textContent = 'Load your .BIN — auto XDF/tables + full checksum validation (P01 & EDC16/EDC17/MED17) ready. Edit safely! v1.5.0 fully operational industry-leading.';
+  console.log('TuneItVerse UI fully wired v1.5.0');
 }
 
 if (document.readyState === 'loading') {
