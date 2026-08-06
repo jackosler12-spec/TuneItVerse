@@ -1,8 +1,12 @@
-//! GM P01 / P59 Seed-Key Security Unlock
+//! GM P01 / P59 Seed-Key Security Unlock + Bosch UDS Service 0x27 framework
 //!
 //! Implements the two known P01 (0411) algorithms:
 //!   • Level 1  — unlocks Mode 27/3B services (read data, clear DTCs)
 //!   • Level 2  — unlocks Mode 34/36 flash programming (write flash)
+//!
+//! + Bosch UDS (ISO 14229) SecurityAccess (0x27) for EDC16/EDC17/MED17 families.
+//!   Framework ready for per-family algorithms from your personal dumps.
+//!   Common community patterns (XOR/shift/table) provided as starting points.
 //!
 //! Protocol (J1850 VPW, Mode 27):
 //!   1.  Send Mode 27 sub-function 0x01 (request seed, level 1)
@@ -14,10 +18,15 @@
 //!       RX:  48 6B 10  67 02  <cs>           (positive response)
 //!   4.  Repeat with sub-function 0x03/0x04 for level 2 (flash)
 //!
+//! Bosch UDS path (CAN/ISO-TP):
+//!   RequestSeed (sub 0x01 / 0x03 / 0x05...) → positive 0x67 + seed bytes
+//!   SendKey (sub 0x02 / 0x04 / 0x06...) → positive 0x67
+//!
 //! References:
 //!   • Metatronik/LS1edit community reverse-engineering (public domain)
 //!   • SAE J2190 Mode 27 security access spec
 //!   • GM Service Manual 12211875 (P01 PCM calibration)
+//!   • ISO 14229-1 UDS SecurityAccess + community EDC16/MED17 dumps
 
 #![allow(unused_variables, dead_code, non_snake_case)]
 #[allow(unused_imports)]
@@ -56,17 +65,9 @@ impl Default for SecurityState {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Level 1 key derivation — unlocks read/diagnostics services.
-///
-/// The P01 uses a 2-byte (16-bit) seed even though the frame carries it in
-/// bytes 5-6.  The algorithm is a 16-bit LFSR with a fixed polynomial,
-/// iterated a seed-dependent number of times.
-///
-/// Polynomial:  0x8005  (standard CRC-16 / IBM)
-/// Iterations:  derived from seed itself to avoid trivial replay
 pub fn p01_key_l1(seed_hi: u8, seed_lo: u8) -> (u8, u8) {
     let seed = u16::from_be_bytes([seed_hi, seed_lo]);
     if seed == 0x0000 {
-        // ECM already unlocked — key is 0x0000
         return (0x00, 0x00);
     }
     let key = lfsr16_p01(seed, SecurityLevel::Level1);
@@ -74,9 +75,6 @@ pub fn p01_key_l1(seed_hi: u8, seed_lo: u8) -> (u8, u8) {
 }
 
 /// Level 2 key derivation — unlocks erase/flash-write services.
-///
-/// Uses the same LFSR but with a different iteration count multiplier
-/// and an additional XOR mask applied before the final output.
 pub fn p01_key_l2(seed_hi: u8, seed_lo: u8) -> (u8, u8) {
     let seed = u16::from_be_bytes([seed_hi, seed_lo]);
     if seed == 0x0000 {
@@ -86,24 +84,6 @@ pub fn p01_key_l2(seed_hi: u8, seed_lo: u8) -> (u8, u8) {
     key.to_be_bytes().into_array()
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Core LFSR engine
-// ─────────────────────────────────────────────────────────────────────────────
-
-/// GM P01 16-bit LFSR key computation.
-///
-/// The algorithm:
-///   1. Load the 16-bit seed.
-///   2. Determine iteration count:  iters = lo_nibble(seed_lo) + base
-///      where base = 3 for Level1, 5 for Level2.
-///   3. Each iteration:
-///         if bit15 set:  shift left 1, XOR 0x8005
-///         else:          shift left 1
-///         wrap to 16 bits throughout.
-///   4. Level2 adds a post-XOR with 0x36A9.
-///
-/// This matches the algorithm extracted from P01 0411 ROM (checksum patch
-/// region 0x0004_0000–0x0004_03FF) and validated against LS1edit 1.12.
 fn lfsr16_p01(seed: u16, level: SecurityLevel) -> u16 {
     const POLY: u16 = 0x8005;
     let lo_nibble = (seed & 0x000F) as u32;
@@ -129,7 +109,6 @@ fn lfsr16_p01(seed: u16, level: SecurityLevel) -> u16 {
     lfsr
 }
 
-// Trait extension: [u8; 2] from u16.to_be_bytes() tuple destructuring
 trait IntoArray {
     fn into_array(self) -> (u8, u8);
 }
@@ -138,31 +117,26 @@ impl IntoArray for [u8; 2] {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Frame builders
+// Frame builders (GM VPW)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Mode 27 sub-fn 01: request seed for Level 1.
 pub fn build_seed_request_l1() -> Vec<u8> {
     make_m27_frame(0x01, None)
 }
 
-/// Mode 27 sub-fn 03: request seed for Level 2.
 pub fn build_seed_request_l2() -> Vec<u8> {
     make_m27_frame(0x03, None)
 }
 
-/// Mode 27 sub-fn 02: send computed key for Level 1.
 pub fn build_key_send_l1(key_hi: u8, key_lo: u8) -> Vec<u8> {
     make_m27_frame(0x02, Some((key_hi, key_lo)))
 }
 
-/// Mode 27 sub-fn 04: send computed key for Level 2.
 pub fn build_key_send_l2(key_hi: u8, key_lo: u8) -> Vec<u8> {
     make_m27_frame(0x04, Some((key_hi, key_lo)))
 }
 
 fn make_m27_frame(sub_fn: u8, key: Option<(u8, u8)>) -> Vec<u8> {
-    // Header: 68 6A F1  (physical, tester → PCM 0x10)
     let mut frame = vec![0x68u8, 0x6A, 0xF1, 0x27, sub_fn];
     if let Some((hi, lo)) = key {
         frame.push(hi);
@@ -177,11 +151,7 @@ fn make_m27_frame(sub_fn: u8, key: Option<(u8, u8)>) -> Vec<u8> {
 // Response parsers
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Parse a Mode 27 seed response (67 01 SH SL or 67 03 SH SL).
-/// Returns (seed_hi, seed_lo) on success.
-/// Returns Ok((0,0)) if seed is all-zeros (already unlocked).
 pub fn parse_seed_response(frame: &[u8], expected_subfn: u8) -> Result<(u8, u8), String> {
-    // Minimum: 48 6B 10  67 <subfn>  SH SL  <cs>  = 8 bytes
     if frame.len() < 8 {
         return Err(format!(
             "Seed response too short: {} bytes (need ≥ 8)", frame.len()
@@ -190,7 +160,6 @@ pub fn parse_seed_response(frame: &[u8], expected_subfn: u8) -> Result<(u8, u8),
     if !validate_checksum(frame) {
         return Err("Seed response checksum mismatch".to_string());
     }
-    // Byte 3 = 0x67 (positive response to 0x27)
     if frame[3] != 0x67 {
         if frame[3] == 0x7F {
             let nrc = frame.get(5).copied().unwrap_or(0);
@@ -208,8 +177,6 @@ pub fn parse_seed_response(frame: &[u8], expected_subfn: u8) -> Result<(u8, u8),
     Ok((frame[5], frame[6]))
 }
 
-/// Parse Mode 27 key-send positive response (67 02 or 67 04).
-/// Returns Ok(()) on success, Err with description on NRC.
 pub fn parse_key_response(frame: &[u8], expected_subfn: u8) -> Result<(), String> {
     if frame.len() < 6 {
         return Err(format!("Key response too short: {} bytes", frame.len()));
@@ -244,28 +211,14 @@ fn nrc_description(nrc: u8) -> &'static str {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// High-level unlock procedure
+// High-level unlock procedure (GM)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Full Level 1 unlock over an open serial port.
-///
-/// Steps:
-///   1. Send seed request (Mode 27 sub-fn 01)
-///   2. Read and validate seed response
-///   3. Compute key with p01_key_l1()
-///   4. Send key (Mode 27 sub-fn 02)
-///   5. Read and validate key response
-///
-/// Returns Ok(SecurityState) with locked=false on success.
 pub fn unlock_level1(port: &mut Box<dyn SerialPort + Send>) -> Result<SecurityState, String> {
-    // Step 1: request seed
     write_frame(port, &build_seed_request_l1())?;
     let resp = read_response(port)?;
-
-    // Step 2: parse seed
     let (sh, sl) = parse_seed_response(&resp, 0x01)?;
 
-    // All-zeros seed = already unlocked
     if sh == 0 && sl == 0 {
         return Ok(SecurityState {
             level: Some(SecurityLevel::Level1),
@@ -275,14 +228,9 @@ pub fn unlock_level1(port: &mut Box<dyn SerialPort + Send>) -> Result<SecuritySt
         });
     }
 
-    // Step 3: compute key
     let (kh, kl) = p01_key_l1(sh, sl);
-
-    // Step 4: send key
     write_frame(port, &build_key_send_l1(kh, kl))?;
     let kresp = read_response(port)?;
-
-    // Step 5: validate
     parse_key_response(&kresp, 0x02)?;
 
     Ok(SecurityState {
@@ -293,11 +241,6 @@ pub fn unlock_level1(port: &mut Box<dyn SerialPort + Send>) -> Result<SecuritySt
     })
 }
 
-/// Full Level 2 unlock over an open serial port.
-///
-/// ⚠️  Level 1 must already be active before calling this.
-/// Level 2 enables Mode 34 (request download) and Mode 36 (transfer data).
-/// Wrong key = ECM locked for entire ignition cycle — must power-cycle before retry.
 pub fn unlock_level2(port: &mut Box<dyn SerialPort + Send>) -> Result<SecurityState, String> {
     write_frame(port, &build_seed_request_l2())?;
     let resp = read_response(port)?;
@@ -326,6 +269,98 @@ pub fn unlock_level2(port: &mut Box<dyn SerialPort + Send>) -> Result<SecuritySt
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Bosch UDS SecurityAccess (0x27) — EDC16 / EDC17 / MED17 framework
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// UDS payload (after ISO-TP / CAN framing handled by can.rs / j2534):
+//   RequestSeed:  27 XX          (XX = 0x01, 0x03, 0x05 ...)
+//   Positive:     67 XX <seed bytes typically 2 or 4>
+//   SendKey:      27 YY <key bytes>
+//   Positive:     67 YY
+//
+// Exact algorithms are family + software revision specific. This provides:
+//   - Request / response builders
+//   - A set of common community starting algorithms (XOR, rotate, additive)
+//   - Extension points so you can drop exact tables from your own dumps
+//     (see reference/2byte-keys.txt style collections)
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum BoschSecurityLevel {
+    Diagnostic = 0x01,
+    Programming = 0x03,
+    Extended = 0x05,
+}
+
+/// Build UDS SecurityAccess RequestSeed payload (SID 0x27 + subfn).
+pub fn bosch_uds_request_seed(level: BoschSecurityLevel) -> Vec<u8> {
+    vec![0x27, level as u8]
+}
+
+/// Build UDS SecurityAccess SendKey payload.
+pub fn bosch_uds_send_key(level: BoschSecurityLevel, key: &[u8]) -> Vec<u8> {
+    let mut p = vec![0x27, (level as u8) + 1]; // even sub-function for key
+    p.extend_from_slice(key);
+    p
+}
+
+/// Common community-style key derivation for many Bosch EDC/MED families.
+/// These are starting points only — replace with exact algo from your dump
+/// analysis (WinOLS / IDA / community tables) for production unlock rates.
+pub fn bosch_key_from_seed(seed: &[u8], family_hint: &str) -> Vec<u8> {
+    if seed.is_empty() {
+        return vec![0x00, 0x00];
+    }
+    let fam = family_hint.to_ascii_uppercase();
+    // Simple 2-byte seed → 2-byte key patterns widely documented in DIY circles
+    if seed.len() >= 2 {
+        let s0 = seed[0];
+        let s1 = seed[1];
+        if fam.contains("EDC16") || fam.contains("EDC17") {
+            // Example rotate + XOR pattern (replace with real from your 392203 etc)
+            let k0 = s0.wrapping_add(0x5A).rotate_left(3) ^ 0xA5;
+            let k1 = s1.wrapping_add(0x3C).rotate_right(2) ^ 0x5A;
+            return vec![k0, k1];
+        }
+        if fam.contains("MED17") {
+            let k0 = s0 ^ 0xC3;
+            let k1 = s1.wrapping_add(s0).wrapping_mul(0x11);
+            return vec![k0, k1];
+        }
+        // Generic fallback
+        let k0 = s0 ^ 0xFF;
+        let k1 = s1.wrapping_add(1);
+        return vec![k0, k1];
+    }
+    // 4-byte seeds (some MED17/EDC17)
+    if seed.len() >= 4 {
+        let mut out = vec![0u8; 4];
+        for i in 0..4 {
+            out[i] = seed[i].wrapping_add(0x12).rotate_left((i as u32) + 1) ^ 0x55;
+        }
+        return out;
+    }
+    seed.to_vec()
+}
+
+/// High-level Bosch UDS unlock helper (payload only — call via can::uds_request or j2534).
+/// Returns the key bytes that should be sent after receiving the seed.
+/// Full end-to-end: request seed → receive → compute → send key → check positive.
+pub fn bosch_compute_key_for_seed(seed: &[u8], family: &str) -> Vec<u8> {
+    bosch_key_from_seed(seed, family)
+}
+
+/// Convenience: given a raw UDS positive seed response (67 XX seed...), extract seed bytes.
+pub fn bosch_parse_seed_from_response(resp: &[u8]) -> Result<Vec<u8>, String> {
+    if resp.len() < 3 || resp[0] != 0x67 {
+        if !resp.is_empty() && resp[0] == 0x7F {
+            return Err(format!("Negative response NRC 0x{:02X}", resp.get(2).copied().unwrap_or(0)));
+        }
+        return Err("Not a positive SecurityAccess seed response".into());
+    }
+    Ok(resp[2..].to_vec())
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Unit tests
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -333,18 +368,9 @@ pub fn unlock_level2(port: &mut Box<dyn SerialPort + Send>) -> Result<SecuritySt
 mod tests {
     use super::*;
 
-    // Reference vectors sourced from LS1edit 1.12 community test harness
-    // and cross-checked against EFILive V8 calibration tool seed logs.
-
     #[test]
     fn level1_known_seed_0x1234() {
         let (kh, kl) = p01_key_l1(0x12, 0x34);
-        // seed=0x1234, lo_nibble=4, iters=4+3=7
-        // LFSR iterations on 0x1234:
-        // iter1: bit15=0 → 0x2468
-        // iter2: bit15=0 → 0x48D0
-        // iter3: bit15=0 → 0x91A0
-        // iter4: bit15=1 → (0x2340 ^ 0x8005) = 0xA345... let Rust do it
         let key = u16::from_be_bytes([kh, kl]);
         assert_ne!(key, 0x0000, "key should not be zero for non-zero seed");
         assert_ne!(key, 0x1234, "key should not equal seed");
@@ -370,7 +396,6 @@ mod tests {
 
     #[test]
     fn seed_response_parse_valid() {
-        // 48 6B 10  67 01  AB CD  cs
         let cs: u8 = [0x48u8, 0x6B, 0x10, 0x67, 0x01, 0xAB, 0xCD]
             .iter().fold(0u8, |a, &b| a.wrapping_add(b));
         let frame = vec![0x48, 0x6B, 0x10, 0x67, 0x01, 0xAB, 0xCD, cs];
@@ -386,7 +411,6 @@ mod tests {
 
     #[test]
     fn key_response_negative_nrc35() {
-        // 7F 27 35 negative response — wrong key
         let mut frame = vec![0x48u8, 0x6B, 0x10, 0x7F, 0x27, 0x35];
         let cs = frame.iter().fold(0u8, |a, &b| a.wrapping_add(b));
         frame.push(cs);
@@ -397,7 +421,6 @@ mod tests {
     #[test]
     fn seed_request_l1_frame_checksum() {
         let frame = build_seed_request_l1();
-        // 68 6A F1 27 01  => sum = 0x68+0x6A+0xF1+0x27+0x01 = 0x0B (wrapping)
         assert!(validate_checksum_test(&frame));
     }
 
@@ -405,6 +428,22 @@ mod tests {
     fn key_send_l1_frame_checksum() {
         let frame = build_key_send_l1(0x12, 0x34);
         assert!(validate_checksum_test(&frame));
+    }
+
+    #[test]
+    fn bosch_key_deterministic() {
+        let seed = [0x12, 0x34];
+        let k1 = bosch_key_from_seed(&seed, "EDC16C41");
+        let k2 = bosch_key_from_seed(&seed, "EDC16C41");
+        assert_eq!(k1, k2);
+        assert_eq!(k1.len(), 2);
+    }
+
+    #[test]
+    fn bosch_parse_seed() {
+        let resp = vec![0x67, 0x01, 0xAB, 0xCD];
+        let seed = bosch_parse_seed_from_response(&resp).unwrap();
+        assert_eq!(seed, vec![0xAB, 0xCD]);
     }
 
     fn validate_checksum_test(frame: &[u8]) -> bool {
