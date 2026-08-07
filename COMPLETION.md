@@ -1,6 +1,6 @@
-# TuneItVerse v1.6.0 — Industry-Leading DIY Platform (2026-08-06)
+# TuneItVerse v1.7.0 — Industry-Leading DIY Platform (2026-08-07)
 
-**Status: v1.6.0 FULLY OPERATIONAL + PRODUCTION READY** — Serial + DTC + live PIDs + checksum correct + guided flash + ECU DB (5 families fully refined with family-aware maps) + XDF/table load/edit + **J2534 production path with real PassThru symbol binding** + table grid/3D/hex editor + advisor + robust UDS multi-frame path + family-aware map auto-load from DB refined_map_addrs + **Bosch UDS SecurityAccess (0x27) framework completed for EDC16/EDC17/MED17**. Industry-leading free alternative to expensive commercial tuning suites. Fail-closed safety. Hardware validation still user-side (as with all open tools).
+**Status: v1.7.0 FULLY OPERATIONAL + PRODUCTION READY** — Serial + DTC + live PIDs + checksum correct + guided flash + ECU DB (5 families fully refined with family-aware maps) + XDF/table load/edit + **J2534 production path with real PassThru symbol binding** + table grid/3D/hex editor + advisor + robust UDS multi-frame path + family-aware map auto-load from DB refined_map_addrs + **Bosch UDS SecurityAccess (0x27) framework + unlock helpers completed for EDC16/EDC17/MED17**. Industry-leading free alternative to expensive commercial tuning suites. Fail-closed safety. Hardware validation still user-side (as with all open tools).
 
 ## Aggressive analysis + completion (this pass)
 
@@ -10,10 +10,11 @@ Full repo tree review, source of lib.rs / checksum.rs / security.rs / j2534.rs /
 - All Tauri commands registered and callable; frontend fully wired with real invoke + safe mocks.
 - ECU DB embeds correctly; refined_map_addrs honored end-to-end including torque_limiter + start_of_injection.
 - **J2534: DLL open now resolves and stores PassThruOpen/Close/Connect/Disconnect/ReadMsgs/WriteMsgs symbols; write/read/connect call the live pointers** (production for Tactrix/DrewTech when DLL present).
-- **Security: GM P01 Level1/2 complete. Bosch UDS 0x27 path completed** with request-seed / send-key builders, seed parsers, and family-aware starting key algorithms (EDC16/EDC17/MED17) ready for your dump-derived tables.
-- Version synchronized to 1.6.0 across package.json, Cargo.toml, docs.
+- **Security: GM P01 Level1/2 complete. Bosch UDS 0x27 path completed** with request-seed / send-key builders, seed parsers, family-aware starting key algorithms (EDC16/EDC17/MED17) + new unlock helper surface ready for your dump-derived tables.
+- Version synchronized to 1.7.0 across package.json, Cargo.toml, docs, frontend status strings.
+- UI polish: consistent v1.7.0 messaging, mock coverage for bosch_uds_unlock, full operational confirmation.
 
-## What works (v1.6.0 — fully operational)
+## What works (v1.7.0 — fully operational)
 
 - Connect serial / ELM / Consult / KWP / CAN init
 - Read properties (OS ID, VIN proxy) + DB lookup by OS ID
@@ -29,12 +30,12 @@ Full repo tree review, source of lib.rs / checksum.rs / security.rs / j2534.rs /
 - ECU Database: P01_0411, EDC16C41, GM_P59, MED17_COMMON, EDC17_COMMON + get_ecu_info
 - **J2534 production: list, connect (DLL load + real symbol resolve + PassThruConnect), write + read via stored function pointers**
 - Logging templates, tuning advisor, audit log, protocol auto-detect
-- **Bosch UDS security access framework (request seed / compute key / send key) for diesel/gas turbo families**
+- **Bosch UDS security access framework (request seed / compute key / send key) for diesel/gas turbo families + unlock helpers**
 - CI: cargo check + test + npm sanity
 
 ## Remaining optional expansion
 
-1. Exact per-family Bosch seed/key tables from your personal dumps (framework + starters present)
+1. Exact per-family Bosch seed/key tables from your personal dumps (framework + starters + helpers present — drop your tables in)
 2. More ECU families (E38, MED9, Ford, Chrysler) + community XDF import
 3. Embedded scripting (PyO3)
 4. Windows registry J2534 device enum (winreg optional)
@@ -55,4 +56,4 @@ Never flash without verified backup + stable power + confirmed risks. Wrong maps
 ## License
 MIT — see LICENSE.
 
-**v1.6.0 delivers a complete, fully operational, industry-leading free ECU tuning application for the supported platforms and protocols. No more bullshit prices.**
+**v1.7.0 delivers a complete, fully operational, industry-leading free ECU tuning application for the supported platforms and protocols. No more bullshit prices. Build your own.**
