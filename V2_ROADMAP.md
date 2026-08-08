@@ -15,112 +15,81 @@ This roadmap is derived from a full code review of the repository (Rust modules,
 ## Priority 0 — Safety & Correctness Blockers (Must ship before any write claims)
 These fix the issues that make current guided flash dangerous or misleading.
 
-1. **Proper Flash Read / Backup (replace Mode 22 loop)**
-   - Implement real bulk memory read for supported families:
-     - P01 / GM VPW: Kernel-assisted Mode 23 / ALDL fast upload or Mode 3D style after kernel in RAM.
-     - Bosch EDC16/EDC17/MED17: Proper UDS ReadMemoryByAddress (0x23) with multi-frame ISO-TP, or family-specific dump routines.
-   - Fallback path that clearly marks "partial / DID-only" vs "full flash image".
-   - Produce verifiable .bin backups with header metadata (OS ID, size, CRC, timestamp, tool version).
+1. **Proper Flash Read / Backup (replace Mode 22 loop)** — PARTIAL ✅
+   - [x] Honest quality labelling: `BackupQuality::{FullImage, PartialDidOnly, Failed}`
+   - [x] Mode 22 / DID sampling never reported as full image
+   - [x] UDS Mode 23 (ReadMemoryByAddress) scaffolding for Bosch families
+   - [ ] Full multi-frame ISO-TP bulk dump for EDC16/EDC17/MED17
+   - [ ] Kernel-assisted Mode 23/3D full cal dump for P01
+   - [ ] Backup file header metadata (OS ID, size, CRC, timestamp, tool version)
 
-2. **Live Post-Flash Verification**
-   - Implement `verify_after_write` that actually reads back from the ECU (using the new bulk read) and compares CRC / selected regions / full image against the written data.
-   - Surface mismatch as hard failure + recovery prompt.
-   - Do not report the CRC of the local image as "verification".
+2. **Live Post-Flash Verification** — PARTIAL ✅
+   - [x] `verify_after_write` attempts real ECU readback (Mode 23 window for Bosch)
+   - [x] Mismatch surfaced as hard failure message; `verified_live` flag on result
+   - [x] Local image CRC is **never** reported as verification
+   - [ ] Full-image live compare once bulk read is complete
 
-3. **Voltage / Power Monitoring Gate**
-   - Before any Mode 34/36/erase/write: query battery voltage (OBD PID 0x42 or equivalent) and enforce ≥ 12.5 V (configurable, with hard abort).
-   - Continuous monitoring during long transfers; abort + recovery if voltage sags.
-   - UI checkbox alone is not safety — this is the real fail-closed gate.
+3. **Voltage / Power Monitoring Gate** — DONE ✅
+   - [x] PID 0x42 battery voltage query before any Mode 34/36 write
+   - [x] Fail-closed ≥ 12.5 V (configurable via `min_voltage_v`; 0 bypasses for bench only)
+   - [x] Re-check immediately before the destructive write phase
+   - [ ] Continuous monitoring mid-transfer with abort on sag
 
-4. **Adaptive Serial / Protocol Timing**
-   - Remove hardcoded `thread::sleep(20ms)` etc.
-   - Response-length-aware polling, adaptive timeouts based on protocol (VPW vs ISO-TP vs KWP), retry with backoff.
-   - Move flash I/O toward async (tokio) where practical so UI stays responsive and timing is precise.
+4. **Adaptive Serial / Protocol Timing** — DONE ✅
+   - [x] `AdaptiveTiming` replaces hardcoded 20 ms / 3 ms / 5 ms sleeps in guided path
+   - [x] Exponential backoff on empty responses; reset on success
+   - [x] Separate VPW vs CAN base delays
+   - [ ] Full tokio async I/O for UI responsiveness on long transfers
 
 ## Priority 1 — Real Security Access (Unlock is the point of the tool)
 
-5. **Replace Placeholder Bosch Seed/Key Algorithms**
-   - `bosch_key_from_seed` currently uses invented XOR/rotate patterns explicitly marked as starting points.
-   - Derive and implement real tables / algorithms from personal dumps (EDC16C41 392203 / Patrol, EDC17, MED17).
-   - Support common community patterns + extensible table lookup (reference/2byte-keys.txt style + per-family JSON or binary tables).
-   - Full end-to-end UDS 0x27 flow with level selection, attempt counting, and clear NRC handling.
-   - Unit tests against known seed→key pairs from dumps.
+5. **Replace Placeholder Bosch Seed/Key Algorithms** — EDC16C41 DONE ✅
+   - [x] Real EDC16C41 4-byte algorithm integrated (`edc16c41_calculate_key`)
+   - [x] `const fn`, fixed-size arrays, unit tests with known vectors
+   - [x] Dispatcher prefers EDC16C41 path for 4-byte seeds
+   - [ ] EDC17 / MED17 exact tables from personal dumps
+   - [ ] Extensible table lookup (2byte-keys.txt style + per-family JSON)
 
-6. **GM P01 / P59 refinements**
-   - Already strong (LFSR L1/L2). Add any missing levels or known variants; keep unit tests.
+6. **GM P01 / P59 refinements** — solid (LFSR L1/L2 + unit tests)
 
 ## Priority 2 — Scalable ECU Definition & Identification
 
-7. **Real ECU Auto-Detection & Fingerprinting**
-   - Live handshake: query VIN / OS ID / hardware ID / software version via protocol-specific DIDs or Mode 22 / UDS 0x22.
-   - Map to verified DB entry; reject unknown units before allowing writes.
-   - Replace simple `contains()` string match with proper matching (exact OS, fuzzy family, version ranges).
-
-8. **Scalable ECU Database + Import Pipeline**
-   - Expand beyond the current 5 families (P01_0411, EDC16C41, GM_P59, MED17_COMMON, EDC17_COMMON).
-   - Schema evolution: versioned entries, A2L / DAMOS / XDF community import, map address validation.
-   - Master index + per-family JSON (or SQLite for larger scale).
-   - Auto-load corresponding XDF / refined_map_addrs on bin open or connect.
-   - Community contribution path (PRs with test bins + checksum routines + seed tables).
-
-9. **Checksum Expansion**
-   - Keep existing P01 additive + EDC16/17/MED17 multipoint CRC32 solid.
-   - Add more family-specific correctors as DB grows (MED9, E38, etc.).
-   - Always validate + correct before write; surface report in UI.
+7. **Real ECU Auto-Detection & Fingerprinting** — TODO
+8. **Scalable ECU Database + Import Pipeline** — TODO (still 5 families)
+9. **Checksum Expansion** — existing multipoint solid; more families TODO
 
 ## Priority 3 — Professional Workflow Features
 
-10. **J2534 Windows Registry Device Enumeration**
-    - Use winreg (or equivalent) to discover installed J2534 devices from the Windows Registry instead of requiring manual DLL path.
-    - List name, vendor, DLL path; auto-select or let user pick.
-    - Keep current symbol binding + PassThru* calls.
-
-11. **Datalog Import & Map-from-Log Automation**
-    - Import CSV / MegaLogViewer / EFILive-style logs.
-    - Basic VE table / fuel / timing correction suggestions from WOT pulls, lambda, knock counts.
-    - Closed-loop correction workflow (simple first version).
-    - Export corrected maps back to XDF / bin.
-
-12. **BDM / JTAG / Bench Mode Support (foundation)**
-    - Even if full hardware is in VerseLink Apex, provide software stubs + protocol scaffolding for BDM100-style / JTAG recovery of locked or virgin ECUs.
-    - Kernel / loader management for recovery scenarios.
-    - Safety warnings for bench power requirements.
+10. **J2534 Windows Registry Device Enumeration** — TODO (still hardcoded name list)
+11. **Datalog Import & Map-from-Log Automation** — TODO
+12. **BDM / JTAG / Bench Mode Support** — TODO (foundation only)
 
 ## Priority 4 — Extensibility & Ecosystem
 
-13. **Plugin / Driver SDK**
-    - Define a clean interface for external drivers, definition packs, and importers (Rust trait or dynamic load, or PyO3 scripting runtime).
-    - Allow community to add ECU families, seed tables, checksum routines, and log parsers without core changes.
-    - Document the SDK early so adoption can start.
-
-14. **Scripting Runtime (PyO3 or similar)**
-    - Optional Python scripting surface for power users (map math, batch processing, custom PIDs).
-
-15. **UI / UX Polish for Daily Use**
-    - Guided flash must surface voltage, backup status, verification result, and recovery steps clearly.
-    - Progress + cancel for long operations.
-    - Better error messages with actionable recovery (not just "failed").
+13. **Plugin / Driver SDK** — TODO
+14. **Scripting Runtime** — TODO
+15. **UI / UX Polish** — voltage, backup quality, verified_live now available to surface
 
 ## Suggested Release Sequence
-- **v1.8** (hotfixes): Voltage gate + adaptive timing + start of real bulk read for P01.
-- **v1.9**: Live verify_after_write + real Bosch seed/key for EDC16C41 (user's Patrol).
-- **v2.0**: Full Priority 0–2 + J2534 enum + initial datalog import + expanded DB (at least 8–10 families) + SDK skeleton.
+- **v1.8** ✅ (this work): Voltage gate + adaptive timing + honest backup + Mode 23 scaffold + live verify path
+- **v1.9** ✅ (EDC16C41): Real Bosch seed/key for Patrol
+- **v2.0**: Full bulk read, J2534 registry enum, expanded DB, datalog import, SDK skeleton
 
 ## Implementation Notes
-- All changes go on feature branches (e.g. `feat/flash-bulk-read`, `feat/bosch-real-seedkey`, `feat/ecu-db-v2`).
+- All changes go on feature branches.
 - Prefer real test vectors from personal dumps only.
 - Update COMPLETION.md honestly after each milestone — no more "fully operational / industry-leading" claims until the blockers are closed.
 - Reference folder and ecu_database/ remain the source of truth for algorithms and maps.
 
 ## Success Criteria for v2.0
 - Can safely backup, unlock, flash, and verify a known-good P01 and EDC16C41 without relying on placeholders or Mode-22-as-bulk.
-- Voltage is enforced.
+- Voltage is enforced. ✅
 - New ECUs can be added via structured DB entry + algorithm without core rewrite.
 - J2534 devices appear automatically on Windows.
 - A tuner can import a log and get a useful map correction suggestion.
-- The tool is honest about what it supports and what still needs user-derived tables.
+- The tool is honest about what it supports and what still needs user-derived tables. ✅ (backup quality + verified_live)
 
 Build your own. No more bullshit prices.
 
 ---
-Generated from full repository review + gap analysis. Track progress by closing items and opening PRs against this roadmap.
+Updated 2026-08-08: Priority 0 core gates + EDC16C41 seed/key landed on main.
