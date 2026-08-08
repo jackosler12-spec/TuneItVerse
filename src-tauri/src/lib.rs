@@ -3,6 +3,7 @@
 // FIXED 2026-07-23: trailing semicolons on Ok(...) + format! argument count
 // v1.1.0: J2534 write/read fully registered, family-aware table auto-load from ECU DB refined_map_addrs for all 5 families, get_ecu_info command
 // v1.2.1: Completed missing torque_limiter + start_of_injection handlers in auto_load so DB refined_map_addrs are fully honored (industry-leading map coverage)
+// v1.7.0: J2534 PassThruIoctl — SET_CONFIG DATA_RATE, READ_VBATT, ISO15765 STMIN/BS, VPW high-speed helpers
 #![allow(unused_imports, dead_code, unused_variables, unused_mut)]
 
 use std::sync::Mutex;
@@ -33,9 +34,6 @@ use crate::kwp::{kwp_fast_init, kwp_request_response, build_kwp_request};
 use crate::consult::{consult_init, consult_read_basic_diesel_data};
 use crate::checksum::{validate_checksums, correct_checksums, correct_and_validate_checksums, validate_bin_checksums_summary};
 
-// ─── Shared port helpers (used by sub-modules) ─────────────────────────────
-// These MUST be pub(crate) so dtc.rs, security.rs, can.rs, kwp.rs, consult.rs can import them
-
 pub(crate) fn write_frame(port: &mut Box<dyn SerialPort + Send>, frame: &[u8]) -> Result<(), String> {
     port.write_all(frame).map_err(|e| format!("Write error: {}", e))
 }
@@ -52,8 +50,6 @@ pub(crate) fn validate_checksum(frame: &[u8]) -> bool {
 }
 
 use serialport::SerialPort;
-
-// ─── App State ─────────────────────────────────────────────────────────────
 
 pub struct AppState {
     pub port: Mutex<Option<Box<dyn SerialPort + Send>>>,
@@ -81,8 +77,6 @@ impl Default for AppState {
         }
     }
 }
-
-// ─── Serial Port Commands ──────────────────────────────────────────────────
 
 #[tauri::command]
 fn list_serial_ports() -> Result<Vec<String>, String> {
@@ -120,7 +114,6 @@ fn connect_ecu(state: State<AppState>, port_name: String, baud: u32, protocol: O
     Ok(init_msg)
 }
 
-/// Cleanly disconnect from the ECU — closes the serial port and resets state.
 #[tauri::command]
 fn disconnect_ecu(state: State<AppState>) -> Result<String, String> {
     let mut port_guard = state.port.lock().map_err(|e| e.to_string())?;
@@ -133,10 +126,6 @@ fn disconnect_ecu(state: State<AppState>) -> Result<String, String> {
     Ok("Disconnected successfully".to_string())
 }
 
-// ─── ECU Identity / Properties ─────────────────────────────────────────────
-
-/// Read live ECU properties using Mode 22 (GM VPW / OBD-II).
-/// Returns OS ID, VIN, hardware rev, ECU type, protocol detected.
 #[tauri::command]
 fn read_properties(state: State<AppState>) -> Result<String, String> {
     let mut port_guard = state.port.lock().map_err(|e| e.to_string())?;
@@ -156,7 +145,6 @@ fn read_properties(state: State<AppState>) -> Result<String, String> {
             }
             _ => "UNAVAILABLE".to_string(),
         };
-        // Try DB lookup by OS ID first
         let ecu_info = get_ecu_by_os_id(&os_id)
             .or_else(|| get_ecu_by_family("P01_0411"))
             .map(|e| (e.display_name, e.protocol))
@@ -178,7 +166,6 @@ fn read_properties(state: State<AppState>) -> Result<String, String> {
     Err("Not connected — call connect_ecu first".to_string())
 }
 
-/// Get full ECU DB entry by family or OS ID (for frontend configuration)
 #[tauri::command]
 fn get_ecu_info(family_or_os: String) -> Result<String, String> {
     if let Some(e) = get_ecu_by_family(&family_or_os).or_else(|| get_ecu_by_os_id(&family_or_os)) {
@@ -188,10 +175,6 @@ fn get_ecu_info(family_or_os: String) -> Result<String, String> {
     }
 }
 
-// ─── Live Data ─────────────────────────────────────────────────────────────
-
-/// Read live ECU data (RPM, MAP, TPS, ECT, IAT, Spark, STFT, BATT).
-/// Uses OBD Mode 01 + pid_decode. Requires an active connection — no mock values.
 #[tauri::command]
 fn read_ecu_data(state: State<AppState>) -> Result<String, String> {
     let mut port_guard = state.port.lock().map_err(|e| e.to_string())?;
@@ -199,7 +182,6 @@ fn read_ecu_data(state: State<AppState>) -> Result<String, String> {
         .as_mut()
         .ok_or_else(|| "Not connected — call connect_ecu first".to_string())?;
 
-    // (json_key, mode01_pid_byte, pid_decode id)
     let pid_map: &[(&str, u8, u16)] = &[
         ("rpm",   0x0C, 0x000C),
         ("map",   0x0B, 0x000B),
@@ -218,7 +200,6 @@ fn read_ecu_data(state: State<AppState>) -> Result<String, String> {
         let cs = req[..len - 1].iter().fold(0u8, |a, &b| a.wrapping_add(b));
         req[len - 1] = cs;
         if let Ok(resp) = request_response(port, &req) {
-            // Mode 01 response payload is often after SID/PID; use trailing data bytes
             let raw = if resp.len() >= 2 { &resp[resp.len().saturating_sub(2)..] } else { resp.as_slice() };
             let decoded = crate::pid_decode::decode_pid(*pid_id, raw);
             if let Some(v) = decoded.value {
@@ -230,7 +211,6 @@ fn read_ecu_data(state: State<AppState>) -> Result<String, String> {
     if !any {
         return Err("No PID responses received — check adapter/protocol and that the ECU is powered".into());
     }
-    // Derived inj estimate only when we have rpm+map
     let rpm = out.get("rpm").and_then(|v| v.as_f64()).unwrap_or(0.0);
     let map = out.get("map").and_then(|v| v.as_f64()).unwrap_or(0.0);
     let inj_ms = if rpm > 100.0 {
@@ -241,8 +221,6 @@ fn read_ecu_data(state: State<AppState>) -> Result<String, String> {
     out.insert("inj_ms".into(), serde_json::json!(inj_ms));
     serde_json::to_string(&out).map_err(|e| e.to_string())
 }
-
-// ─── BIN Validation & Checksum ─────────────────────────────────────────────
 
 #[tauri::command]
 fn validate_bin(file_bytes: Vec<u8>) -> Result<String, String> {
@@ -263,7 +241,6 @@ fn validate_cal_checksum(data: Vec<u8>) -> Result<String, String> {
     }
 }
 
-/// Correct checksums in the provided calibration image and return corrected bytes.
 #[tauri::command]
 fn correct_cal_checksum(data: Vec<u8>) -> Result<Vec<u8>, String> {
     match crate::checksum::correct_checksums(&data) {
@@ -272,20 +249,17 @@ fn correct_cal_checksum(data: Vec<u8>) -> Result<Vec<u8>, String> {
     }
 }
 
-// General checksum validation (auto-detects P01 or EDC16 from size)
 #[tauri::command]
 fn validate_checksums_cmd(data: Vec<u8>) -> Result<String, String> {
     let report = crate::checksum::validate_checksums(&data)?;
     serde_json::to_string(&report).map_err(|e| e.to_string())
 }
 
-// Human readable summary for quick UI feedback
 #[tauri::command]
 fn validate_bin_checksums_summary_cmd(data: Vec<u8>) -> Result<String, String> {
     crate::checksum::validate_bin_checksums_summary(&data)
 }
 
-// Auto correct checksums (works for both P01 and EDC16)
 #[tauri::command]
 fn correct_bin_checksums(data: Vec<u8>) -> Result<Vec<u8>, String> {
     match crate::checksum::correct_checksums(&data) {
@@ -294,12 +268,8 @@ fn correct_bin_checksums(data: Vec<u8>) -> Result<Vec<u8>, String> {
     }
 }
 
-// ─── AUTO LOAD TABLES FOR BIN (key feature) ────────────────────────────────
-
-/// Embedded P01/OS-16263425 TableData definitions (real cal-relative addresses).
 const P01_TABLE_XML: &str = include_str!("../../reference/16263425.xml");
 
-/// Helper to build TableDef from refined_map_addrs style
 fn table_from_addr(id: &str, name: &str, category: &str, addr: &str, rows: u32, cols: u32, dtype: &str, math: &str, units: &str) -> TableDef {
     TableDef {
         id: id.into(),
@@ -317,14 +287,11 @@ fn table_from_addr(id: &str, name: &str, category: &str, addr: &str, rows: u32, 
     }
 }
 
-/// Auto-detect ECU family from BIN size and return TableDef list with real addresses.
-/// P01/P59 sizes load `reference/16263425.xml`. 2MB uses family-aware DB refined_map_addrs (EDC16/EDC17/MED17).
 #[tauri::command]
 fn auto_load_tables_for_bin(bin_bytes: Vec<u8>, family_hint: Option<String>) -> Result<String, String> {
     let len = bin_bytes.len();
     let tables: Vec<TableDef> = if len == 524288 || len == 131072 {
         let mut parsed = parse_table_definitions(P01_TABLE_XML);
-        // Prefer engine-relevant tables first; keep full set for completeness.
         parsed.sort_by(|a, b| {
             let score = |t: &TableDef| {
                 let c = t.category.as_deref().unwrap_or("").to_ascii_lowercase();
@@ -341,7 +308,6 @@ fn auto_load_tables_for_bin(bin_bytes: Vec<u8>, family_hint: Option<String>) -> 
         }
         parsed
     } else if len == 2097152 {
-        // Family-aware from ECU DB refined_map_addrs
         let fam = family_hint.unwrap_or_else(|| "EDC16C41".to_string()).to_uppercase();
         let entry = get_ecu_by_family(&fam)
             .or_else(|| get_ecu_by_family("EDC16C41"))
@@ -351,7 +317,6 @@ fn auto_load_tables_for_bin(bin_bytes: Vec<u8>, family_hint: Option<String>) -> 
         if let Some(e) = entry {
             if let Some(addrs) = e.maps_and_xdf.refined_map_addrs {
                 let mut out = Vec::new();
-                // Generic mapping from common keys
                 if let Some(a) = addrs.get("driver_wish").or_else(|| addrs.get("driver-wish")).and_then(|v| v.as_str()) {
                     out.push(table_from_addr("driver-wish", "Driver Wish (Torque Request)", "Torque", a, 16, 16, "UWORD", "X*0.1", "Nm"));
                 }
@@ -385,7 +350,6 @@ fn auto_load_tables_for_bin(bin_bytes: Vec<u8>, family_hint: Option<String>) -> 
                 if let Some(a) = addrs.get("knock_control").and_then(|v| v.as_str()) {
                     out.push(table_from_addr("knock-control", "Knock Control", "Ignition", a, 12, 12, "UWORD", "X", ""));
                 }
-                // v1.2.1: Complete the expanded maps claimed in COMPLETION + JSON
                 if let Some(a) = addrs.get("torque_limiter").or_else(|| addrs.get("torque-limiter")).and_then(|v| v.as_str()) {
                     out.push(table_from_addr("torque-limiter", "Torque Limiter", "Limiters", a, 12, 12, "UWORD", "X*0.1", "Nm"));
                 }
@@ -397,7 +361,6 @@ fn auto_load_tables_for_bin(bin_bytes: Vec<u8>, family_hint: Option<String>) -> 
                 }
             }
         }
-        // Fallback community maps for 2MB diesel/gas (now includes torque + SOI)
         vec![
             table_from_addr("driver-wish", "Driver Wish (Torque Request)", "Torque", "0x80000", 16, 16, "UWORD", "X*0.1", "Nm"),
             table_from_addr("inj-quantity", "Injection Quantity", "Fuel", "0x82000", 16, 16, "UWORD", "X*0.01", "mm3"),
@@ -420,9 +383,6 @@ fn auto_load_tables_for_bin(bin_bytes: Vec<u8>, family_hint: Option<String>) -> 
     serde_json::to_string(&tables).map_err(|e| e.to_string())
 }
 
-// ─── BIN Comparison ────────────────────────────────────────────────────────
-
-/// Compare a loaded BIN file against live ECU data read via Mode 22.
 #[tauri::command]
 fn compare_bin_to_ecu(state: State<AppState>, file_bytes: Vec<u8>) -> Result<String, String> {
     let mut port_guard = state.port.lock().map_err(|e| e.to_string())?;
@@ -465,9 +425,6 @@ fn compare_bin_to_ecu(state: State<AppState>, file_bytes: Vec<u8>) -> Result<Str
     ))
 }
 
-// ─── Flash Write Commands ──────────────────────────────────────────────────
-
-/// Write calibration BIN via Mode 34 (RequestDownload) → 36 (TransferData) → 37 after L2 unlock.
 #[tauri::command]
 fn write_calibration_cmd(state: State<AppState>, file_bytes: Vec<u8>) -> Result<String, String> {
     let mut port_guard = state.port.lock().map_err(|e| e.to_string())?;
@@ -505,7 +462,6 @@ fn write_calibration_cmd(state: State<AppState>, file_bytes: Vec<u8>) -> Result<
     ))
 }
 
-/// Write full OS + calibration image (Mode 34/36/37).
 #[tauri::command]
 fn write_os_calibration(state: State<AppState>, file_bytes: Vec<u8>) -> Result<String, String> {
     let mut port_guard = state.port.lock().map_err(|e| e.to_string())?;
@@ -534,7 +490,6 @@ fn write_os_calibration(state: State<AppState>, file_bytes: Vec<u8>) -> Result<S
     ))
 }
 
-/// Post-flash verification: read back cal region and compare CRC. Requires connection.
 #[tauri::command]
 fn verify_after_write(state: State<AppState>, expected_bytes: Option<Vec<u8>>) -> Result<String, String> {
     let mut port_guard = state.port.lock().map_err(|e| e.to_string())?;
@@ -596,7 +551,6 @@ fn crc32_simple(data: &[u8]) -> u32 {
     !crc
 }
 
-/// Upload a kernel binary to ECU RAM via Mode 34/36/37 (replaces demo stub).
 #[tauri::command]
 fn write_ecu_frame(state: State<AppState>, data: Vec<u8>) -> Result<String, String> {
     let mut port_guard = state.port.lock().map_err(|e| e.to_string())?;
@@ -620,9 +574,6 @@ fn write_ecu_frame(state: State<AppState>, data: Vec<u8>) -> Result<String, Stri
     ))
 }
 
-// ─── DTC Commands ──────────────────────────────────────────────────────────
-
-/// Read stored / pending / permanent DTCs (Modes 03 / 07 / 0A).
 #[tauri::command]
 fn read_dtcs_cmd(state: State<AppState>) -> Result<String, String> {
     let mut port_guard = state.port.lock().map_err(|e| e.to_string())?;
@@ -631,7 +582,6 @@ fn read_dtcs_cmd(state: State<AppState>) -> Result<String, String> {
     serde_json::to_string(&result).map_err(|e| e.to_string())
 }
 
-/// Read freeze-frame snapshot for the first stored DTC (Mode 02).
 #[tauri::command]
 fn read_freeze_frame_cmd(state: State<AppState>) -> Result<String, String> {
     let mut port_guard = state.port.lock().map_err(|e| e.to_string())?;
@@ -640,18 +590,14 @@ fn read_freeze_frame_cmd(state: State<AppState>) -> Result<String, String> {
     serde_json::to_string(&result).map_err(|e| e.to_string())
 }
 
-/// Clear all DTCs from the ECU (OBD-II Mode 04).
 #[tauri::command]
 fn clear_dtcs_cmd(state: State<AppState>) -> Result<String, String> {
     let mut port_guard = state.port.lock().map_err(|e| e.to_string())?;
     let port = port_guard.as_mut().ok_or("No connection — call connect_ecu first")?;
-    // Get prior count for the result
     let prior = crate::dtc::read_dtcs(port).map(|r| r.total).unwrap_or(0);
     let result = crate::dtc::clear_dtcs(port, prior)?;
     serde_json::to_string(&result).map_err(|e| e.to_string())
 }
-
-// ─── PCM Backup ────────────────────────────────────────────────────────────
 
 #[tauri::command]
 fn read_entire_pcm(state: State<AppState>) -> Result<String, String> {
@@ -674,8 +620,6 @@ fn read_entire_pcm(state: State<AppState>) -> Result<String, String> {
     Ok(format!("ECU dump saved as {} (real read)", path))
 }
 
-// ─── ECU Database & Protocol ───────────────────────────────────────────────
-
 #[tauri::command]
 fn list_supported_ecus() -> Vec<String> {
     list_supported_ecu_families()
@@ -691,8 +635,6 @@ fn list_supported_protocols() -> Vec<String> {
         "J2534 (PassThru - if hardware + DLL present)".into(),
     ]
 }
-
-// ─── Protocol Commands ─────────────────────────────────────────────────────
 
 #[tauri::command]
 fn read_nissan_consult_data(state: State<AppState>) -> Result<String, String> {
@@ -718,8 +660,6 @@ fn send_kwp_request(state: State<AppState>, tgt: u8, data: Vec<u8>) -> Result<St
     let resp = kwp_request_response(port, &frame)?;
     Ok(format!("{:02X?}", resp))
 }
-
-// ─── Health & Detection ────────────────────────────────────────────────────
 
 #[tauri::command]
 fn get_connection_health(state: State<AppState>) -> Result<String, String> {
@@ -747,11 +687,8 @@ fn auto_detect_protocol(state: State<AppState>, port_name: String) -> Result<Str
     Ok(format!("Auto-detected (fallback): VPW/J1850 on {}", port_name))
 }
 
-// ─── Map Discovery & Logging ───────────────────────────────────────────────
-
 #[tauri::command]
 fn discover_maps_from_bin(bin_bytes: Vec<u8>, family: String) -> Result<String, String> {
-    // Reuse auto-load definitions so discovery returns real TableDef JSON, not a marketing string.
     let tables_json = auto_load_tables_for_bin(bin_bytes, Some(family.clone()))?;
     let tables: Vec<TableDef> = serde_json::from_str(&tables_json).unwrap_or_default();
     Ok(serde_json::json!({
@@ -773,8 +710,6 @@ fn get_logging_templates() -> Result<String, String> {
     ]"#.into())
 }
 
-// ─── Tuning Advisor ────────────────────────────────────────────────────────
-
 #[tauri::command]
 fn get_tuning_advice(table_id: String, sample_value: f64, ecu_family: String) -> Result<String, String> {
     let advice = if table_id.contains("ve") || table_id.contains("volumetric") {
@@ -791,8 +726,6 @@ fn get_tuning_advice(table_id: String, sample_value: f64, ecu_family: String) ->
     Ok(advice)
 }
 
-// ─── Audit Persistence ─────────────────────────────────────────────────────
-
 #[tauri::command]
 async fn save_audit_log(app: AppHandle, content: String) -> Result<String, String> {
     use tauri::Manager;
@@ -800,8 +733,6 @@ async fn save_audit_log(app: AppHandle, content: String) -> Result<String, Strin
     std::fs::write(&path, content).map_err(|e| e.to_string())?;
     Ok(path.to_string_lossy().to_string())
 }
-
-// ─── Guided Flash Pipeline ─────────────────────────────────────────────────
 
 #[tauri::command]
 async fn guided_flash_pipeline(
@@ -836,8 +767,6 @@ fn get_recovery_prompt(ecu_family: String, error_context: String) -> Result<Stri
     serde_json::to_string(&p).map_err(|e| e.to_string())
 }
 
-// ─── Entry Point ───────────────────────────────────────────────────────────
-
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -846,64 +775,56 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .manage(AppState::default())
         .invoke_handler(tauri::generate_handler![
-            // Serial port
             list_serial_ports,
             connect_ecu,
             disconnect_ecu,
-            // ECU identity
             list_supported_ecus,
             read_properties,
             get_ecu_info,
             read_entire_pcm,
-            // BIN validation & checksum
             validate_bin,
             validate_cal_checksum,
             correct_cal_checksum,
             validate_checksums_cmd,
             validate_bin_checksums_summary_cmd,
             correct_bin_checksums,
-            // Auto tables
             auto_load_tables_for_bin,
-            // BIN comparison
             compare_bin_to_ecu,
-            // Flash write
             write_calibration_cmd,
             write_os_calibration,
             verify_after_write,
             write_ecu_frame,
-            // Pipeline
             guided_flash_pipeline,
             get_recovery_prompt,
-            // DTC
             read_dtcs_cmd,
             read_freeze_frame_cmd,
             clear_dtcs_cmd,
-            // Live data
             read_ecu_data,
-            // Health & detection
             get_connection_health,
             auto_detect_protocol,
-            // Map discovery & logging
             discover_maps_from_bin,
             get_logging_templates,
-            // Tuning advisor
             get_tuning_advice,
-            // Audit
             save_audit_log,
-            // XDF / table
             parse_xdf_definitions,
             extract_table_from_bin,
             patch_table_into_bin,
-            // Protocols
             list_supported_protocols,
             read_nissan_consult_data,
             send_can_uds,
             send_kwp_request,
-            // J2534 surface (requires Windows + vendor DLL for live use) - FULL write/read now registered
+            // J2534 PassThru + Ioctl
             j2534::j2534_list_devices,
             j2534::j2534_connect,
+            j2534::j2534_connect_vpw,
             j2534::j2534_write,
             j2534::j2534_read,
+            j2534::j2534_set_data_rate,
+            j2534::j2534_set_vpw_high_speed,
+            j2534::j2534_set_vpw_normal_speed,
+            j2534::j2534_read_vbatt,
+            j2534::j2534_set_iso15765_timing,
+            j2534::j2534_clear_buffers,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
