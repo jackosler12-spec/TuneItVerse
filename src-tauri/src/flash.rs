@@ -21,10 +21,6 @@ use crate::vpw::{
 use crate::security::unlock_level2;
 use std::time::Duration;
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Types
-// ─────────────────────────────────────────────────────────────────────────────
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FlashWriteResult {
     pub bytes_written: u32,
@@ -107,16 +103,10 @@ pub const P01_FLASH_SIZE: u32 = 0x0008_0000;
 pub const P01_CAL_BASE: u32 = 0x0002_0000;
 pub const P01_CAL_SIZE: u32 = 0x0002_0000;
 
-/// Normal-speed Mode 3C block (safe on all VPW adapters).
-pub const MODE3C_BLOCK: u16 = 0x100; // 256 B
-/// High-speed Mode 3C block (used only after successful 0xA0/0xA1).
-pub const MODE3C_BLOCK_HS: u16 = 0x200; // 512 B
+pub const MODE3C_BLOCK: u16 = 0x100;
+pub const MODE3C_BLOCK_HS: u16 = 0x200;
 
 const KERNEL_P01: &[u8] = include_bytes!("../../reference/Kernel-P01.bin");
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Adaptive timing
-// ─────────────────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone)]
 pub struct AdaptiveTiming {
@@ -135,7 +125,6 @@ impl AdaptiveTiming {
     pub fn for_vpw() -> Self {
         Self { base_ms: 8, max_ms: 120, consecutive_empty: 0 }
     }
-    /// Tighter gaps once high-speed VPW is confirmed.
     pub fn for_vpw_hs() -> Self {
         Self { base_ms: 3, max_ms: 40, consecutive_empty: 0 }
     }
@@ -152,10 +141,6 @@ impl AdaptiveTiming {
     }
     pub fn sleep(&self) { std::thread::sleep(self.delay()); }
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Voltage gate
-// ─────────────────────────────────────────────────────────────────────────────
 
 pub fn read_battery_voltage(port: &mut Box<dyn SerialPort + Send>) -> Option<f32> {
     let req = build_obd_request(0x42);
@@ -216,10 +201,6 @@ pub fn enforce_voltage_gate(
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Kernel upload + Mode 3C + optional high-speed VPW
-// ─────────────────────────────────────────────────────────────────────────────
-
 pub fn upload_kernel(port: &mut Box<dyn SerialPort + Send>, kernel: &[u8]) -> Result<(), String> {
     let _ = unlock_level2(port);
     let load_addr: u32 = 0x0010_0000;
@@ -262,8 +243,6 @@ pub fn kernel_read_block(
     parse_mode3c_response(&resp)
 }
 
-/// Probe Mode 3C at normal speed with a tiny window.
-/// Returns true if the kernel returns usable data.
 fn probe_mode3c(port: &mut Box<dyn SerialPort + Send>, logs: &mut Vec<String>) -> bool {
     match kernel_read_block(port, 0x0000_0000, 0x10) {
         Ok(data) if !data.is_empty() => {
@@ -282,12 +261,7 @@ fn probe_mode3c(port: &mut Box<dyn SerialPort + Send>, logs: &mut Vec<String>) -
 }
 
 /// Attempt high-speed VPW entry (0xA0 → 0xA1).
-///
-/// Returns `true` only when both prepare and enter look positive.
-/// Does **not** switch the tool physical layer — that is adapter-specific
-/// (J2534 PassThruSetConfig / STN proprietary). Serial ELM clones usually
-/// stay at normal rate; the kernel may still accept the modes and we simply
-/// benefit from slightly faster kernel-side handling.
+/// Best-effort: returns false on any rejection so caller stays at normal speed.
 pub fn try_enter_high_speed(
     port: &mut Box<dyn SerialPort + Send>,
     logs: &mut Vec<String>,
@@ -305,7 +279,6 @@ pub fn try_enter_high_speed(
                 return false;
             }
             other => {
-                // Some kernels ACK with non-standard bytes; treat non-empty as soft-ok
                 if resp.is_empty() {
                     logs.push(format!("Mode 0xA0 unclear ({:?}) — aborting HS", other));
                     return false;
@@ -321,7 +294,6 @@ pub fn try_enter_high_speed(
         }
     }
 
-    // Brief settle so kernel arms the faster bit-clock
     std::thread::sleep(Duration::from_millis(20));
 
     logs.push("Sending Mode 0xA1 HighSpeed enter…".into());
@@ -330,7 +302,6 @@ pub fn try_enter_high_speed(
         Ok(resp) => match parse_hs_response(&resp) {
             HsResponse::EnterOk => {
                 logs.push("Mode 0xA1 HighSpeed ENTERED (E1) — using HS block size + timing".into());
-                // Adapter physical-layer switch would go here for J2534/STN.
                 true
             }
             HsResponse::Negative => {
@@ -342,9 +313,8 @@ pub fn try_enter_high_speed(
                     logs.push(format!("Mode 0xA1 unclear ({:?}) — normal speed", other));
                     false
                 } else {
-                    // Soft success: non-empty reply after A0 accepted
                     logs.push(format!(
-                        "Mode 0xA1 soft-accept ({:?}) — trying HS blocks".into(),
+                        "Mode 0xA1 soft-accept ({:?}) — trying HS blocks",
                         other
                     ));
                     true
@@ -358,20 +328,11 @@ pub fn try_enter_high_speed(
     }
 }
 
-/// Full kernel-assisted bulk read for P01/P59.
-///
-/// Sequence:
-/// 1. Ensure kernel resident (upload if needed)
-/// 2. Mode 3F alive + Mode 3C probe at normal speed
-/// 3. Optional 0xA0/0xA1 high-speed entry
-/// 4. Mode 3C loop (HS block size if entered, else normal)
-/// 5. On sustained failures while HS: drop back to normal blocks once
-/// 6. Mode 20 ExitKernel
 pub fn p01_kernel_bulk_read<F>(
     port: &mut Box<dyn SerialPort + Send>,
     base: u32,
     total_size: u32,
-    mut on_progress: F,
+    on_progress: F,
     logs: &mut Vec<String>,
 ) -> Result<Vec<u8>, String>
 where
@@ -380,7 +341,6 @@ where
     p01_kernel_bulk_read_ex(port, base, total_size, true, on_progress, logs)
 }
 
-/// Extended bulk read with explicit high-speed preference.
 pub fn p01_kernel_bulk_read_ex<F>(
     port: &mut Box<dyn SerialPort + Send>,
     base: u32,
@@ -397,7 +357,6 @@ where
         base, total_size, prefer_hs
     ));
 
-    // ── Kernel present ──────────────────────────────────────────────────
     if !kernel_is_alive(port) {
         logs.push("Kernel not responding — uploading Kernel-P01.bin…".into());
         upload_kernel(port, KERNEL_P01)
@@ -414,12 +373,10 @@ where
         logs.push("Kernel already resident".into());
     }
 
-    // ── Normal-speed Mode 3C probe (required before HS) ─────────────────
     if !probe_mode3c(port, logs) {
         logs.push("Mode 3C probe failed — continuing anyway; dump may be partial".into());
     }
 
-    // ── Optional high-speed ─────────────────────────────────────────────
     let mut high_speed = false;
     if prefer_hs {
         high_speed = try_enter_high_speed(port, logs);
@@ -434,12 +391,8 @@ where
         AdaptiveTiming::for_vpw()
     };
 
-    logs.push(format!(
-        "Bulk Mode 3C: block={} HS={}",
-        block_size, high_speed
-    ));
+    logs.push(format!("Bulk Mode 3C: block={} HS={}", block_size, high_speed));
 
-    // ── Dump loop ───────────────────────────────────────────────────────
     let mut out = Vec::with_capacity(total_size as usize);
     let mut offset = 0u32;
     let mut consecutive_fail = 0u32;
@@ -475,7 +428,6 @@ where
                     base + offset, e, consecutive_fail
                 ));
 
-                // One-shot fallback: if HS is active and we're failing, drop to normal
                 if high_speed && !hs_fallback_done && consecutive_fail >= 3 {
                     logs.push(
                         "HS Mode 3C unstable — falling back to normal-speed blocks".into()
@@ -498,7 +450,6 @@ where
         timing.sleep();
     }
 
-    // ── Exit kernel ─────────────────────────────────────────────────────
     let _ = send_frame(port, &build_mode20_exit_kernel());
     logs.push("Mode 20 ExitKernel sent".into());
 
@@ -509,14 +460,10 @@ where
         "Kernel bulk read recovered {} / {} bytes (HS used: {})",
         out.len(),
         total_size,
-        high_speed || hs_fallback_done // true if we entered HS at any point
+        high_speed || hs_fallback_done
     ));
     Ok(out)
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Bosch Mode 23 bulk
-// ─────────────────────────────────────────────────────────────────────────────
 
 pub fn uds_read_memory_by_address(
     port: &mut Box<dyn SerialPort + Send>,
@@ -607,10 +554,6 @@ where
     logs.push(format!("Bulk read recovered {} / {} bytes", out.len(), total_size));
     Ok(out)
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Backup
-// ─────────────────────────────────────────────────────────────────────────────
 
 pub fn perform_backup(
     port: &mut Box<dyn SerialPort + Send>,
@@ -745,10 +688,6 @@ pub fn perform_backup(
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Live verification
-// ─────────────────────────────────────────────────────────────────────────────
-
 pub fn verify_after_write(
     port: &mut Box<dyn SerialPort + Send>,
     ecu_family: &str,
@@ -818,10 +757,6 @@ pub fn verify_after_write(
     Err("Live verification not available for this family.".into())
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Guided orchestration
-// ─────────────────────────────────────────────────────────────────────────────
-
 pub fn orchestrate_guided_flash<F>(
     port: &mut Box<dyn SerialPort + Send>,
     request: GuidedFlashRequest,
@@ -860,7 +795,6 @@ where
     result.steps_completed.push("ECU profile loaded".into());
 
     if request.perform_backup {
-        // perform_backup uses default prefer_hs=true via p01_kernel_bulk_read
         let backup = perform_backup(port, &request.ecu_family, &mut result.logs);
         result.steps_completed.push(format!(
             "Backup finished (quality={:?}, {} bytes)", backup.quality, backup.bytes
@@ -890,7 +824,7 @@ where
         } else {
             result.logs.push("Kernel uploaded for write support".into());
         }
-        let _ = prefer_hs; // reserved for write-path HS later
+        let _ = prefer_hs;
     }
 
     if !request.user_confirmed_risks {
