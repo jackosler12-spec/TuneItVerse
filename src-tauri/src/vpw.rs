@@ -8,6 +8,11 @@
 //!   0x20 ExitKernel
 //!   0x3F TestDevicePresent
 //!   0xA0 HighSpeedPrepare / 0xA1 HighSpeed
+//!
+//! High-speed VPW (~4× normal bit rate) requires BOTH:
+//!   1. Kernel accepting 0xA0 then 0xA1
+//!   2. The tool/adapter switching its physical VPW timing
+//! ELM327 clones often cannot do (2); J2534 / STN / AVT usually can.
 
 use serialport::SerialPort;
 use std::io::{Read, Write};
@@ -29,6 +34,10 @@ pub const MODE_READ_BLOCK: u8 = 0x3C;
 pub const MODE_TEST_DEVICE: u8 = 0x3F;
 pub const MODE_HS_PREPARE: u8 = 0xA0;
 pub const MODE_HS_ENTER: u8 = 0xA1;
+
+/// Positive response = mode | 0x40
+pub const RESP_HS_PREPARE: u8 = 0xE0; // A0 + 0x40
+pub const RESP_HS_ENTER: u8 = 0xE1;   // A1 + 0x40
 
 // ── Frame builders ──────────────────────────────────────────────────────
 
@@ -63,12 +72,6 @@ pub fn build_clear_dtc_request() -> Vec<u8> {
 }
 
 /// Mode 0x3C ReadBlock — kernel-assisted bulk memory read.
-///
-/// Format (PcmHammer / UniversalPatcher convention):
-///   [prio] [PCM] [Tool] [0x3C] [addr:3 BE] [size:2 BE] [cs]
-///
-/// Address is 24-bit (P01 flash is ≤ 512 KB). Size is the number of bytes
-/// requested in this block (typically 0x40–0x400 while kernel is running).
 pub fn build_mode3c_read_block(address: u32, size: u16) -> Vec<u8> {
     let mut frame = vec![
         PRIO_HIGH_PHYS,
@@ -85,28 +88,27 @@ pub fn build_mode3c_read_block(address: u32, size: u16) -> Vec<u8> {
     frame
 }
 
-/// Mode 0x3F TestDevicePresent — probe whether the kernel is still alive.
 pub fn build_mode3f_test_device() -> Vec<u8> {
     let mut frame = vec![PRIO_HIGH_PHYS, PCM_ADDR, TOOL_ADDR, MODE_TEST_DEVICE];
     frame.push(vpw_checksum(&frame));
     frame
 }
 
-/// Mode 0x20 ExitKernel — return PCM to normal operating system.
 pub fn build_mode20_exit_kernel() -> Vec<u8> {
     let mut frame = vec![PRIO_HIGH_PHYS, PCM_ADDR, TOOL_ADDR, MODE_EXIT_KERNEL];
     frame.push(vpw_checksum(&frame));
     frame
 }
 
-/// Mode 0xA0 HighSpeedPrepare.
+/// Mode 0xA0 HighSpeedPrepare — tell kernel to arm high-speed VPW.
 pub fn build_mode_a0_hs_prepare() -> Vec<u8> {
     let mut frame = vec![PRIO_HIGH_PHYS, PCM_ADDR, TOOL_ADDR, MODE_HS_PREPARE];
     frame.push(vpw_checksum(&frame));
     frame
 }
 
-/// Mode 0xA1 HighSpeed enter.
+/// Mode 0xA1 HighSpeed — enter high-speed VPW (~4× bit rate).
+/// Caller must also switch the tool/adapter physical layer after a positive E1.
 pub fn build_mode_a1_hs_enter() -> Vec<u8> {
     let mut frame = vec![PRIO_HIGH_PHYS, PCM_ADDR, TOOL_ADDR, MODE_HS_ENTER];
     frame.push(vpw_checksum(&frame));
@@ -157,19 +159,19 @@ pub fn parse_dtc_response(frame: &[u8]) -> Option<Vec<[u8; 2]>> {
     Some(data.chunks_exact(2).map(|c| [c[0], c[1]]).collect())
 }
 
-/// Parse Mode 0x7C (positive response to ReadBlock 0x3C).
-/// Returns the data payload (everything after the service ID, before checksum).
 pub fn parse_mode3c_response(frame: &[u8]) -> Result<Vec<u8>, String> {
     if frame.len() < 5 {
         return Err(format!("Mode 3C response too short: {} bytes", frame.len()));
     }
-    // Find service byte — may be at index 3 (standard 3-byte header)
     let sid_idx = if frame.len() > 3 && (frame[3] == 0x7C || frame[3] == 0x7F) {
         3
     } else if frame.first() == Some(&0x7C) || frame.first() == Some(&0x7F) {
         0
     } else {
-        return Err(format!("Not a Mode 3C response (SID=0x{:02X})", frame.get(3).copied().unwrap_or(0)));
+        return Err(format!(
+            "Not a Mode 3C response (SID=0x{:02X})",
+            frame.get(3).copied().unwrap_or(0)
+        ));
     };
 
     if frame[sid_idx] == 0x7F {
@@ -177,12 +179,48 @@ pub fn parse_mode3c_response(frame: &[u8]) -> Result<Vec<u8>, String> {
         return Err(format!("Mode 3C negative response NRC 0x{:02X}", nrc));
     }
 
-    // Data starts after SID; strip trailing checksum if present
     let mut data = frame[sid_idx + 1..].to_vec();
     if data.len() > 1 && validate_frame(frame) {
-        data.pop(); // remove checksum byte
+        data.pop();
     }
     Ok(data)
+}
+
+/// True if `frame` looks like a positive response to 0xA0 or 0xA1.
+/// Accepts SID at index 0 or 3 (with/without 3-byte VPW header).
+pub fn is_positive_hs_response(frame: &[u8], expected_resp: u8) -> bool {
+    if frame.is_empty() {
+        return false;
+    }
+    frame.iter().any(|&b| b == expected_resp)
+        || frame.get(3).copied() == Some(expected_resp)
+        || frame.first().copied() == Some(expected_resp)
+}
+
+/// Classify a high-speed control response.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HsResponse {
+    PrepareOk,
+    EnterOk,
+    Negative,
+    Unknown,
+}
+
+pub fn parse_hs_response(frame: &[u8]) -> HsResponse {
+    if frame.is_empty() {
+        return HsResponse::Unknown;
+    }
+    if is_positive_hs_response(frame, RESP_HS_PREPARE) {
+        return HsResponse::PrepareOk;
+    }
+    if is_positive_hs_response(frame, RESP_HS_ENTER) {
+        return HsResponse::EnterOk;
+    }
+    // Generic negative: 0x7F present
+    if frame.iter().any(|&b| b == 0x7F) {
+        return HsResponse::Negative;
+    }
+    HsResponse::Unknown
 }
 
 // ── Serial I/O ──────────────────────────────────────────────────────────
@@ -191,7 +229,6 @@ pub fn send_frame(port: &mut Box<dyn SerialPort + Send>, frame: &[u8]) -> Result
     port.write_all(frame).map_err(|e| format!("VPW send error: {}", e))
 }
 
-/// Read a response frame. Buffer sized for Mode 3C block responses (up to ~1 KB).
 pub fn recv_frame(port: &mut Box<dyn SerialPort + Send>) -> Result<Vec<u8>, String> {
     let mut buf = [0u8; 1100];
     let n = port.read(&mut buf).map_err(|e| format!("VPW recv error: {}", e))?;
@@ -255,11 +292,9 @@ mod tests {
     fn mode3c_frame_structure() {
         let f = build_mode3c_read_block(0x00020000, 0x0100);
         assert_eq!(f[3], MODE_READ_BLOCK);
-        // addr 0x00020000 → bytes 00 02 00
         assert_eq!(f[4], 0x02);
         assert_eq!(f[5], 0x00);
         assert_eq!(f[6], 0x00);
-        // size 0x0100
         assert_eq!(f[7], 0x01);
         assert_eq!(f[8], 0x00);
         assert!(validate_frame(&f));
@@ -267,7 +302,6 @@ mod tests {
 
     #[test]
     fn mode3c_response_parse() {
-        // Synthetic: header + 0x7C + 4 data bytes + checksum
         let mut frame = vec![0x8C, 0xF0, 0x10, 0x7C, 0xAA, 0xBB, 0xCC, 0xDD];
         let cs = vpw_checksum(&frame);
         frame.push(cs);
@@ -280,5 +314,25 @@ mod tests {
         let f = build_mode20_exit_kernel();
         assert_eq!(f[3], MODE_EXIT_KERNEL);
         assert!(validate_frame(&f));
+    }
+
+    #[test]
+    fn hs_prepare_enter_frames() {
+        let a0 = build_mode_a0_hs_prepare();
+        assert_eq!(a0[3], MODE_HS_PREPARE);
+        assert!(validate_frame(&a0));
+        let a1 = build_mode_a1_hs_enter();
+        assert_eq!(a1[3], MODE_HS_ENTER);
+        assert!(validate_frame(&a1));
+    }
+
+    #[test]
+    fn hs_response_parse() {
+        let prep = vec![0x8C, 0xF0, 0x10, RESP_HS_PREPARE, 0x00];
+        assert_eq!(parse_hs_response(&prep), HsResponse::PrepareOk);
+        let enter = vec![0x8C, 0xF0, 0x10, RESP_HS_ENTER];
+        assert_eq!(parse_hs_response(&enter), HsResponse::EnterOk);
+        let neg = vec![0x8C, 0xF0, 0x10, 0x7F, 0xA0, 0x11];
+        assert_eq!(parse_hs_response(&neg), HsResponse::Negative);
     }
 }

@@ -3,7 +3,7 @@
 // Priority 0:
 //   1. Proper flash read / backup
 //      - Bosch: Mode 23 + multi-frame ISO-TP
-//      - P01/GM: kernel upload + Mode 3C ReadBlock
+//      - P01/GM: kernel upload + Mode 3C ReadBlock (+ optional HS VPW)
 //   2. Live post-flash verification
 //   3. Voltage gate (PID 0x42)
 //   4. Adaptive protocol timing
@@ -15,14 +15,11 @@ use crate::vpw::{
     build_mode22_request, request_response, build_mode34_request, build_mode36_chunk,
     build_mode37_request, send_frame, build_obd_request, parse_mode01_response,
     build_mode3c_read_block, parse_mode3c_response, build_mode3f_test_device,
-    build_mode20_exit_kernel,
+    build_mode20_exit_kernel, build_mode_a0_hs_prepare, build_mode_a1_hs_enter,
+    parse_hs_response, HsResponse,
 };
 use crate::security::unlock_level2;
 use std::time::Duration;
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Types
-// ─────────────────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FlashWriteResult {
@@ -64,6 +61,9 @@ pub struct GuidedFlashRequest {
     pub enable_recovery_prompts: bool,
     pub user_confirmed_risks: bool,
     pub min_voltage_v: Option<f32>,
+    /// Attempt VPW high-speed (0xA0/0xA1) after kernel Mode 3C probe.
+    /// Default true. Harmless if adapter/kernel reject — falls back automatically.
+    pub prefer_high_speed: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -96,23 +96,17 @@ pub const CAL_A_START: u32 = 0x0002_0000;
 pub const DEFAULT_MIN_VOLTAGE_V: f32 = 12.5;
 
 pub const BOSCH_FLASH_BASE: u32 = 0x0000_0000;
-pub const BOSCH_FLASH_SIZE: u32 = 0x0020_0000; // 2 MB
+pub const BOSCH_FLASH_SIZE: u32 = 0x0020_0000;
 pub const MODE23_WINDOW: u16 = 0x400;
 
-/// P01 / 0411 full flash image size (512 KB).
 pub const P01_FLASH_SIZE: u32 = 0x0008_0000;
-/// P01 calibration region start (common).
 pub const P01_CAL_BASE: u32 = 0x0002_0000;
-/// P01 cal size (128 KB) — used when only cal is needed.
 pub const P01_CAL_SIZE: u32 = 0x0002_0000;
-/// Mode 3C block size while kernel is resident.
-pub const MODE3C_BLOCK: u16 = 0x100; // 256 bytes — reliable on VPW
+
+pub const MODE3C_BLOCK: u16 = 0x100;
+pub const MODE3C_BLOCK_HS: u16 = 0x200;
 
 const KERNEL_P01: &[u8] = include_bytes!("../../reference/Kernel-P01.bin");
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Adaptive timing
-// ─────────────────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone)]
 pub struct AdaptiveTiming {
@@ -131,6 +125,9 @@ impl AdaptiveTiming {
     pub fn for_vpw() -> Self {
         Self { base_ms: 8, max_ms: 120, consecutive_empty: 0 }
     }
+    pub fn for_vpw_hs() -> Self {
+        Self { base_ms: 3, max_ms: 40, consecutive_empty: 0 }
+    }
     pub fn for_can() -> Self {
         Self { base_ms: 3, max_ms: 60, consecutive_empty: 0 }
     }
@@ -144,10 +141,6 @@ impl AdaptiveTiming {
     }
     pub fn sleep(&self) { std::thread::sleep(self.delay()); }
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Voltage gate
-// ─────────────────────────────────────────────────────────────────────────────
 
 pub fn read_battery_voltage(port: &mut Box<dyn SerialPort + Send>) -> Option<f32> {
     let req = build_obd_request(0x42);
@@ -208,10 +201,6 @@ pub fn enforce_voltage_gate(
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Kernel upload + Mode 3C bulk read (P01 / P59)
-// ─────────────────────────────────────────────────────────────────────────────
-
 pub fn upload_kernel(port: &mut Box<dyn SerialPort + Send>, kernel: &[u8]) -> Result<(), String> {
     let _ = unlock_level2(port);
     let load_addr: u32 = 0x0010_0000;
@@ -228,27 +217,21 @@ pub fn upload_kernel(port: &mut Box<dyn SerialPort + Send>, kernel: &[u8]) -> Re
         timing.sleep();
     }
     let _ = send_frame(port, &build_mode37_request());
-    // Allow kernel to initialise
     std::thread::sleep(Duration::from_millis(100));
     Ok(())
 }
 
-/// Probe whether the resident kernel responds to Mode 0x3F.
 pub fn kernel_is_alive(port: &mut Box<dyn SerialPort + Send>) -> bool {
     let req = build_mode3f_test_device();
     match request_response(port, &req) {
         Ok(resp) => {
-            // Positive responses typically echo 0x7F (TestDevicePresent + 0x40)
-            // or contain non-empty data from the kernel.
             !resp.is_empty()
-                && (resp.iter().any(|&b| b == 0x7F || b == 0x3F)
-                    || resp.len() > 3)
+                && (resp.iter().any(|&b| b == 0x7F || b == 0x3F) || resp.len() > 3)
         }
         Err(_) => false,
     }
 }
 
-/// Read one Mode 3C block from the kernel.
 pub fn kernel_read_block(
     port: &mut Box<dyn SerialPort + Send>,
     address: u32,
@@ -260,19 +243,109 @@ pub fn kernel_read_block(
     parse_mode3c_response(&resp)
 }
 
-/// Full kernel-assisted bulk read for P01/P59.
-///
-/// 1. Unlock L2
-/// 2. Upload Kernel-P01.bin to RAM
-/// 3. Confirm kernel alive (Mode 3F)
-/// 4. Mode 3C ReadBlock loop over [base, base+size)
-/// 5. Exit kernel (Mode 20)
-///
-/// Default: full 512 KB image from 0x000000.
+fn probe_mode3c(port: &mut Box<dyn SerialPort + Send>, logs: &mut Vec<String>) -> bool {
+    match kernel_read_block(port, 0x0000_0000, 0x10) {
+        Ok(data) if !data.is_empty() => {
+            logs.push(format!("Mode 3C probe OK ({} bytes)", data.len()));
+            true
+        }
+        Ok(_) => {
+            logs.push("Mode 3C probe returned empty — kernel may be limited".into());
+            false
+        }
+        Err(e) => {
+            logs.push(format!("Mode 3C probe failed: {}", e));
+            false
+        }
+    }
+}
+
+/// Attempt high-speed VPW entry (0xA0 → 0xA1).
+/// Best-effort: returns false on any rejection so caller stays at normal speed.
+pub fn try_enter_high_speed(
+    port: &mut Box<dyn SerialPort + Send>,
+    logs: &mut Vec<String>,
+) -> bool {
+    logs.push("Attempting high-speed VPW (Mode 0xA0 prepare)…".into());
+
+    let prep = build_mode_a0_hs_prepare();
+    match request_response(port, &prep) {
+        Ok(resp) => match parse_hs_response(&resp) {
+            HsResponse::PrepareOk => {
+                logs.push("Mode 0xA0 HighSpeedPrepare accepted (E0)".into());
+            }
+            HsResponse::Negative => {
+                logs.push("Mode 0xA0 rejected (NRC) — staying normal speed".into());
+                return false;
+            }
+            other => {
+                if resp.is_empty() {
+                    logs.push(format!("Mode 0xA0 unclear ({:?}) — aborting HS", other));
+                    return false;
+                }
+                logs.push(format!(
+                    "Mode 0xA0 response ambiguous ({:?}) — continuing to 0xA1", other
+                ));
+            }
+        },
+        Err(e) => {
+            logs.push(format!("Mode 0xA0 no response: {} — normal speed", e));
+            return false;
+        }
+    }
+
+    std::thread::sleep(Duration::from_millis(20));
+
+    logs.push("Sending Mode 0xA1 HighSpeed enter…".into());
+    let enter = build_mode_a1_hs_enter();
+    match request_response(port, &enter) {
+        Ok(resp) => match parse_hs_response(&resp) {
+            HsResponse::EnterOk => {
+                logs.push("Mode 0xA1 HighSpeed ENTERED (E1) — using HS block size + timing".into());
+                true
+            }
+            HsResponse::Negative => {
+                logs.push("Mode 0xA1 rejected — staying normal speed".into());
+                false
+            }
+            other => {
+                if resp.is_empty() {
+                    logs.push(format!("Mode 0xA1 unclear ({:?}) — normal speed", other));
+                    false
+                } else {
+                    logs.push(format!(
+                        "Mode 0xA1 soft-accept ({:?}) — trying HS blocks",
+                        other
+                    ));
+                    true
+                }
+            }
+        },
+        Err(e) => {
+            logs.push(format!("Mode 0xA1 no response: {} — normal speed", e));
+            false
+        }
+    }
+}
+
 pub fn p01_kernel_bulk_read<F>(
     port: &mut Box<dyn SerialPort + Send>,
     base: u32,
     total_size: u32,
+    on_progress: F,
+    logs: &mut Vec<String>,
+) -> Result<Vec<u8>, String>
+where
+    F: FnMut(FlashProgress),
+{
+    p01_kernel_bulk_read_ex(port, base, total_size, true, on_progress, logs)
+}
+
+pub fn p01_kernel_bulk_read_ex<F>(
+    port: &mut Box<dyn SerialPort + Send>,
+    base: u32,
+    total_size: u32,
+    prefer_hs: bool,
     mut on_progress: F,
     logs: &mut Vec<String>,
 ) -> Result<Vec<u8>, String>
@@ -280,11 +353,10 @@ where
     F: FnMut(FlashProgress),
 {
     logs.push(format!(
-        "P01 kernel bulk read: base=0x{:06X} size={} (Mode 3C blocks of {})",
-        base, total_size, MODE3C_BLOCK
+        "P01 kernel bulk read: base=0x{:06X} size={} prefer_hs={}",
+        base, total_size, prefer_hs
     ));
 
-    // Ensure kernel is resident
     if !kernel_is_alive(port) {
         logs.push("Kernel not responding — uploading Kernel-P01.bin…".into());
         upload_kernel(port, KERNEL_P01)
@@ -301,14 +373,34 @@ where
         logs.push("Kernel already resident".into());
     }
 
+    if !probe_mode3c(port, logs) {
+        logs.push("Mode 3C probe failed — continuing anyway; dump may be partial".into());
+    }
+
+    let mut high_speed = false;
+    if prefer_hs {
+        high_speed = try_enter_high_speed(port, logs);
+    } else {
+        logs.push("High-speed VPW disabled by request".into());
+    }
+
+    let mut block_size = if high_speed { MODE3C_BLOCK_HS } else { MODE3C_BLOCK };
+    let mut timing = if high_speed {
+        AdaptiveTiming::for_vpw_hs()
+    } else {
+        AdaptiveTiming::for_vpw()
+    };
+
+    logs.push(format!("Bulk Mode 3C: block={} HS={}", block_size, high_speed));
+
     let mut out = Vec::with_capacity(total_size as usize);
     let mut offset = 0u32;
-    let mut timing = AdaptiveTiming::for_vpw();
     let mut consecutive_fail = 0u32;
+    let mut hs_fallback_done = false;
 
     while offset < total_size {
         let remaining = total_size - offset;
-        let this_size = (remaining as u16).min(MODE3C_BLOCK);
+        let this_size = (remaining as u16).min(block_size);
 
         match kernel_read_block(port, base + offset, this_size) {
             Ok(chunk) => {
@@ -335,6 +427,19 @@ where
                     "Mode 3C @ 0x{:06X} failed: {} (#{})",
                     base + offset, e, consecutive_fail
                 ));
+
+                if high_speed && !hs_fallback_done && consecutive_fail >= 3 {
+                    logs.push(
+                        "HS Mode 3C unstable — falling back to normal-speed blocks".into()
+                    );
+                    high_speed = false;
+                    hs_fallback_done = true;
+                    block_size = MODE3C_BLOCK;
+                    timing = AdaptiveTiming::for_vpw();
+                    consecutive_fail = 0;
+                    continue;
+                }
+
                 if consecutive_fail >= 6 {
                     logs.push("Too many Mode 3C failures — stopping".into());
                     break;
@@ -345,7 +450,6 @@ where
         timing.sleep();
     }
 
-    // Exit kernel so the PCM returns to normal OS
     let _ = send_frame(port, &build_mode20_exit_kernel());
     logs.push("Mode 20 ExitKernel sent".into());
 
@@ -353,14 +457,13 @@ where
         return Err("Kernel bulk read returned no data".into());
     }
     logs.push(format!(
-        "Kernel bulk read recovered {} / {} bytes", out.len(), total_size
+        "Kernel bulk read recovered {} / {} bytes (HS used: {})",
+        out.len(),
+        total_size,
+        high_speed || hs_fallback_done
     ));
     Ok(out)
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Bosch Mode 23 bulk
-// ─────────────────────────────────────────────────────────────────────────────
 
 pub fn uds_read_memory_by_address(
     port: &mut Box<dyn SerialPort + Send>,
@@ -452,10 +555,6 @@ where
     Ok(out)
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Backup
-// ─────────────────────────────────────────────────────────────────────────────
-
 pub fn perform_backup(
     port: &mut Box<dyn SerialPort + Send>,
     ecu_family: &str,
@@ -505,14 +604,14 @@ pub fn perform_backup(
     }
 
     if is_p01 {
-        logs.push("P01/GM: kernel-assisted Mode 3C bulk read…".into());
+        logs.push("P01/GM: kernel-assisted Mode 3C bulk read (HS preferred)…".into());
         match p01_kernel_bulk_read(port, 0x0000_0000, P01_FLASH_SIZE, |_| {}, logs) {
             Ok(data) => {
                 let crc = crc32_ieee(&data);
                 let quality = if data.len() as u32 >= P01_FLASH_SIZE {
                     BackupQuality::FullImage
                 } else if data.len() as u32 >= P01_CAL_SIZE {
-                    BackupQuality::PartialDidOnly // got cal region-ish but not full
+                    BackupQuality::PartialDidOnly
                 } else if data.len() >= 256 {
                     BackupQuality::PartialDidOnly
                 } else {
@@ -535,7 +634,7 @@ pub fn perform_backup(
                     crc32: Some(crc),
                     notes: match quality {
                         BackupQuality::FullImage =>
-                            "Full 512 KB P01 image via kernel Mode 3C. Restore-grade.".into(),
+                            "Full 512 KB P01 image via kernel Mode 3C (±HS). Restore-grade.".into(),
                         BackupQuality::PartialDidOnly => format!(
                             "Partial kernel dump ({} of {} bytes). Not full restore-grade.",
                             data.len(), P01_FLASH_SIZE
@@ -548,12 +647,10 @@ pub fn perform_backup(
                 logs.push(format!(
                     "Kernel bulk read failed ({}), falling back to Mode 22 partial…", e
                 ));
-                // fall through to Mode 22
             }
         }
     }
 
-    // Fallback: Mode 22 DID sampling
     logs.push("Fallback: Mode 22 DID sampling (PARTIAL only).".into());
     let mut backup_data = vec![0u8; 0x20000];
     let mut filled = 0usize;
@@ -590,10 +687,6 @@ pub fn perform_backup(
         notes: format!("Mode 22 fallback ({} samples). NOT restore-grade.", filled),
     }
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Live verification
-// ─────────────────────────────────────────────────────────────────────────────
 
 pub fn verify_after_write(
     port: &mut Box<dyn SerialPort + Send>,
@@ -637,10 +730,9 @@ pub fn verify_after_write(
     }
 
     if is_p01 {
-        // Kernel Mode 3C readback of written region (or full image)
         let size = (written.len() as u32).min(P01_FLASH_SIZE);
         let base = if size >= P01_FLASH_SIZE { 0 } else { P01_CAL_BASE };
-        logs.push("P01 live verify via kernel Mode 3C…".into());
+        logs.push("P01 live verify via kernel Mode 3C (±HS)…".into());
         let readback = p01_kernel_bulk_read(port, base, size, |_| {}, logs)?;
         if readback.len() < 256 {
             return Err("P01 live verify: insufficient kernel readback".into());
@@ -665,10 +757,6 @@ pub fn verify_after_write(
     Err("Live verification not available for this family.".into())
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Guided orchestration
-// ─────────────────────────────────────────────────────────────────────────────
-
 pub fn orchestrate_guided_flash<F>(
     port: &mut Box<dyn SerialPort + Send>,
     request: GuidedFlashRequest,
@@ -678,6 +766,7 @@ where
     F: FnMut(FlashProgress),
 {
     let min_v = request.min_voltage_v.unwrap_or(DEFAULT_MIN_VOLTAGE_V);
+    let prefer_hs = request.prefer_high_speed.unwrap_or(true);
     let mut result = GuidedFlashResult {
         success: false,
         steps_completed: vec![],
@@ -727,7 +816,6 @@ where
     }
     result.steps_completed.push("Pre-flash validation passed".into());
 
-    // Kernel for write path (P01)
     if request.ecu_family.contains("P01") || request.ecu_family.contains("GM") {
         let _ = unlock_level2(port);
         result.logs.push("Level 2 security unlocked".into());
@@ -736,6 +824,7 @@ where
         } else {
             result.logs.push("Kernel uploaded for write support".into());
         }
+        let _ = prefer_hs;
     }
 
     if !request.user_confirmed_risks {
@@ -857,7 +946,7 @@ pub fn get_recovery_prompt(ecu_family: String, error_context: String) -> Recover
             None
         },
         grounding_required: ecu_family.contains("P01"),
-        reference_notes: "See V2_ROADMAP.md Priority 0 + reference/VPW.cs Mode 3C.".into(),
+        reference_notes: "See V2_ROADMAP.md Priority 0 + reference/VPW.cs Mode 3C / A0-A1.".into(),
     }
 }
 
@@ -876,14 +965,23 @@ mod tests {
     }
 
     #[test]
+    fn hs_timing_is_tighter() {
+        let n = AdaptiveTiming::for_vpw();
+        let h = AdaptiveTiming::for_vpw_hs();
+        assert!(h.base_ms < n.base_ms);
+        assert!(h.max_ms < n.max_ms);
+    }
+
+    #[test]
     fn crc32_known_vector() {
         assert_eq!(crc32_ieee(&[]), 0);
         assert_eq!(crc32_ieee(b"123456789"), 0xCBF4_3926);
     }
 
     #[test]
-    fn p01_constants() {
-        assert_eq!(P01_FLASH_SIZE, 0x80000);
+    fn p01_block_sizes() {
         assert_eq!(MODE3C_BLOCK, 0x100);
+        assert_eq!(MODE3C_BLOCK_HS, 0x200);
+        assert!(MODE3C_BLOCK_HS > MODE3C_BLOCK);
     }
 }
