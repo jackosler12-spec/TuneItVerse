@@ -1,7 +1,9 @@
 // flash.rs — Guided flash pipeline with Priority 0 safety gates
 //
 // Priority 0:
-//   1. Proper flash read / backup (Mode 23 + multi-frame ISO-TP bulk)
+//   1. Proper flash read / backup
+//      - Bosch: Mode 23 + multi-frame ISO-TP
+//      - P01/GM: kernel upload + Mode 3C ReadBlock
 //   2. Live post-flash verification
 //   3. Voltage gate (PID 0x42)
 //   4. Adaptive protocol timing
@@ -12,6 +14,8 @@ use serialport::SerialPort;
 use crate::vpw::{
     build_mode22_request, request_response, build_mode34_request, build_mode36_chunk,
     build_mode37_request, send_frame, build_obd_request, parse_mode01_response,
+    build_mode3c_read_block, parse_mode3c_response, build_mode3f_test_device,
+    build_mode20_exit_kernel,
 };
 use crate::security::unlock_level2;
 use std::time::Duration;
@@ -91,11 +95,18 @@ pub struct GuidedFlashResult {
 pub const CAL_A_START: u32 = 0x0002_0000;
 pub const DEFAULT_MIN_VOLTAGE_V: f32 = 12.5;
 
-/// Typical Bosch EDC16 flash base and full size (2 MB).
 pub const BOSCH_FLASH_BASE: u32 = 0x0000_0000;
 pub const BOSCH_FLASH_SIZE: u32 = 0x0020_0000; // 2 MB
-/// Preferred Mode 23 window — large enough to exercise multi-frame ISO-TP.
-pub const MODE23_WINDOW: u16 = 0x400; // 1024 bytes per request
+pub const MODE23_WINDOW: u16 = 0x400;
+
+/// P01 / 0411 full flash image size (512 KB).
+pub const P01_FLASH_SIZE: u32 = 0x0008_0000;
+/// P01 calibration region start (common).
+pub const P01_CAL_BASE: u32 = 0x0002_0000;
+/// P01 cal size (128 KB) — used when only cal is needed.
+pub const P01_CAL_SIZE: u32 = 0x0002_0000;
+/// Mode 3C block size while kernel is resident.
+pub const MODE3C_BLOCK: u16 = 0x100; // 256 bytes — reliable on VPW
 
 const KERNEL_P01: &[u8] = include_bytes!("../../reference/Kernel-P01.bin");
 
@@ -198,12 +209,159 @@ pub fn enforce_voltage_gate(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// UDS Mode 23 + bulk multi-frame read
+// Kernel upload + Mode 3C bulk read (P01 / P59)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// UDS ReadMemoryByAddress (0x23).
-/// addressAndLengthFormatIdentifier 0x42 = 4-byte address + 2-byte size.
-/// Response rides multi-frame ISO-TP when size > ~6 bytes.
+pub fn upload_kernel(port: &mut Box<dyn SerialPort + Send>, kernel: &[u8]) -> Result<(), String> {
+    let _ = unlock_level2(port);
+    let load_addr: u32 = 0x0010_0000;
+    let req34 = build_mode34_request(load_addr, kernel.len() as u32);
+    send_frame(port, &req34).map_err(|e| format!("Mode34: {}", e))?;
+
+    let mut timing = AdaptiveTiming::for_vpw();
+    timing.sleep();
+
+    for (i, chunk) in kernel.chunks(128).enumerate() {
+        let frame = build_mode36_chunk(chunk);
+        send_frame(port, &frame).map_err(|e| format!("Mode36 chunk {}: {}", i, e))?;
+        timing.on_success();
+        timing.sleep();
+    }
+    let _ = send_frame(port, &build_mode37_request());
+    // Allow kernel to initialise
+    std::thread::sleep(Duration::from_millis(100));
+    Ok(())
+}
+
+/// Probe whether the resident kernel responds to Mode 0x3F.
+pub fn kernel_is_alive(port: &mut Box<dyn SerialPort + Send>) -> bool {
+    let req = build_mode3f_test_device();
+    match request_response(port, &req) {
+        Ok(resp) => {
+            // Positive responses typically echo 0x7F (TestDevicePresent + 0x40)
+            // or contain non-empty data from the kernel.
+            !resp.is_empty()
+                && (resp.iter().any(|&b| b == 0x7F || b == 0x3F)
+                    || resp.len() > 3)
+        }
+        Err(_) => false,
+    }
+}
+
+/// Read one Mode 3C block from the kernel.
+pub fn kernel_read_block(
+    port: &mut Box<dyn SerialPort + Send>,
+    address: u32,
+    size: u16,
+) -> Result<Vec<u8>, String> {
+    let req = build_mode3c_read_block(address, size);
+    let resp = request_response(port, &req)
+        .map_err(|e| format!("Mode 3C @ 0x{:06X}: {}", address, e))?;
+    parse_mode3c_response(&resp)
+}
+
+/// Full kernel-assisted bulk read for P01/P59.
+///
+/// 1. Unlock L2
+/// 2. Upload Kernel-P01.bin to RAM
+/// 3. Confirm kernel alive (Mode 3F)
+/// 4. Mode 3C ReadBlock loop over [base, base+size)
+/// 5. Exit kernel (Mode 20)
+///
+/// Default: full 512 KB image from 0x000000.
+pub fn p01_kernel_bulk_read<F>(
+    port: &mut Box<dyn SerialPort + Send>,
+    base: u32,
+    total_size: u32,
+    mut on_progress: F,
+    logs: &mut Vec<String>,
+) -> Result<Vec<u8>, String>
+where
+    F: FnMut(FlashProgress),
+{
+    logs.push(format!(
+        "P01 kernel bulk read: base=0x{:06X} size={} (Mode 3C blocks of {})",
+        base, total_size, MODE3C_BLOCK
+    ));
+
+    // Ensure kernel is resident
+    if !kernel_is_alive(port) {
+        logs.push("Kernel not responding — uploading Kernel-P01.bin…".into());
+        upload_kernel(port, KERNEL_P01)
+            .map_err(|e| format!("Kernel upload failed: {}", e))?;
+        if !kernel_is_alive(port) {
+            return Err(
+                "Kernel upload completed but Mode 3F probe failed. \
+                 Check L2 unlock, power, and VPW link."
+                    .into(),
+            );
+        }
+        logs.push("Kernel alive (Mode 3F OK)".into());
+    } else {
+        logs.push("Kernel already resident".into());
+    }
+
+    let mut out = Vec::with_capacity(total_size as usize);
+    let mut offset = 0u32;
+    let mut timing = AdaptiveTiming::for_vpw();
+    let mut consecutive_fail = 0u32;
+
+    while offset < total_size {
+        let remaining = total_size - offset;
+        let this_size = (remaining as u16).min(MODE3C_BLOCK);
+
+        match kernel_read_block(port, base + offset, this_size) {
+            Ok(chunk) => {
+                timing.on_success();
+                consecutive_fail = 0;
+                let got = chunk.len() as u32;
+                if got == 0 {
+                    consecutive_fail += 1;
+                } else {
+                    out.extend_from_slice(&chunk);
+                    offset += got;
+                }
+                on_progress(FlashProgress {
+                    bytes_done: offset.min(total_size),
+                    bytes_total: total_size,
+                    percent: ((offset.min(total_size) as u64 * 100)
+                        / total_size.max(1) as u64) as u8,
+                });
+            }
+            Err(e) => {
+                timing.on_empty();
+                consecutive_fail += 1;
+                logs.push(format!(
+                    "Mode 3C @ 0x{:06X} failed: {} (#{})",
+                    base + offset, e, consecutive_fail
+                ));
+                if consecutive_fail >= 6 {
+                    logs.push("Too many Mode 3C failures — stopping".into());
+                    break;
+                }
+                timing.sleep();
+            }
+        }
+        timing.sleep();
+    }
+
+    // Exit kernel so the PCM returns to normal OS
+    let _ = send_frame(port, &build_mode20_exit_kernel());
+    logs.push("Mode 20 ExitKernel sent".into());
+
+    if out.is_empty() {
+        return Err("Kernel bulk read returned no data".into());
+    }
+    logs.push(format!(
+        "Kernel bulk read recovered {} / {} bytes", out.len(), total_size
+    ));
+    Ok(out)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Bosch Mode 23 bulk
+// ─────────────────────────────────────────────────────────────────────────────
+
 pub fn uds_read_memory_by_address(
     port: &mut Box<dyn SerialPort + Send>,
     address: u32,
@@ -213,7 +371,6 @@ pub fn uds_read_memory_by_address(
     payload.extend_from_slice(&address.to_be_bytes());
     payload.extend_from_slice(&size.to_be_bytes());
 
-    // Multi-frame capable path
     let resp = crate::can::uds_request_multiframe(port, 0x23, &payload, true)
         .map_err(|e| format!("Mode 23 failed: {}", e))?;
 
@@ -230,12 +387,6 @@ pub fn uds_read_memory_by_address(
     Err("Mode 23: empty or unexpected response".into())
 }
 
-/// Bulk-read a contiguous memory region using repeated Mode 23 windows.
-///
-/// Each window is large enough (`MODE23_WINDOW`) that the positive response
-/// is multi-frame ISO-TP — exercising the full FF/CF + Flow Control path.
-///
-/// `on_progress` is called after each successful window.
 pub fn bulk_read_memory<F>(
     port: &mut Box<dyn SerialPort + Send>,
     base: u32,
@@ -268,34 +419,29 @@ where
                 let got = chunk.len() as u32;
                 out.extend_from_slice(&chunk);
                 offset += got;
-
-                // If ECU returned less than requested, accept and advance by got
                 if got == 0 {
                     consecutive_fail += 1;
                 }
-
                 on_progress(FlashProgress {
                     bytes_done: offset.min(total_size),
                     bytes_total: total_size,
-                    percent: ((offset.min(total_size) as u64 * 100) / total_size.max(1) as u64) as u8,
+                    percent: ((offset.min(total_size) as u64 * 100)
+                        / total_size.max(1) as u64) as u8,
                 });
             }
             Err(e) => {
                 timing.on_empty();
                 consecutive_fail += 1;
                 logs.push(format!(
-                    "Mode 23 window @ 0x{:08X} failed: {} (fail #{})",
+                    "Mode 23 @ 0x{:08X} failed: {} (#{})",
                     base + offset, e, consecutive_fail
                 ));
                 if consecutive_fail >= 5 {
-                    logs.push("Too many consecutive Mode 23 failures — stopping bulk read".into());
                     break;
                 }
                 timing.sleep();
             }
         }
-
-        // Small adaptive gap between windows
         timing.sleep();
     }
 
@@ -318,86 +464,97 @@ pub fn perform_backup(
     let ts = chrono::Local::now().format("%Y%m%d_%H%M%S").to_string();
     let fam = ecu_family.to_ascii_uppercase();
     let is_bosch = fam.contains("EDC16") || fam.contains("EDC17") || fam.contains("MED17");
+    let is_p01 = fam.contains("P01") || fam.contains("P59") || fam.contains("GM") || fam.contains("0411");
 
     if is_bosch {
         logs.push("Bosch family: multi-frame ISO-TP Mode 23 bulk read…".into());
-
-        // Full 2 MB is the target; if the link can't sustain it we still keep
-        // whatever was recovered and label quality honestly.
-        let target = BOSCH_FLASH_SIZE;
-        let base = BOSCH_FLASH_BASE;
-
-        match bulk_read_memory(
-            port,
-            base,
-            target,
-            MODE23_WINDOW,
-            |_| {},
-            logs,
-        ) {
+        match bulk_read_memory(port, BOSCH_FLASH_BASE, BOSCH_FLASH_SIZE, MODE23_WINDOW, |_| {}, logs) {
             Ok(data) => {
                 let crc = crc32_ieee(&data);
-                let quality = if data.len() as u32 >= target {
+                let quality = if data.len() as u32 >= BOSCH_FLASH_SIZE {
                     BackupQuality::FullImage
-                } else if data.len() >= 64 * 1024 {
-                    // ≥64 KB is useful but incomplete
-                    BackupQuality::PartialDidOnly
                 } else if data.len() >= 64 {
                     BackupQuality::PartialDidOnly
                 } else {
                     BackupQuality::Failed
                 };
-
-                let path = match quality {
-                    BackupQuality::FullImage => format!("bosch_full_{}.bin", ts),
-                    _ => format!("bosch_partial_{}.bin", ts),
+                let path = if quality == BackupQuality::FullImage {
+                    format!("bosch_full_{}.bin", ts)
+                } else {
+                    format!("bosch_partial_{}.bin", ts)
                 };
                 let _ = std::fs::write(&path, &data);
-
-                let notes = match quality {
-                    BackupQuality::FullImage => {
-                        "Full 2 MB image via Mode 23 + multi-frame ISO-TP. Restore-grade."
-                            .to_string()
-                    }
-                    BackupQuality::PartialDidOnly => format!(
-                        "Partial dump ({} bytes of {}). Link dropped or security limited range. \
-                         Not restore-grade unless you only need the recovered region.",
-                        data.len(), target
-                    ),
-                    BackupQuality::Failed => "Dump failed or too small to be useful.".into(),
-                };
-
-                logs.push(format!(
-                    "Backup {} — {} bytes CRC=0x{:08X} quality={:?}",
-                    path, data.len(), crc, quality
-                ));
-
                 return BackupResult {
                     path,
                     quality,
                     bytes: data.len() as u32,
                     crc32: Some(crc),
-                    notes,
+                    notes: format!("Mode 23 multi-frame dump ({} bytes).", data.len()),
                 };
             }
             Err(e) => {
-                logs.push(format!("Bulk read failed: {}", e));
                 return BackupResult {
                     path: String::new(),
                     quality: BackupQuality::Failed,
                     bytes: 0,
                     crc32: None,
-                    notes: format!("Mode 23 bulk failed: {}. Check security access + ISO-TP link.", e),
+                    notes: format!("Mode 23 bulk failed: {}", e),
                 };
             }
         }
     }
 
-    // GM / P01 — still Mode 22 partial until kernel bulk path lands
-    logs.push(
-        "P01/GM: Mode 22 DID sampling only. Full cal dump needs kernel-assisted Mode 23/3D."
-            .into(),
-    );
+    if is_p01 {
+        logs.push("P01/GM: kernel-assisted Mode 3C bulk read…".into());
+        match p01_kernel_bulk_read(port, 0x0000_0000, P01_FLASH_SIZE, |_| {}, logs) {
+            Ok(data) => {
+                let crc = crc32_ieee(&data);
+                let quality = if data.len() as u32 >= P01_FLASH_SIZE {
+                    BackupQuality::FullImage
+                } else if data.len() as u32 >= P01_CAL_SIZE {
+                    BackupQuality::PartialDidOnly // got cal region-ish but not full
+                } else if data.len() >= 256 {
+                    BackupQuality::PartialDidOnly
+                } else {
+                    BackupQuality::Failed
+                };
+                let path = if quality == BackupQuality::FullImage {
+                    format!("p01_full_{}.bin", ts)
+                } else {
+                    format!("p01_partial_{}.bin", ts)
+                };
+                let _ = std::fs::write(&path, &data);
+                logs.push(format!(
+                    "P01 backup {} — {} bytes CRC=0x{:08X} quality={:?}",
+                    path, data.len(), crc, quality
+                ));
+                return BackupResult {
+                    path,
+                    quality,
+                    bytes: data.len() as u32,
+                    crc32: Some(crc),
+                    notes: match quality {
+                        BackupQuality::FullImage =>
+                            "Full 512 KB P01 image via kernel Mode 3C. Restore-grade.".into(),
+                        BackupQuality::PartialDidOnly => format!(
+                            "Partial kernel dump ({} of {} bytes). Not full restore-grade.",
+                            data.len(), P01_FLASH_SIZE
+                        ),
+                        BackupQuality::Failed => "Kernel dump too small.".into(),
+                    },
+                };
+            }
+            Err(e) => {
+                logs.push(format!(
+                    "Kernel bulk read failed ({}), falling back to Mode 22 partial…", e
+                ));
+                // fall through to Mode 22
+            }
+        }
+    }
+
+    // Fallback: Mode 22 DID sampling
+    logs.push("Fallback: Mode 22 DID sampling (PARTIAL only).".into());
     let mut backup_data = vec![0u8; 0x20000];
     let mut filled = 0usize;
     let mut timing = AdaptiveTiming::for_vpw();
@@ -422,20 +579,15 @@ pub fn perform_backup(
             }
         }
     }
-
     let path = format!("pcm_partial_backup_{}.bin", ts);
     let _ = std::fs::write(&path, &backup_data);
     let crc = crc32_ieee(&backup_data);
-    logs.push(format!(
-        "Partial backup {} ({} samples). CRC=0x{:08X}", path, filled, crc
-    ));
-
     BackupResult {
         path,
         quality: BackupQuality::PartialDidOnly,
         bytes: backup_data.len() as u32,
         crc32: Some(crc),
-        notes: "Mode 22 DID sampling — NOT a full calibration image.".into(),
+        notes: format!("Mode 22 fallback ({} samples). NOT restore-grade.", filled),
     }
 }
 
@@ -454,39 +606,27 @@ pub fn verify_after_write(
 
     let fam = ecu_family.to_ascii_uppercase();
     let is_bosch = fam.contains("EDC16") || fam.contains("EDC17") || fam.contains("MED17");
+    let is_p01 = fam.contains("P01") || fam.contains("P59") || fam.contains("GM") || fam.contains("0411");
 
     if is_bosch {
-        // Read back as much as practical (up to full image or 256 KB for speed)
         let window_total = (written.len() as u32).min(256 * 1024);
         let base = if written.len() as u32 >= BOSCH_FLASH_SIZE {
             BOSCH_FLASH_BASE
         } else {
-            0x0008_0000 // common cal region
+            0x0008_0000
         };
-
-        let readback = bulk_read_memory(
-            port,
-            base,
-            window_total,
-            MODE23_WINDOW,
-            |_| {},
-            logs,
-        )?;
-
+        let readback = bulk_read_memory(port, base, window_total, MODE23_WINDOW, |_| {}, logs)?;
         if readback.len() < 256 {
             return Err("Live verification failed: insufficient readback".into());
         }
-
         let compare_len = readback.len().min(written.len());
         let live_crc = crc32_ieee(&readback[..compare_len]);
         let expected_window = crc32_ieee(&written[..compare_len]);
         let matched = live_crc == expected_window;
-
         logs.push(format!(
             "Live CRC ({} bytes): ECU=0x{:08X} expected=0x{:08X} match={}",
             compare_len, live_crc, expected_window, matched
         ));
-
         if !matched {
             return Err(format!(
                 "LIVE VERIFICATION MISMATCH: 0x{:08X} != 0x{:08X}",
@@ -496,33 +636,38 @@ pub fn verify_after_write(
         return Ok((live_crc, true));
     }
 
-    logs.push("P01/GM live full-image verify requires kernel bulk read — not claiming local CRC.".into());
-    Err("Live verification not available for this family without kernel bulk read.".into())
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Kernel + guided orchestration
-// ─────────────────────────────────────────────────────────────────────────────
-
-pub fn upload_kernel(port: &mut Box<dyn SerialPort + Send>, kernel: &[u8]) -> Result<(), String> {
-    let _ = unlock_level2(port);
-    let load_addr: u32 = 0x0010_0000;
-    let req34 = build_mode34_request(load_addr, kernel.len() as u32);
-    send_frame(port, &req34).map_err(|e| format!("Mode34: {}", e))?;
-
-    let mut timing = AdaptiveTiming::for_vpw();
-    timing.sleep();
-
-    for (i, chunk) in kernel.chunks(128).enumerate() {
-        let frame = build_mode36_chunk(chunk);
-        send_frame(port, &frame).map_err(|e| format!("Mode36 chunk {}: {}", i, e))?;
-        timing.on_success();
-        timing.sleep();
+    if is_p01 {
+        // Kernel Mode 3C readback of written region (or full image)
+        let size = (written.len() as u32).min(P01_FLASH_SIZE);
+        let base = if size >= P01_FLASH_SIZE { 0 } else { P01_CAL_BASE };
+        logs.push("P01 live verify via kernel Mode 3C…".into());
+        let readback = p01_kernel_bulk_read(port, base, size, |_| {}, logs)?;
+        if readback.len() < 256 {
+            return Err("P01 live verify: insufficient kernel readback".into());
+        }
+        let compare_len = readback.len().min(written.len());
+        let live_crc = crc32_ieee(&readback[..compare_len]);
+        let expected_window = crc32_ieee(&written[..compare_len]);
+        let matched = live_crc == expected_window;
+        logs.push(format!(
+            "P01 live CRC ({} bytes): ECU=0x{:08X} expected=0x{:08X} match={}",
+            compare_len, live_crc, expected_window, matched
+        ));
+        if !matched {
+            return Err(format!(
+                "LIVE VERIFICATION MISMATCH: 0x{:08X} != 0x{:08X}",
+                live_crc, expected_window
+            ));
+        }
+        return Ok((live_crc, true));
     }
-    let _ = send_frame(port, &build_mode37_request());
-    timing.sleep();
-    Ok(())
+
+    Err("Live verification not available for this family.".into())
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Guided orchestration
+// ─────────────────────────────────────────────────────────────────────────────
 
 pub fn orchestrate_guided_flash<F>(
     port: &mut Box<dyn SerialPort + Send>,
@@ -582,11 +727,14 @@ where
     }
     result.steps_completed.push("Pre-flash validation passed".into());
 
+    // Kernel for write path (P01)
     if request.ecu_family.contains("P01") || request.ecu_family.contains("GM") {
         let _ = unlock_level2(port);
         result.logs.push("Level 2 security unlocked".into());
         if let Err(e) = upload_kernel(port, KERNEL_P01) {
             result.logs.push(format!("Kernel upload warning: {}", e));
+        } else {
+            result.logs.push("Kernel uploaded for write support".into());
         }
     }
 
@@ -700,8 +848,8 @@ pub fn get_recovery_prompt(ecu_family: String, error_context: String) -> Recover
         message: format!("Recovery needed for {}: {}", ecu_family, error_context),
         steps: vec![
             "Verify power (≥12.5 V) and connection".into(),
-            "Upload appropriate kernel from reference/".into(),
-            "Retry with perform_backup=true and review BackupQuality".into(),
+            "Upload Kernel-P01.bin and retry Mode 3C bulk read".into(),
+            "If locked: public grounding recovery during erase (see reference notes)".into(),
         ],
         kernel_to_upload: if ecu_family.contains("P01") {
             Some("Kernel-P01.bin".into())
@@ -709,7 +857,7 @@ pub fn get_recovery_prompt(ecu_family: String, error_context: String) -> Recover
             None
         },
         grounding_required: ecu_family.contains("P01"),
-        reference_notes: "See V2_ROADMAP.md Priority 0.".into(),
+        reference_notes: "See V2_ROADMAP.md Priority 0 + reference/VPW.cs Mode 3C.".into(),
     }
 }
 
@@ -734,9 +882,8 @@ mod tests {
     }
 
     #[test]
-    fn mode23_window_is_multiframe_sized() {
-        // >7 bytes of UDS data → multi-frame ISO-TP response
-        assert!(MODE23_WINDOW > 7);
-        assert_eq!(MODE23_WINDOW, 0x400);
+    fn p01_constants() {
+        assert_eq!(P01_FLASH_SIZE, 0x80000);
+        assert_eq!(MODE3C_BLOCK, 0x100);
     }
 }
