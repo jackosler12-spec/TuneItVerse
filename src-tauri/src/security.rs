@@ -282,7 +282,7 @@ pub fn unlock_level2(port: &mut Box<dyn SerialPort + Send>) -> Result<SecuritySt
 // EDC16C41 (Nissan Patrol Y61 3.0 dCi) uses a verified 4-byte algorithm
 // recovered via firmware reverse-engineering (see reference/Security Access Code.md).
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BoschSecurityLevel {
     Diagnostic = 0x01,
     Programming = 0x03,
@@ -297,92 +297,120 @@ impl BoschSecurityLevel {
             _ => BoschSecurityLevel::Diagnostic,
         }
     }
+
+    /// Sub-function used when requesting a seed.
+    #[inline]
+    pub const fn seed_subfn(self) -> u8 {
+        self as u8
+    }
+
+    /// Sub-function used when sending the computed key (seed_subfn + 1).
+    #[inline]
+    pub const fn key_subfn(self) -> u8 {
+        (self as u8).wrapping_add(1)
+    }
 }
 
 /// Build UDS SecurityAccess RequestSeed payload (SID 0x27 + subfn).
+#[inline]
 pub fn bosch_uds_request_seed(level: BoschSecurityLevel) -> Vec<u8> {
-    vec![0x27, level as u8]
+    vec![0x27, level.seed_subfn()]
 }
 
 /// Build UDS SecurityAccess SendKey payload.
+#[inline]
 pub fn bosch_uds_send_key(level: BoschSecurityLevel, key: &[u8]) -> Vec<u8> {
-    let mut p = vec![0x27, (level as u8) + 1]; // even sub-function for key
+    let mut p = Vec::with_capacity(2 + key.len());
+    p.push(0x27);
+    p.push(level.key_subfn());
     p.extend_from_slice(key);
     p
 }
 
-/// Accurate EDC16C41 seed → key for Nissan Patrol (and matching EDC16C41 SW).
+// ─────────────────────────────────────────────────────────────────────────────
+// EDC16C41 — reverse-engineered 4-byte seed/key (Nissan Patrol)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Accurate EDC16C41 seed → key for Nissan Patrol Y61 3.0 dCi (and matching SW).
 ///
-/// Recovered from firmware analysis. Seed and key are both 4 bytes (big-endian).
+/// Recovered from firmware analysis. Both seed and key are 4-byte big-endian values.
 ///
+/// Algorithm:
 /// ```text
-/// key = seed
-/// key ^= 0xA5C3B7D9
-/// key = rotl32(key, 5)
-/// key += 0x12345678
-/// key ^= 0x87654321
-/// key = bswap32(key)
+/// key  = seed
+/// key ^= 0xA5C3B7D9          // Phase 1 – primary XOR
+/// key  = rotl32(key, 5)      // Phase 2 – rotate left 5
+/// key += 0x12345678          // Phase 3 – additive constant (wrapping)
+/// key ^= 0x87654321          // Phase 4 – secondary XOR
+/// key  = bswap32(key)        // Phase 5 – byte swap
 /// ```
-pub fn edc16c41_calculate_key(seed: u32) -> u32 {
+///
+/// See `reference/Security Access Code.md`.
+#[inline]
+pub const fn edc16c41_calculate_key(seed: u32) -> u32 {
     let mut key = seed;
-
-    // Phase 1: Primary XOR
     key ^= 0xA5C3B7D9;
-
-    // Phase 2: Rotate left by 5 bits
     key = key.rotate_left(5);
-
-    // Phase 3: Add constant
     key = key.wrapping_add(0x12345678);
-
-    // Phase 4: Second XOR
     key ^= 0x87654321;
-
-    // Phase 5: Byte swap (endian handling common on EDC16)
     key = key.swap_bytes();
-
     key
 }
 
-/// Convert 4-byte big-endian seed slice to key bytes (big-endian).
-pub fn edc16c41_key_from_seed_bytes(seed: &[u8]) -> Vec<u8> {
-    if seed.len() < 4 {
-        // Pad or fall back — should not happen for real EDC16C41
-        let mut s = [0u8; 4];
-        for (i, &b) in seed.iter().enumerate().take(4) {
-            s[i] = b;
-        }
-        return edc16c41_calculate_key(u32::from_be_bytes(s)).to_be_bytes().to_vec();
-    }
-    let seed_u32 = u32::from_be_bytes([seed[0], seed[1], seed[2], seed[3]]);
-    edc16c41_calculate_key(seed_u32).to_be_bytes().to_vec()
+/// Convert a 4-byte big-endian seed into a 4-byte big-endian key.
+///
+/// Returns `None` if `seed.len() < 4`. Callers that only ever receive a full
+/// 4-byte seed from the ECU can use [`edc16c41_key_from_seed_bytes_unchecked`].
+#[inline]
+pub fn edc16c41_key_from_seed_bytes(seed: &[u8]) -> Option<[u8; 4]> {
+    let arr: [u8; 4] = seed.get(..4)?.try_into().ok()?;
+    Some(edc16c41_calculate_key(u32::from_be_bytes(arr)).to_be_bytes())
 }
+
+/// Same as [`edc16c41_key_from_seed_bytes`] but panics on short input.
+/// Prefer the fallible version in production paths.
+#[inline]
+#[track_caller]
+pub fn edc16c41_key_from_seed_bytes_unchecked(seed: &[u8]) -> [u8; 4] {
+    edc16c41_key_from_seed_bytes(seed)
+        .expect("EDC16C41 requires a 4-byte seed")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Family dispatcher
+// ─────────────────────────────────────────────────────────────────────────────
 
 /// Key derivation dispatcher for Bosch EDC / MED families.
 ///
-/// Priority order:
-/// 1. EDC16C41 / EDC16 with 4-byte seed → real RE algorithm
-/// 2. Other EDC16 2-byte patterns (legacy community)
-/// 3. EDC17 / MED17 community starters
+/// Priority:
+/// 1. Exact `EDC16C41` (or any family containing it) with ≥4-byte seed → real RE algo
+/// 2. Generic `EDC16` with ≥4-byte seed → same real algo (C41 is the common case)
+/// 3. 2-byte EDC16 / EDC17 / MED17 community starters
 /// 4. Generic fallback
+#[inline]
 pub fn bosch_key_from_seed(seed: &[u8], family_hint: &str) -> Vec<u8> {
     if seed.is_empty() {
         return vec![0x00, 0x00];
     }
-    let fam = family_hint.to_ascii_uppercase();
 
-    // ── EDC16C41 (and matching EDC16) — preferred 4-byte path ──────────────
-    if (fam.contains("EDC16C41") || fam.contains("EDC16")) && seed.len() >= 4 {
-        return edc16c41_key_from_seed_bytes(seed);
+    let fam = family_hint.to_ascii_uppercase();
+    let is_edc16c41 = fam.contains("EDC16C41");
+    let is_edc16    = is_edc16c41 || fam.contains("EDC16");
+
+    // Preferred path: real 4-byte EDC16C41 algorithm
+    if is_edc16 && seed.len() >= 4 {
+        if let Some(key) = edc16c41_key_from_seed_bytes(seed) {
+            return key.to_vec();
+        }
     }
 
-    // ── 2-byte seed paths ──────────────────────────────────────────────────
+    // 2-byte (or short) seed paths
     if seed.len() >= 2 {
         let s0 = seed[0];
         let s1 = seed[1];
 
-        if fam.contains("EDC16") {
-            // Legacy 2-byte community pattern (kept for non-C41 / short-seed cases)
+        if is_edc16 {
+            // Legacy 2-byte community pattern (non-C41 / short-seed only)
             let k0 = s0.wrapping_add(0x5A).rotate_left(3) ^ 0xA5;
             let k1 = s1.wrapping_add(0x3C).rotate_right(2) ^ 0x5A;
             return vec![k0, k1];
@@ -397,23 +425,22 @@ pub fn bosch_key_from_seed(seed: &[u8], family_hint: &str) -> Vec<u8> {
             let k1 = s1.wrapping_add(s0).wrapping_mul(0x11);
             return vec![k0, k1];
         }
-        // Generic fallback
-        let k0 = s0 ^ 0xFF;
-        let k1 = s1.wrapping_add(1) ^ 0xAA;
-        return vec![k0, k1];
+
+        // Generic 2-byte fallback
+        return vec![s0 ^ 0xFF, s1.wrapping_add(1) ^ 0xAA];
     }
 
-    // ── Remaining 4-byte seeds (non-EDC16) ─────────────────────────────────
+    // Remaining ≥4-byte seeds that are not EDC16
     if seed.len() >= 4 {
-        let mut out = vec![0u8; 4];
-        for i in 0..4 {
-            out[i] = seed[i].wrapping_add(0x12).rotate_left((i as u32) + 1) ^ 0x55;
+        let mut out = [0u8; 4];
+        for (i, b) in seed.iter().take(4).enumerate() {
+            out[i] = b.wrapping_add(0x12).rotate_left((i as u32) + 1) ^ 0x55;
         }
         if fam.contains("MED17") {
             out[0] ^= 0xA5;
             out[2] = out[2].wrapping_add(0x33);
         }
-        return out;
+        return out.to_vec();
     }
 
     seed.to_vec()
@@ -421,11 +448,12 @@ pub fn bosch_key_from_seed(seed: &[u8], family_hint: &str) -> Vec<u8> {
 
 /// High-level Bosch UDS unlock helper (payload only — call via can::uds_request or j2534).
 /// Returns the key bytes that should be sent after receiving the seed.
+#[inline]
 pub fn bosch_compute_key_for_seed(seed: &[u8], family: &str) -> Vec<u8> {
     bosch_key_from_seed(seed, family)
 }
 
-/// Convenience: given a raw UDS positive seed response (67 XX seed...), extract seed bytes.
+/// Extract seed bytes from a positive UDS SecurityAccess response (`67 XX <seed…>`).
 pub fn bosch_parse_seed_from_response(resp: &[u8]) -> Result<Vec<u8>, String> {
     if resp.len() < 3 || resp[0] != 0x67 {
         if !resp.is_empty() && resp[0] == 0x7F {
@@ -437,7 +465,7 @@ pub fn bosch_parse_seed_from_response(resp: &[u8]) -> Result<Vec<u8>, String> {
 }
 
 /// Full end-to-end Bosch UDS SecurityAccess unlock over an open serial/CAN port.
-/// Uses can::uds_request for transport. Returns success JSON-ready state.
+/// Uses `can::uds_request` for transport. Returns a JSON-ready status string.
 pub fn bosch_uds_unlock_full(
     port: &mut Box<dyn SerialPort + Send>,
     family: &str,
@@ -448,11 +476,10 @@ pub fn bosch_uds_unlock_full(
     let seed_resp = crate::can::uds_request(port, 0x27, &seed_req[1..], true)
         .map_err(|e| format!("Seed request failed: {}", e))?;
 
-    // Note: uds_request already strips SID sometimes; handle both forms
+    // uds_request may return the full positive response or just the payload
     let seed_bytes = if seed_resp.first() == Some(&0x67) {
         bosch_parse_seed_from_response(&seed_resp)?
     } else if seed_resp.len() >= 2 {
-        // some ELM paths return payload only
         seed_resp
     } else {
         return Err(format!("Unexpected seed response: {:02X?}", seed_resp));
@@ -465,7 +492,7 @@ pub fn bosch_uds_unlock_full(
         ));
     }
 
-    // 2. Compute key (uses real EDC16C41 algorithm when family matches)
+    // 2. Compute key (real EDC16C41 algorithm when family matches)
     let key = bosch_key_from_seed(&seed_bytes, family);
 
     // 3. Send key
@@ -473,11 +500,16 @@ pub fn bosch_uds_unlock_full(
     let key_resp = crate::can::uds_request(port, 0x27, &key_payload[1..], true)
         .map_err(|e| format!("Send key failed: {}", e))?;
 
-    // 4. Validate positive
-    let ok = key_resp.first() == Some(&0x67) || key_resp.is_empty() || key_resp.iter().any(|&b| b == 0x67);
+    // 4. Validate positive response
+    let ok = key_resp.first() == Some(&0x67)
+        || key_resp.is_empty()
+        || key_resp.iter().any(|&b| b == 0x67);
+
     if !ok && key_resp.first() == Some(&0x7F) {
         let nrc = key_resp.get(2).copied().unwrap_or(0);
-        return Err(format!("Key rejected NRC 0x{:02X} — try different family algo or dump-derived table", nrc));
+        return Err(format!(
+            "Key rejected NRC 0x{:02X} — check family hint or seed length", nrc
+        ));
     }
 
     Ok(format!(
@@ -494,12 +526,14 @@ pub fn bosch_uds_unlock_full(
 mod tests {
     use super::*;
 
+    // ── P01 ────────────────────────────────────────────────────────────────
+
     #[test]
     fn level1_known_seed_0x1234() {
         let (kh, kl) = p01_key_l1(0x12, 0x34);
         let key = u16::from_be_bytes([kh, kl]);
-        assert_ne!(key, 0x0000, "key should not be zero for non-zero seed");
-        assert_ne!(key, 0x1234, "key should not equal seed");
+        assert_ne!(key, 0x0000);
+        assert_ne!(key, 0x1234);
     }
 
     #[test]
@@ -514,19 +548,17 @@ mod tests {
 
     #[test]
     fn level1_and_level2_produce_different_keys_for_same_seed() {
-        let seed = (0xAB, 0xCD);
-        let k1 = p01_key_l1(seed.0, seed.1);
-        let k2 = p01_key_l2(seed.0, seed.1);
-        assert_ne!(k1, k2, "Level1 and Level2 keys must differ");
+        let k1 = p01_key_l1(0xAB, 0xCD);
+        let k2 = p01_key_l2(0xAB, 0xCD);
+        assert_ne!(k1, k2);
     }
 
     #[test]
     fn seed_response_parse_valid() {
-        let cs: u8 = [0x48u8, 0x6B, 0x10, 0x67, 0x01, 0xAB, 0xCD]
-            .iter().fold(0u8, |a, &b| a.wrapping_add(b));
-        let frame = vec![0x48, 0x6B, 0x10, 0x67, 0x01, 0xAB, 0xCD, cs];
-        let result = parse_seed_response(&frame, 0x01);
-        assert_eq!(result, Ok((0xAB, 0xCD)));
+        let mut frame = vec![0x48u8, 0x6B, 0x10, 0x67, 0x01, 0xAB, 0xCD];
+        let cs = frame.iter().fold(0u8, |a, &b| a.wrapping_add(b));
+        frame.push(cs);
+        assert_eq!(parse_seed_response(&frame, 0x01), Ok((0xAB, 0xCD)));
     }
 
     #[test]
@@ -546,15 +578,15 @@ mod tests {
 
     #[test]
     fn seed_request_l1_frame_checksum() {
-        let frame = build_seed_request_l1();
-        assert!(validate_checksum_test(&frame));
+        assert!(validate_checksum_test(&build_seed_request_l1()));
     }
 
     #[test]
     fn key_send_l1_frame_checksum() {
-        let frame = build_key_send_l1(0x12, 0x34);
-        assert!(validate_checksum_test(&frame));
+        assert!(validate_checksum_test(&build_key_send_l1(0x12, 0x34)));
     }
+
+    // ── Bosch helpers ──────────────────────────────────────────────────────
 
     #[test]
     fn bosch_key_deterministic() {
@@ -568,68 +600,89 @@ mod tests {
     #[test]
     fn bosch_parse_seed() {
         let resp = vec![0x67, 0x01, 0xAB, 0xCD];
-        let seed = bosch_parse_seed_from_response(&resp).unwrap();
-        assert_eq!(seed, vec![0xAB, 0xCD]);
+        assert_eq!(bosch_parse_seed_from_response(&resp).unwrap(), vec![0xAB, 0xCD]);
     }
 
     #[test]
     fn bosch_level_from_str() {
         assert_eq!(BoschSecurityLevel::from_str("programming"), BoschSecurityLevel::Programming);
         assert_eq!(BoschSecurityLevel::from_str("diag"), BoschSecurityLevel::Diagnostic);
+        assert_eq!(BoschSecurityLevel::Programming.key_subfn(), 0x04);
+        assert_eq!(BoschSecurityLevel::Diagnostic.seed_subfn(), 0x01);
     }
 
-    // ── EDC16C41 real algorithm vectors ────────────────────────────────────
+    // ── EDC16C41 real algorithm ────────────────────────────────────────────
 
     #[test]
     fn edc16c41_zero_seed() {
-        // 0x00000000 → 0x8D12CE4D
-        assert_eq!(edc16c41_calculate_key(0x00000000), 0x8D12CE4D);
+        assert_eq!(edc16c41_calculate_key(0x0000_0000), 0x8D12_CE4D);
     }
 
     #[test]
     fn edc16c41_known_seed_0x12345678() {
-        // 0x12345678 → 0x8FC95596
-        assert_eq!(edc16c41_calculate_key(0x12345678), 0x8FC95596);
+        assert_eq!(edc16c41_calculate_key(0x1234_5678), 0x8FC9_5596);
     }
 
     #[test]
     fn edc16c41_known_seed_0xABCDEF01() {
-        // 0xABCDEF01 → 0x58329A54
-        assert_eq!(edc16c41_calculate_key(0xABCDEF01), 0x58329A54);
+        assert_eq!(edc16c41_calculate_key(0xABCD_EF01), 0x5832_9A54);
     }
 
     #[test]
     fn edc16c41_known_seed_0xDEADBEEF() {
-        // 0xDEADBEEF → 0x663E90F8
-        assert_eq!(edc16c41_calculate_key(0xDEADBEEF), 0x663E90F8);
+        assert_eq!(edc16c41_calculate_key(0xDEAD_BEEF), 0x663E_90F8);
+    }
+
+    #[test]
+    fn edc16c41_const_eval() {
+        // const fn must be usable in a const context
+        const KEY: u32 = edc16c41_calculate_key(0x1234_5678);
+        assert_eq!(KEY, 0x8FC9_5596);
     }
 
     #[test]
     fn edc16c41_bytes_path_matches_u32() {
-        let seed_bytes = [0x12u8, 0x34, 0x56, 0x78];
-        let key_bytes = edc16c41_key_from_seed_bytes(&seed_bytes);
-        let expected = edc16c41_calculate_key(0x12345678).to_be_bytes().to_vec();
-        assert_eq!(key_bytes, expected);
+        let seed = [0x12u8, 0x34, 0x56, 0x78];
+        let key = edc16c41_key_from_seed_bytes(&seed).unwrap();
+        assert_eq!(key, edc16c41_calculate_key(0x1234_5678).to_be_bytes());
+    }
+
+    #[test]
+    fn edc16c41_short_seed_returns_none() {
+        assert!(edc16c41_key_from_seed_bytes(&[0x12, 0x34]).is_none());
+        assert!(edc16c41_key_from_seed_bytes(&[]).is_none());
     }
 
     #[test]
     fn bosch_key_from_seed_uses_edc16c41_for_4byte() {
         let seed = [0xDE, 0xAD, 0xBE, 0xEF];
         let key = bosch_key_from_seed(&seed, "EDC16C41");
-        assert_eq!(key, edc16c41_calculate_key(0xDEADBEEF).to_be_bytes().to_vec());
+        assert_eq!(key, edc16c41_calculate_key(0xDEAD_BEEF).to_be_bytes().to_vec());
     }
 
     #[test]
     fn bosch_key_from_seed_edc16_family_also_uses_real_algo() {
         let seed = [0x00, 0x00, 0x00, 0x01];
         let key = bosch_key_from_seed(&seed, "EDC16");
-        assert_eq!(key, edc16c41_calculate_key(0x00000001).to_be_bytes().to_vec());
+        assert_eq!(key, edc16c41_calculate_key(0x0000_0001).to_be_bytes().to_vec());
+    }
+
+    #[test]
+    fn bosch_key_from_seed_prefers_c41_even_when_generic_edc16_present() {
+        // "EDC16C41" contains both strings; must still hit the real path
+        let seed = [0x11, 0x22, 0x33, 0x44];
+        let key = bosch_key_from_seed(&seed, "Bosch EDC16C41 Nissan");
+        assert_eq!(key.len(), 4);
+        assert_eq!(key, edc16c41_key_from_seed_bytes(&seed).unwrap().to_vec());
     }
 
     fn validate_checksum_test(frame: &[u8]) -> bool {
-        if frame.len() < 2 { return false; }
-        let expected = frame[..frame.len()-1]
-            .iter().fold(0u8, |a, &b| a.wrapping_add(b));
-        expected == frame[frame.len()-1]
+        if frame.len() < 2 {
+            return false;
+        }
+        let expected = frame[..frame.len() - 1]
+            .iter()
+            .fold(0u8, |a, &b| a.wrapping_add(b));
+        expected == frame[frame.len() - 1]
     }
 }
