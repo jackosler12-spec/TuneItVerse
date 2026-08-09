@@ -4,6 +4,7 @@
 // v1.1.0: J2534 write/read fully registered, family-aware table auto-load from ECU DB refined_map_addrs for all 5 families, get_ecu_info command
 // v1.2.1: Completed missing torque_limiter + start_of_injection handlers in auto_load so DB refined_map_addrs are fully honored (industry-leading map coverage)
 // v1.7.0: J2534 PassThruIoctl — SET_CONFIG DATA_RATE, READ_VBATT, ISO15765 STMIN/BS, VPW high-speed helpers
+// v2.0-prep: ISO 14229 UDS application layer (session, TesterPresent, RMBA ALFI, 34/36/37, routines, DTCs)
 #![allow(unused_imports, dead_code, unused_variables, unused_mut)]
 
 use std::sync::Mutex;
@@ -22,6 +23,7 @@ mod xdf;
 mod j2534;
 
 mod can;
+mod uds;
 mod kwp;
 mod consult;
 
