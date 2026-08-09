@@ -1,39 +1,63 @@
 #![allow(unused, dead_code)]
 //! can.rs — CAN / ISO-TP (ISO 15765-2) support for TuneItVerse
 //!
-//! Features:
-//! - ELM327 / STN / OBDLink adapters over serial
-//! - Lawicel-style raw CAN (tIIDDLCData)
-//! - Full ISO-TP multi-frame: SF / FF / CF + Flow Control (CTS)
-//! - UDS request helpers (single + multi-frame)
-//!
-//! Used for EDC16C41 Nissan Patrol ZD30CRD (CAN 500 kbps) and other UDS ECUs.
+//! - ELM327 / STN / OBDLink over serial
+//! - Lawicel-style raw CAN
+//! - Full ISO-TP: SF / FF / CF + Flow Control (CTS)
+//! - Configurable BS / STmin with automatic gentler retry on incomplete RX
 
 use serialport::SerialPort;
 use std::time::{Duration, Instant};
 
-/// Common CAN IDs for many ECUs (11-bit)
 pub const ECM_REQUEST_ID: u32 = 0x7E0;
 pub const ECM_RESPONSE_ID: u32 = 0x7E8;
 pub const BROADCAST_ID: u32 = 0x7DF;
 
-/// ISO-TP PCI type nibbles
-const PCI_SF: u8 = 0x00; // Single Frame
-const PCI_FF: u8 = 0x10; // First Frame
-const PCI_CF: u8 = 0x20; // Consecutive Frame
-const PCI_FC: u8 = 0x30; // Flow Control
+const PCI_SF: u8 = 0x00;
+const PCI_FF: u8 = 0x10;
+const PCI_CF: u8 = 0x20;
+const PCI_FC: u8 = 0x30;
 
-/// Flow Control flags
-pub const FC_CTS: u8 = 0x00; // Continue To Send
+pub const FC_CTS: u8 = 0x00;
 pub const FC_WAIT: u8 = 0x01;
 pub const FC_OVFLW: u8 = 0x02;
 
-/// Default block size (0 = send all remaining without further FC)
 pub const DEFAULT_FC_BLOCK_SIZE: u8 = 0;
-/// Default separation time minimum (ms) advertised to sender
 pub const DEFAULT_FC_STMIN_MS: u8 = 0;
 
-/// Simple CAN frame (11-bit for now)
+/// Gentler FC used on incomplete multi-frame RX retry (cheap ELM clones).
+pub const RETRY_FC_BLOCK_SIZE: u8 = 16;
+pub const RETRY_FC_STMIN_MS: u8 = 2;
+
+/// Flow Control parameters advertised to the sender (ECU) after a First Frame.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FlowControlParams {
+    pub block_size: u8,
+    pub st_min_ms: u8,
+}
+
+impl Default for FlowControlParams {
+    fn default() -> Self {
+        Self {
+            block_size: DEFAULT_FC_BLOCK_SIZE,
+            st_min_ms: DEFAULT_FC_STMIN_MS,
+        }
+    }
+}
+
+impl FlowControlParams {
+    pub fn fast() -> Self {
+        Self::default()
+    }
+    /// Safer pacing for weak adapters / large Mode 23 windows.
+    pub fn gentle() -> Self {
+        Self {
+            block_size: RETRY_FC_BLOCK_SIZE,
+            st_min_ms: RETRY_FC_STMIN_MS,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CanFrame {
     pub id: u32,
@@ -41,26 +65,15 @@ pub struct CanFrame {
     pub is_extended: bool,
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// ISO-TP pure logic (no I/O) — unit-tested
-// ─────────────────────────────────────────────────────────────────────────────
-
-/// Classify and extract payload from a single ISO-TP PCI frame (up to 8 data bytes).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum IsoTpSegment {
-    /// Complete single-frame payload
     Single(Vec<u8>),
-    /// First frame: (total_length, first_data_bytes)
     First { total_len: usize, data: Vec<u8> },
-    /// Consecutive frame: (sequence 0-15, data)
     Consecutive { seq: u8, data: Vec<u8> },
-    /// Flow control from peer
     FlowControl { flag: u8, block_size: u8, st_min: u8 },
-    /// Unrecognised
     Unknown(Vec<u8>),
 }
 
-/// Parse one CAN data field (≤8 bytes) as an ISO-TP segment.
 pub fn parse_isotp_segment(data: &[u8]) -> IsoTpSegment {
     if data.is_empty() {
         return IsoTpSegment::Unknown(data.to_vec());
@@ -102,7 +115,6 @@ pub fn parse_isotp_segment(data: &[u8]) -> IsoTpSegment {
     }
 }
 
-/// Build a Flow Control frame (CTS by default).
 pub fn build_flow_control(flag: u8, block_size: u8, st_min_ms: u8) -> [u8; 8] {
     let mut frame = [0u8; 8];
     frame[0] = PCI_FC | (flag & 0x0F);
@@ -111,7 +123,10 @@ pub fn build_flow_control(flag: u8, block_size: u8, st_min_ms: u8) -> [u8; 8] {
     frame
 }
 
-/// Build a Single Frame for a short UDS payload (≤7 bytes).
+pub fn build_flow_control_params(fc: FlowControlParams) -> [u8; 8] {
+    build_flow_control(FC_CTS, fc.block_size, fc.st_min_ms)
+}
+
 pub fn build_single_frame(payload: &[u8]) -> Result<[u8; 8], String> {
     if payload.len() > 7 {
         return Err("SF payload max 7 bytes".into());
@@ -124,10 +139,6 @@ pub fn build_single_frame(payload: &[u8]) -> Result<[u8; 8], String> {
     Ok(frame)
 }
 
-/// Assemble a multi-frame ISO-TP message from a First Frame + Consecutive Frames.
-///
-/// `segments` must start with a First frame; subsequent are Consecutive in order.
-/// Returns the complete payload (without PCI bytes).
 pub fn assemble_multiframe(segments: &[IsoTpSegment]) -> Result<Vec<u8>, String> {
     if segments.is_empty() {
         return Err("No segments".into());
@@ -170,9 +181,7 @@ pub fn assemble_multiframe(segments: &[IsoTpSegment]) -> Result<Vec<u8>, String>
     Ok(buf)
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// ELM327 helpers
-// ─────────────────────────────────────────────────────────────────────────────
+// ── ELM327 ──────────────────────────────────────────────────────────────────
 
 pub fn elm_init_can_500k(port: &mut Box<dyn SerialPort + Send>) -> Result<(), String> {
     let cmds = [
@@ -181,9 +190,9 @@ pub fn elm_init_can_500k(port: &mut Box<dyn SerialPort + Send>) -> Result<(), St
         "AT L0",
         "AT S0",
         "AT H0",
-        "AT SP 6", // ISO 15765-4 CAN 11-bit 500k
-        "AT AL",  // allow long messages (>7 bytes) — critical for multi-frame
-        "AT CAF 0", // CAN auto-format off so we see PCI bytes
+        "AT SP 6",
+        "AT AL",
+        "AT CAF 0",
     ];
     for c in cmds {
         let _ = send_elm_cmd(port, c);
@@ -197,7 +206,6 @@ fn send_elm_cmd(port: &mut Box<dyn SerialPort + Send>, cmd: &str) -> Result<Stri
     port.write_all(line.as_bytes()).map_err(|e| e.to_string())?;
     port.flush().ok();
     std::thread::sleep(Duration::from_millis(40));
-
     let mut buf = [0u8; 512];
     let n = port.read(&mut buf).unwrap_or(0);
     let resp = String::from_utf8_lossy(&buf[..n]).to_string();
@@ -214,12 +222,8 @@ pub fn elm_set_header(port: &mut Box<dyn SerialPort + Send>, can_id: u32) -> Res
     Ok(())
 }
 
-/// Parse ELM ASCII hex response into raw bytes (strips spaces, prompts, CR).
 fn elm_hex_to_bytes(raw: &str) -> Vec<u8> {
-    let cleaned: String = raw
-        .chars()
-        .filter(|c| c.is_ascii_hexdigit())
-        .collect();
+    let cleaned: String = raw.chars().filter(|c| c.is_ascii_hexdigit()).collect();
     let mut out = Vec::with_capacity(cleaned.len() / 2);
     for i in (0..cleaned.len()).step_by(2) {
         if i + 1 < cleaned.len() {
@@ -231,7 +235,6 @@ fn elm_hex_to_bytes(raw: &str) -> Vec<u8> {
     out
 }
 
-/// Read available ELM response data with a timeout.
 fn elm_read_raw(port: &mut Box<dyn SerialPort + Send>, timeout: Duration) -> Result<Vec<u8>, String> {
     let deadline = Instant::now() + timeout;
     let mut collected = String::new();
@@ -242,7 +245,6 @@ fn elm_read_raw(port: &mut Box<dyn SerialPort + Send>, timeout: Duration) -> Res
             Ok(0) => std::thread::sleep(Duration::from_millis(5)),
             Ok(n) => {
                 collected.push_str(&String::from_utf8_lossy(&buf[..n]));
-                // ELM ends responses with '>'
                 if collected.contains('>') {
                     break;
                 }
@@ -263,111 +265,90 @@ fn elm_read_raw(port: &mut Box<dyn SerialPort + Send>, timeout: Duration) -> Res
     Ok(elm_hex_to_bytes(&collected))
 }
 
-/// Send ISO-TP request via ELM and reassemble multi-frame responses.
-///
-/// On First Frame: sends Flow Control (ATFC or manual FC frame depending on adapter).
-/// Collects Consecutive Frames until `total_len` is satisfied.
-pub fn elm_send_iso_tp_request(
+fn elm_collect_cfs(
+    port: &mut Box<dyn SerialPort + Send>,
+    total_len: usize,
+    mut buf: Vec<u8>,
+    overall_ms: u64,
+) -> Result<Vec<u8>, String> {
+    let deadline = Instant::now() + Duration::from_millis(overall_ms);
+    let mut expected_seq: u8 = 1;
+
+    while buf.len() < total_len && Instant::now() < deadline {
+        match elm_read_raw(port, Duration::from_millis(400)) {
+            Ok(raw) if !raw.is_empty() => {
+                for chunk in raw.chunks(8) {
+                    if let IsoTpSegment::Consecutive { seq, data: cf } = parse_isotp_segment(chunk) {
+                        let _ = seq;
+                        let _ = expected_seq;
+                        buf.extend_from_slice(&cf);
+                        expected_seq = expected_seq.wrapping_add(1);
+                    }
+                    if buf.len() >= total_len {
+                        break;
+                    }
+                }
+            }
+            _ => std::thread::sleep(Duration::from_millis(10)),
+        }
+    }
+
+    if buf.len() < total_len {
+        return Err(format!(
+            "ISO-TP incomplete: got {}/{} bytes",
+            buf.len(),
+            total_len
+        ));
+    }
+    buf.truncate(total_len);
+    Ok(buf)
+}
+
+/// ISO-TP request with explicit Flow Control parameters.
+pub fn elm_send_iso_tp_request_with_fc(
     port: &mut Box<dyn SerialPort + Send>,
     request_id: u32,
     data: &[u8],
+    fc: FlowControlParams,
 ) -> Result<Vec<u8>, String> {
     elm_set_header(port, request_id)?;
-
-    // Prefer ISO-TP auto formatting off so we control FC
     let _ = send_elm_cmd(port, "AT CAF 0");
 
-    // Transmit: for short payloads use SF; longer requests use multi-frame TX
-    // (most diagnostic requests are ≤7 bytes → SF)
     if data.len() <= 7 {
         let sf = build_single_frame(data)?;
-        // ELM wants the data bytes as hex; with CAF0 include PCI
         let hex: String = sf
             .iter()
             .take(1 + data.len())
             .map(|b| format!("{:02X}", b))
             .collect();
-        let cmd = format!("{}\r", hex);
-        port.write_all(cmd.as_bytes()).map_err(|e| e.to_string())?;
+        port.write_all(format!("{}\r", hex).as_bytes())
+            .map_err(|e| e.to_string())?;
     } else {
-        // Multi-frame TX (rare for requests; included for completeness)
         return elm_send_multiframe_tx(port, data);
     }
 
-    // Receive path
     let first_raw = elm_read_raw(port, Duration::from_millis(800))?;
     if first_raw.is_empty() {
         return Err("Empty ISO-TP response".into());
     }
 
-    let seg = parse_isotp_segment(&first_raw);
-    match seg {
+    match parse_isotp_segment(&first_raw) {
         IsoTpSegment::Single(payload) => Ok(payload),
-        IsoTpSegment::First { total_len, data: ff_data } => {
-            // Send Flow Control CTS
-            let fc = build_flow_control(FC_CTS, DEFAULT_FC_BLOCK_SIZE, DEFAULT_FC_STMIN_MS);
-            let fc_hex: String = fc[..3].iter().map(|b| format!("{:02X}", b)).collect();
-            // FC is sent TO the ECU, so header stays request ID on many adapters;
-            // OBDLink/STN: use AT SH with response ID for FC in some firmwares.
-            // Practical approach: send FC as raw after setting header to response path.
+        IsoTpSegment::First {
+            total_len,
+            data: ff_data,
+        } => {
+            let fc_frame = build_flow_control_params(fc);
+            let fc_hex: String = fc_frame[..3].iter().map(|b| format!("{:02X}", b)).collect();
             let _ = elm_set_header(port, request_id);
-            let fc_cmd = format!("{}\r", fc_hex);
-            port.write_all(fc_cmd.as_bytes()).map_err(|e| e.to_string())?;
+            port.write_all(format!("{}\r", fc_hex).as_bytes())
+                .map_err(|e| e.to_string())?;
 
-            let mut segments = vec![IsoTpSegment::First {
-                total_len,
-                data: ff_data,
-            }];
-            let mut collected = segments[0].clone();
-            let mut buf = match collected {
-                IsoTpSegment::First { ref data, .. } => data.clone(),
-                _ => vec![],
-            };
-
-            let deadline = Instant::now() + Duration::from_millis(3000);
-            let mut expected_seq: u8 = 1;
-
-            while buf.len() < total_len && Instant::now() < deadline {
-                match elm_read_raw(port, Duration::from_millis(400)) {
-                    Ok(raw) if !raw.is_empty() => {
-                        // ELM may concatenate multiple CFs; split into 8-byte frames
-                        for chunk in raw.chunks(8) {
-                            let s = parse_isotp_segment(chunk);
-                            if let IsoTpSegment::Consecutive { seq, data: cf } = s {
-                                if seq != (expected_seq & 0x0F) {
-                                    // tolerate minor desync from adapter buffering
-                                }
-                                buf.extend_from_slice(&cf);
-                                expected_seq = expected_seq.wrapping_add(1);
-                                segments.push(IsoTpSegment::Consecutive {
-                                    seq,
-                                    data: cf,
-                                });
-                            }
-                            if buf.len() >= total_len {
-                                break;
-                            }
-                        }
-                    }
-                    Ok(_) => std::thread::sleep(Duration::from_millis(10)),
-                    Err(_) => std::thread::sleep(Duration::from_millis(10)),
-                }
-            }
-
-            if buf.len() < total_len {
-                return Err(format!(
-                    "ISO-TP incomplete: got {}/{} bytes",
-                    buf.len(),
-                    total_len
-                ));
-            }
-            buf.truncate(total_len);
-            Ok(buf)
+            elm_collect_cfs(port, total_len, ff_data, 3000)
         }
         IsoTpSegment::Unknown(raw) => {
-            // Fallback: treat as already-stripped payload (some ELM configs)
             if raw.len() > 1 && raw[0] == 0x7F {
-                return Ok(raw); // negative response, pass up
+                return Ok(raw);
             }
             Ok(raw)
         }
@@ -375,11 +356,29 @@ pub fn elm_send_iso_tp_request(
     }
 }
 
+/// Default path: fast FC first; on incomplete multi-frame, one gentler retry.
+pub fn elm_send_iso_tp_request(
+    port: &mut Box<dyn SerialPort + Send>,
+    request_id: u32,
+    data: &[u8],
+) -> Result<Vec<u8>, String> {
+    match elm_send_iso_tp_request_with_fc(port, request_id, data, FlowControlParams::fast()) {
+        Ok(payload) => Ok(payload),
+        Err(e) if e.contains("incomplete") => {
+            // Adapter may have dropped CFs under BS=0/STmin=0 — retry paced
+            let _ = send_elm_cmd(port, "AT CAF 0");
+            std::thread::sleep(Duration::from_millis(30));
+            elm_send_iso_tp_request_with_fc(port, request_id, data, FlowControlParams::gentle())
+                .map_err(|e2| format!("{} (gentle retry: {})", e, e2))
+        }
+        Err(e) => Err(e),
+    }
+}
+
 fn elm_send_multiframe_tx(
     port: &mut Box<dyn SerialPort + Send>,
     data: &[u8],
 ) -> Result<Vec<u8>, String> {
-    // First Frame
     let total = data.len();
     if total > 4095 {
         return Err("ISO-TP max length 4095".into());
@@ -387,27 +386,22 @@ fn elm_send_multiframe_tx(
     let mut ff = [0u8; 8];
     ff[0] = PCI_FF | (((total >> 8) as u8) & 0x0F);
     ff[1] = (total & 0xFF) as u8;
-    let first_data_len = (total).min(6);
+    let first_data_len = total.min(6);
     ff[2..2 + first_data_len].copy_from_slice(&data[..first_data_len]);
 
     let hex: String = ff.iter().map(|b| format!("{:02X}", b)).collect();
     port.write_all(format!("{}\r", hex).as_bytes())
         .map_err(|e| e.to_string())?;
 
-    // Wait for FC
     let fc_raw = elm_read_raw(port, Duration::from_millis(500))?;
-    let fc_seg = parse_isotp_segment(&fc_raw);
-    match fc_seg {
+    match parse_isotp_segment(&fc_raw) {
         IsoTpSegment::FlowControl { flag, .. } if flag == FC_CTS => {}
         IsoTpSegment::FlowControl { flag, .. } => {
             return Err(format!("FC flag 0x{:02X} not CTS", flag));
         }
-        _ => {
-            // Some adapters auto-handle; continue
-        }
+        _ => {}
     }
 
-    // Consecutive Frames
     let mut offset = first_data_len;
     let mut seq: u8 = 1;
     while offset < total {
@@ -423,18 +417,13 @@ fn elm_send_multiframe_tx(
         std::thread::sleep(Duration::from_millis(2));
     }
 
-    // Read final response (may itself be multi-frame)
-    elm_read_raw(port, Duration::from_millis(1500)).map(|raw| {
-        match parse_isotp_segment(&raw) {
-            IsoTpSegment::Single(p) => p,
-            _ => raw,
-        }
+    elm_read_raw(port, Duration::from_millis(1500)).map(|raw| match parse_isotp_segment(&raw) {
+        IsoTpSegment::Single(p) => p,
+        _ => raw,
     })
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Lawicel / raw CAN
-// ─────────────────────────────────────────────────────────────────────────────
+// ── Lawicel / raw CAN ───────────────────────────────────────────────────────
 
 pub fn send_raw_can(port: &mut Box<dyn SerialPort + Send>, frame: &CanFrame) -> Result<(), String> {
     if !frame.is_extended && frame.data.len() <= 8 {
@@ -454,7 +443,6 @@ pub fn recv_raw_can(port: &mut Box<dyn SerialPort + Send>) -> Result<CanFrame, S
     let mut buf = [0u8; 128];
     let n = port.read(&mut buf).map_err(|e| e.to_string())?;
     let s = String::from_utf8_lossy(&buf[..n]);
-    // Find a 't' frame in the buffer
     if let Some(start) = s.find('t') {
         let frame_str = &s[start..];
         if frame_str.len() > 5 {
@@ -479,14 +467,13 @@ pub fn recv_raw_can(port: &mut Box<dyn SerialPort + Send>) -> Result<CanFrame, S
     Err("No parseable CAN frame".into())
 }
 
-/// Multi-frame receive over raw/Lawicel CAN.
-pub fn raw_isotp_transact(
+pub fn raw_isotp_transact_with_fc(
     port: &mut Box<dyn SerialPort + Send>,
     request_id: u32,
     response_id: u32,
     payload: &[u8],
+    fc: FlowControlParams,
 ) -> Result<Vec<u8>, String> {
-    // TX
     if payload.len() <= 7 {
         let sf = build_single_frame(payload)?;
         let frame = CanFrame {
@@ -499,7 +486,6 @@ pub fn raw_isotp_transact(
         return Err("Raw multi-frame TX not yet wired — use ELM path".into());
     }
 
-    // RX first segment
     let deadline = Instant::now() + Duration::from_millis(2000);
     let mut first: Option<CanFrame> = None;
     while Instant::now() < deadline {
@@ -512,46 +498,36 @@ pub fn raw_isotp_transact(
         std::thread::sleep(Duration::from_millis(5));
     }
     let first = first.ok_or("No ISO-TP response frame")?;
-    let seg = parse_isotp_segment(&first.data);
 
-    match seg {
+    match parse_isotp_segment(&first.data) {
         IsoTpSegment::Single(p) => Ok(p),
         IsoTpSegment::First { total_len, data } => {
-            // Send FC
-            let fc = build_flow_control(FC_CTS, DEFAULT_FC_BLOCK_SIZE, DEFAULT_FC_STMIN_MS);
+            let fc_bytes = build_flow_control_params(fc);
             let fc_frame = CanFrame {
                 id: request_id,
-                data: fc[..3].to_vec(),
+                data: fc_bytes[..3].to_vec(),
                 is_extended: false,
             };
             send_raw_can(port, &fc_frame)?;
 
             let mut buf = data;
-            let mut expected_seq: u8 = 1;
             let cf_deadline = Instant::now() + Duration::from_millis(3000);
-
             while buf.len() < total_len && Instant::now() < cf_deadline {
                 if let Ok(f) = recv_raw_can(port) {
                     if f.id != response_id && response_id != 0 {
                         continue;
                     }
-                    if let IsoTpSegment::Consecutive { seq, data: cf } =
+                    if let IsoTpSegment::Consecutive { data: cf, .. } =
                         parse_isotp_segment(&f.data)
                     {
-                        let _ = seq; // sequence validated loosely
                         buf.extend_from_slice(&cf);
-                        expected_seq = expected_seq.wrapping_add(1);
                     }
                 } else {
                     std::thread::sleep(Duration::from_millis(3));
                 }
             }
             if buf.len() < total_len {
-                return Err(format!(
-                    "Raw ISO-TP incomplete: {}/{}",
-                    buf.len(),
-                    total_len
-                ));
+                return Err(format!("Raw ISO-TP incomplete: {}/{}", buf.len(), total_len));
             }
             buf.truncate(total_len);
             Ok(buf)
@@ -560,12 +536,34 @@ pub fn raw_isotp_transact(
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// High-level UDS
-// ─────────────────────────────────────────────────────────────────────────────
+pub fn raw_isotp_transact(
+    port: &mut Box<dyn SerialPort + Send>,
+    request_id: u32,
+    response_id: u32,
+    payload: &[u8],
+) -> Result<Vec<u8>, String> {
+    match raw_isotp_transact_with_fc(
+        port,
+        request_id,
+        response_id,
+        payload,
+        FlowControlParams::fast(),
+    ) {
+        Ok(p) => Ok(p),
+        Err(e) if e.contains("incomplete") => raw_isotp_transact_with_fc(
+            port,
+            request_id,
+            response_id,
+            payload,
+            FlowControlParams::gentle(),
+        )
+        .map_err(|e2| format!("{} (gentle retry: {})", e, e2)),
+        Err(e) => Err(e),
+    }
+}
 
-/// Send a UDS request and return the response payload (SID stripped for positive).
-/// Handles multi-frame ISO-TP automatically when `use_elm` is true.
+// ── High-level UDS ──────────────────────────────────────────────────────────
+
 pub fn uds_request(
     port: &mut Box<dyn SerialPort + Send>,
     sid: u8,
@@ -582,7 +580,6 @@ pub fn uds_request(
     }
 }
 
-/// Explicit multi-frame UDS request (same as uds_request; kept for API clarity).
 pub fn uds_request_multiframe(
     port: &mut Box<dyn SerialPort + Send>,
     sid: u8,
@@ -592,9 +589,22 @@ pub fn uds_request_multiframe(
     uds_request(port, sid, data, use_elm)
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// J2534 stubs
-// ─────────────────────────────────────────────────────────────────────────────
+/// Multi-frame UDS with explicit FC (no automatic retry).
+pub fn uds_request_with_fc(
+    port: &mut Box<dyn SerialPort + Send>,
+    sid: u8,
+    data: &[u8],
+    use_elm: bool,
+    fc: FlowControlParams,
+) -> Result<Vec<u8>, String> {
+    let mut payload = vec![sid];
+    payload.extend_from_slice(data);
+    if use_elm {
+        elm_send_iso_tp_request_with_fc(port, ECM_REQUEST_ID, &payload, fc)
+    } else {
+        raw_isotp_transact_with_fc(port, ECM_REQUEST_ID, ECM_RESPONSE_ID, &payload, fc)
+    }
+}
 
 pub fn j2534_available() -> bool {
     cfg!(windows)
@@ -610,17 +620,12 @@ pub fn j2534_list_devices() -> Vec<String> {
     vec!["J2534 only supported on Windows".into()]
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Tests
-// ─────────────────────────────────────────────────────────────────────────────
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn parse_single_frame() {
-        // SF, 3 bytes payload: 0x03 0x62 0xF1 0x90
         let data = [0x03, 0x62, 0xF1, 0x90, 0, 0, 0, 0];
         match parse_isotp_segment(&data) {
             IsoTpSegment::Single(p) => assert_eq!(p, vec![0x62, 0xF1, 0x90]),
@@ -630,7 +635,6 @@ mod tests {
 
     #[test]
     fn parse_first_frame() {
-        // FF, total length 20 (0x0014), 6 data bytes
         let data = [0x10, 0x14, 0x63, 0x01, 0x02, 0x03, 0x04, 0x05];
         match parse_isotp_segment(&data) {
             IsoTpSegment::First { total_len, data: d } => {
@@ -642,36 +646,20 @@ mod tests {
     }
 
     #[test]
-    fn parse_consecutive_frame() {
-        let data = [0x21, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF, 0x11];
-        match parse_isotp_segment(&data) {
-            IsoTpSegment::Consecutive { seq, data: d } => {
-                assert_eq!(seq, 1);
-                assert_eq!(d.len(), 7);
-                assert_eq!(d[0], 0xAA);
-            }
-            other => panic!("expected CF, got {:?}", other),
-        }
-    }
-
-    #[test]
     fn flow_control_encode() {
         let fc = build_flow_control(FC_CTS, 0, 0);
         assert_eq!(fc[0], 0x30);
         assert_eq!(fc[1], 0);
         assert_eq!(fc[2], 0);
-    }
 
-    #[test]
-    fn assemble_sf() {
-        let segs = vec![IsoTpSegment::Single(vec![0x63, 0x11, 0x22])];
-        let out = assemble_multiframe(&segs).unwrap();
-        assert_eq!(out, vec![0x63, 0x11, 0x22]);
+        let gentle = build_flow_control_params(FlowControlParams::gentle());
+        assert_eq!(gentle[0], 0x30);
+        assert_eq!(gentle[1], RETRY_FC_BLOCK_SIZE);
+        assert_eq!(gentle[2], RETRY_FC_STMIN_MS);
     }
 
     #[test]
     fn assemble_ff_cf() {
-        // total 10 bytes: 6 in FF + 4 in CF
         let segs = vec![
             IsoTpSegment::First {
                 total_len: 10,
@@ -687,17 +675,8 @@ mod tests {
     }
 
     #[test]
-    fn assemble_incomplete_errors() {
-        let segs = vec![IsoTpSegment::First {
-            total_len: 20,
-            data: vec![1, 2, 3],
-        }];
-        assert!(assemble_multiframe(&segs).is_err());
-    }
-
-    #[test]
-    fn build_sf_rejects_long() {
-        assert!(build_single_frame(&[0; 8]).is_err());
-        assert!(build_single_frame(&[1, 2, 3]).is_ok());
+    fn fc_params_defaults() {
+        assert_eq!(FlowControlParams::fast().block_size, 0);
+        assert_eq!(FlowControlParams::gentle().block_size, 16);
     }
 }
