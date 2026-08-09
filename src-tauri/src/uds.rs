@@ -75,7 +75,7 @@ pub struct Alfi(pub u8);
 
 impl Alfi {
     /// 4-byte address + 2-byte size (common Bosch / ISO default for Mode 23).
-    pub const ADDR4_SIZE2: Alfi = Alfi(0x24); // legacy alias path also accepts 0x42-style packing
+    pub const ADDR4_SIZE2: Alfi = Alfi(0x24);
     /// Explicit 4-byte addr + 2-byte size as used in current flash path packing.
     pub const PACKED_42: Alfi = Alfi(0x42);
     /// 4-byte address + 4-byte size (large downloads).
@@ -161,24 +161,19 @@ pub fn build_session_control(session: DiagnosticSession) -> Vec<u8> {
 }
 
 pub fn build_tester_present(suppress_response: bool) -> Vec<u8> {
-    // sub-function 0x00; bit7 = suppressPosRspMsgIndicationBit
     let sub = if suppress_response { 0x80 } else { 0x00 };
     vec![sub]
 }
 
 pub fn build_ecu_reset(reset_type: u8) -> Vec<u8> {
-    // 0x01 hard, 0x02 keyOffOn, 0x03 soft
     vec![reset_type]
 }
 
 pub fn build_communication_control(control_type: u8, communication_type: u8) -> Vec<u8> {
-    // control: 0x00 enableRxAndTx, 0x01 enableRxDisableTx, 0x02 disableRxEnableTx, 0x03 disableRxAndTx
-    // communication_type: often 0x01 (normal) or 0x03 (normal+NM)
     vec![control_type, communication_type]
 }
 
 pub fn build_control_dtc_setting(setting: u8) -> Vec<u8> {
-    // 0x01 on, 0x02 off
     vec![setting]
 }
 
@@ -192,8 +187,6 @@ pub fn build_write_did(did: u16, data: &[u8]) -> Vec<u8> {
     p
 }
 
-/// ReadMemoryByAddress payload (without SID).
-/// Packs ALFI + address (big-endian, `addr_len` bytes) + size (`size_len` bytes).
 pub fn build_read_memory(alfi: Alfi, address: u32, size: u32) -> Result<Vec<u8>, String> {
     let addr_len = alfi.address_bytes();
     let size_len = alfi.size_bytes();
@@ -209,7 +202,6 @@ pub fn build_read_memory(alfi: Alfi, address: u32, size: u32) -> Result<Vec<u8>,
     Ok(p)
 }
 
-/// Compatibility packing used by existing flash path: ALFI 0x42 + 4-byte addr + 2-byte size.
 pub fn build_read_memory_legacy42(address: u32, size: u16) -> Vec<u8> {
     let mut p = vec![0x42];
     p.extend_from_slice(&address.to_be_bytes());
@@ -228,14 +220,12 @@ pub fn build_security_send_key(level: u8, key: &[u8]) -> Vec<u8> {
 }
 
 pub fn build_routine_control(sub: u8, routine_id: u16, option: &[u8]) -> Vec<u8> {
-    // sub: 0x01 start, 0x02 stop, 0x03 requestResults
     let mut p = vec![sub];
     p.extend_from_slice(&routine_id.to_be_bytes());
     p.extend_from_slice(option);
     p
 }
 
-/// RequestDownload (0x34) dataFormatIdentifier + ALFI + address + size.
 pub fn build_request_download(
     data_format: u8,
     alfi: Alfi,
@@ -248,7 +238,7 @@ pub fn build_request_download(
         return Err(format!("Invalid ALFI 0x{:02X}", alfi.0));
     }
     let mut p = Vec::with_capacity(2 + addr_len + size_len);
-    p.push(data_format); // usually 0x00 uncompressed/unencrypted
+    p.push(data_format);
     p.push(alfi.0);
     let addr_be = address.to_be_bytes();
     p.extend_from_slice(&addr_be[4 - addr_len..]);
@@ -269,17 +259,14 @@ pub fn build_transfer_exit(params: &[u8]) -> Vec<u8> {
 }
 
 pub fn build_clear_dtc(group: u32) -> Vec<u8> {
-    // 3-byte group; 0xFFFFFF = all
     vec![((group >> 16) & 0xFF) as u8, ((group >> 8) & 0xFF) as u8, (group & 0xFF) as u8]
 }
 
 pub fn build_read_dtc_by_status_mask(status_mask: u8) -> Vec<u8> {
-    // sub-function 0x02 reportDTCByStatusMask
     vec![0x02, status_mask]
 }
 
 pub fn build_read_dtc_number_by_status_mask(status_mask: u8) -> Vec<u8> {
-    // sub-function 0x01
     vec![0x01, status_mask]
 }
 
@@ -316,7 +303,6 @@ fn expect_positive(sid: u8, resp: &[u8]) -> Result<Vec<u8>, String> {
     }
 }
 
-/// Enter diagnostic session (0x10).
 pub fn diagnostic_session_control(
     port: &mut Box<dyn SerialPort + Send>,
     session: DiagnosticSession,
@@ -326,26 +312,18 @@ pub fn diagnostic_session_control(
     expect_positive(SID_DSC, &resp)
 }
 
-/// TesterPresent (0x3E). Prefer suppress_response=true during long transfers.
 pub fn tester_present(
     port: &mut Box<dyn SerialPort + Send>,
     suppress_response: bool,
     use_elm: bool,
 ) -> Result<(), String> {
-    let resp = transact(
-        port,
-        SID_TP,
-        &build_tester_present(suppress_response),
-        use_elm,
-    )?;
+    let resp = transact(port, SID_TP, &build_tester_present(suppress_response), use_elm)?;
     if suppress_response {
         return Ok(());
     }
     expect_positive(SID_TP, &resp).map(|_| ())
 }
 
-/// Keep session alive by sending TesterPresent every `interval` while `still_running` is true.
-/// Intended for use between bulk Mode 23 windows on the same thread (cooperative).
 pub fn keep_alive_if_due(
     port: &mut Box<dyn SerialPort + Send>,
     last: &mut Instant,
@@ -398,7 +376,6 @@ pub fn read_data_by_identifier(
 ) -> Result<Vec<u8>, String> {
     let resp = transact_mf(port, SID_RDBI, &build_read_did(did), use_elm)?;
     let payload = expect_positive(SID_RDBI, &resp)?;
-    // payload starts with DID echo (2 bytes) then data
     if payload.len() >= 2 {
         Ok(payload[2..].to_vec())
     } else {
@@ -418,7 +395,6 @@ pub fn read_memory_by_address(
     expect_positive(SID_RMBA, &resp)
 }
 
-/// Legacy 0x42 packing used by existing Bosch bulk path.
 pub fn read_memory_legacy42(
     port: &mut Box<dyn SerialPort + Send>,
     address: u32,
@@ -445,8 +421,6 @@ pub fn routine_control(
     expect_positive(SID_RC, &resp)
 }
 
-/// Full ISO-TP UDS download: 0x34 → N×0x36 → 0x37.
-/// Returns maxNumberOfBlockLength advertised by the ECU (if parseable).
 pub fn request_download(
     port: &mut Box<dyn SerialPort + Send>,
     alfi: Alfi,
@@ -457,9 +431,8 @@ pub fn request_download(
     let data = build_request_download(0x00, alfi, address, size)?;
     let resp = transact(port, SID_RD, &data, use_elm)?;
     let payload = expect_positive(SID_RD, &resp)?;
-    // lengthFormatIdentifier (1) + maxNumberOfBlockLength (n bytes)
     if payload.is_empty() {
-        return Ok(0x402); // safe default chunk incl. sequence counter room
+        return Ok(0x402);
     }
     let len_fi = payload[0];
     let n = (len_fi >> 4) as usize;
@@ -470,7 +443,6 @@ pub fn request_download(
     for &b in &payload[1..1 + n] {
         max_block = (max_block << 8) | (b as u32);
     }
-    // maxNumberOfBlockLength includes the blockSequenceCounter byte
     Ok(max_block.max(2) as usize)
 }
 
@@ -492,7 +464,6 @@ pub fn transfer_exit(
     expect_positive(SID_RTE, &resp).map(|_| ())
 }
 
-/// Stream an entire image via UDS 34/36/37 over ISO-TP.
 pub fn download_image<F>(
     port: &mut Box<dyn SerialPort + Send>,
     alfi: Alfi,
@@ -505,7 +476,6 @@ where
     F: FnMut(u32, u32),
 {
     let max_block = request_download(port, alfi, address, image.len() as u32, use_elm)?;
-    // data bytes per TransferData = max_block - 1 (sequence counter)
     let chunk = max_block.saturating_sub(1).max(1).min(0x800);
     let mut seq: u8 = 1;
     let mut offset = 0usize;
@@ -518,7 +488,7 @@ where
         offset = end;
         seq = seq.wrapping_add(1);
         if seq == 0 {
-            seq = 1; // some stacks skip 0
+            seq = 1;
         }
         on_progress(offset as u32, total);
     }
@@ -549,29 +519,25 @@ pub fn read_dtc_by_status_mask(
     expect_positive(SID_READ_DTC, &resp)
 }
 
-/// Prepare ECU for long diagnostic / flash work:
-/// extended session → (optional) disable DTC → (optional) silence TX.
 pub fn prepare_programming_environment(
     port: &mut Box<dyn SerialPort + Send>,
     use_elm: bool,
     silence_bus: bool,
 ) -> Result<(), String> {
-    // Prefer extended; fall back to programming if extended rejected
     match diagnostic_session_control(port, DiagnosticSession::Extended, use_elm) {
         Ok(_) => {}
         Err(_) => {
             diagnostic_session_control(port, DiagnosticSession::Programming, use_elm)?;
         }
     }
-    let _ = control_dtc_setting(port, 0x02, use_elm); // off — best effort
+    let _ = control_dtc_setting(port, 0x02, use_elm);
     if silence_bus {
-        let _ = communication_control(port, 0x03, 0x01, use_elm); // disable Rx&Tx normal
+        let _ = communication_control(port, 0x03, 0x01, use_elm);
     }
     let _ = tester_present(port, true, use_elm);
     Ok(())
 }
 
-/// Restore default session and re-enable communications / DTCs.
 pub fn restore_default_environment(
     port: &mut Box<dyn SerialPort + Send>,
     use_elm: bool,
@@ -588,12 +554,74 @@ pub fn restore_default_environment(
 mod tests {
     use super::*;
 
+    // ── SID constants ───────────────────────────────────────────────────────
+
+    #[test]
+    fn sid_constants_match_iso14229() {
+        assert_eq!(SID_DSC, 0x10);
+        assert_eq!(SID_ECU_RESET, 0x11);
+        assert_eq!(SID_CLEAR_DTC, 0x14);
+        assert_eq!(SID_READ_DTC, 0x19);
+        assert_eq!(SID_RDBI, 0x22);
+        assert_eq!(SID_RMBA, 0x23);
+        assert_eq!(SID_SA, 0x27);
+        assert_eq!(SID_CC, 0x28);
+        assert_eq!(SID_WDBI, 0x2E);
+        assert_eq!(SID_RC, 0x31);
+        assert_eq!(SID_RD, 0x34);
+        assert_eq!(SID_TD, 0x36);
+        assert_eq!(SID_RTE, 0x37);
+        assert_eq!(SID_TP, 0x3E);
+        assert_eq!(SID_CDTCS, 0x85);
+    }
+
+    // ── DiagnosticSession ───────────────────────────────────────────────────
+
+    #[test]
+    fn session_enum_values() {
+        assert_eq!(DiagnosticSession::Default as u8, 0x01);
+        assert_eq!(DiagnosticSession::Programming as u8, 0x02);
+        assert_eq!(DiagnosticSession::Extended as u8, 0x03);
+        assert_eq!(DiagnosticSession::SafetySystem as u8, 0x04);
+    }
+
+    #[test]
+    fn session_from_u8_roundtrip() {
+        for v in [0x01u8, 0x02, 0x03, 0x04] {
+            let s = DiagnosticSession::from_u8(v).unwrap();
+            assert_eq!(s as u8, v);
+        }
+        assert_eq!(DiagnosticSession::from_u8(0x00), None);
+        assert_eq!(DiagnosticSession::from_u8(0xFF), None);
+    }
+
+    #[test]
+    fn build_session_control_payload() {
+        assert_eq!(build_session_control(DiagnosticSession::Extended), vec![0x03]);
+        assert_eq!(build_session_control(DiagnosticSession::Programming), vec![0x02]);
+        assert_eq!(build_session_control(DiagnosticSession::Default), vec![0x01]);
+    }
+
+    // ── ALFI ────────────────────────────────────────────────────────────────
+
     #[test]
     fn alfi_lengths() {
-        assert_eq!(Alfi(0x24).address_bytes(), 4);
-        assert_eq!(Alfi(0x24).size_bytes(), 2);
-        assert_eq!(Alfi(0x44).size_bytes(), 4);
-        assert_eq!(Alfi(0x23).address_bytes(), 3);
+        assert_eq!(Alfi::ADDR4_SIZE2.address_bytes(), 4);
+        assert_eq!(Alfi::ADDR4_SIZE2.size_bytes(), 2);
+        assert_eq!(Alfi::ADDR4_SIZE4.address_bytes(), 4);
+        assert_eq!(Alfi::ADDR4_SIZE4.size_bytes(), 4);
+        assert_eq!(Alfi::ADDR3_SIZE2.address_bytes(), 3);
+        assert_eq!(Alfi::ADDR3_SIZE2.size_bytes(), 2);
+        // PACKED_42 is non-ISO packing used by legacy flash path
+        assert_eq!(Alfi::PACKED_42.address_bytes(), 2);
+        assert_eq!(Alfi::PACKED_42.size_bytes(), 4);
+    }
+
+    #[test]
+    fn alfi_invalid_rejected() {
+        assert!(build_read_memory(Alfi(0x00), 0, 0).is_err());
+        assert!(build_read_memory(Alfi(0x05), 0, 0).is_err()); // addr_len 5 > 4
+        assert!(build_request_download(0x00, Alfi(0x50), 0, 0).is_err()); // size_len 5
     }
 
     #[test]
@@ -602,45 +630,289 @@ mod tests {
         assert_eq!(p[0], 0x24);
         assert_eq!(&p[1..5], &[0x00, 0x08, 0x00, 0x00]);
         assert_eq!(&p[5..7], &[0x04, 0x00]);
+        assert_eq!(p.len(), 7);
+    }
+
+    #[test]
+    fn build_rmba_23_three_byte_addr() {
+        let p = build_read_memory(Alfi(0x23), 0x00_ABCD, 0x10).unwrap();
+        assert_eq!(p[0], 0x23);
+        assert_eq!(&p[1..4], &[0x00, 0xAB, 0xCD]);
+        assert_eq!(&p[4..6], &[0x00, 0x10]);
+        assert_eq!(p.len(), 6);
+    }
+
+    #[test]
+    fn build_rmba_44_large() {
+        let p = build_read_memory(Alfi(0x44), 0x0000_0000, 0x0020_0000).unwrap();
+        assert_eq!(p[0], 0x44);
+        assert_eq!(&p[1..5], &[0x00, 0x00, 0x00, 0x00]);
+        assert_eq!(&p[5..9], &[0x00, 0x20, 0x00, 0x00]);
+        assert_eq!(p.len(), 9);
     }
 
     #[test]
     fn build_rmba_legacy42() {
         let p = build_read_memory_legacy42(0x0008_0000, 0x400);
         assert_eq!(p[0], 0x42);
-        assert_eq!(p.len(), 1 + 4 + 2);
+        assert_eq!(&p[1..5], &[0x00, 0x08, 0x00, 0x00]);
+        assert_eq!(&p[5..7], &[0x04, 0x00]);
+        assert_eq!(p.len(), 7);
     }
 
-    #[test]
-    fn build_request_download_44() {
-        let p = build_request_download(0x00, Alfi(0x44), 0x80000, 0x20000).unwrap();
-        assert_eq!(p[0], 0x00);
-        assert_eq!(p[1], 0x44);
-        assert_eq!(p.len(), 2 + 4 + 4);
-    }
+    // ── parse_response / NRC ────────────────────────────────────────────────
 
     #[test]
-    fn parse_positive() {
+    fn parse_positive_strips_sid() {
         let r = parse_response(0x50, &[0x50, 0x03]).unwrap();
         assert_eq!(r, vec![0x03]);
     }
 
     #[test]
-    fn parse_nrc() {
+    fn parse_positive_empty_payload() {
+        let r = parse_response(0x7E, &[0x7E]).unwrap();
+        assert!(r.is_empty());
+    }
+
+    #[test]
+    fn parse_stripped_payload_passthrough() {
+        // Transport already removed SID
+        let r = parse_response(0x63, &[0xDE, 0xAD]).unwrap();
+        assert_eq!(r, vec![0xDE, 0xAD]);
+    }
+
+    #[test]
+    fn parse_empty_is_nrc() {
+        let e = parse_response(0x50, &[]).unwrap_err();
+        assert_eq!(e.nrc, 0x10);
+        assert_eq!(e.sid, 0x10); // 0x50 - 0x40
+    }
+
+    #[test]
+    fn parse_nrc_conditions_not_correct() {
         let e = parse_response(0x50, &[0x7F, 0x10, 0x22]).unwrap_err();
+        assert_eq!(e.sid, 0x10);
         assert_eq!(e.nrc, 0x22);
         assert!(e.description().contains("conditions"));
     }
 
     #[test]
-    fn transfer_data_seq() {
-        let p = build_transfer_data(1, &[0xAA, 0xBB]);
-        assert_eq!(p, vec![0x01, 0xAA, 0xBB]);
+    fn parse_nrc_invalid_key() {
+        let e = parse_response(0x67, &[0x7F, 0x27, 0x35]).unwrap_err();
+        assert_eq!(e.sid, 0x27);
+        assert_eq!(e.nrc, 0x35);
+        assert_eq!(e.description(), "invalidKey");
     }
 
     #[test]
-    fn session_enum() {
-        assert_eq!(DiagnosticSession::Programming as u8, 0x02);
-        assert_eq!(DiagnosticSession::from_u8(0x03), Some(DiagnosticSession::Extended));
+    fn parse_nrc_short_frame_defaults() {
+        let e = parse_response(0x50, &[0x7F]).unwrap_err();
+        assert_eq!(e.sid, 0);
+        assert_eq!(e.nrc, 0x10);
+    }
+
+    #[test]
+    fn nrc_text_catalogue() {
+        assert_eq!(nrc_text(0x11), "serviceNotSupported");
+        assert_eq!(nrc_text(0x33), "securityAccessDenied");
+        assert_eq!(nrc_text(0x36), "exceedNumberOfAttempts");
+        assert_eq!(nrc_text(0x37), "requiredTimeDelayNotExpired");
+        assert_eq!(nrc_text(0x70), "uploadDownloadNotAccepted");
+        assert_eq!(nrc_text(0x73), "wrongBlockSequenceCounter");
+        assert_eq!(nrc_text(0x78), "requestCorrectlyReceivedResponsePending");
+        assert_eq!(nrc_text(0x7F), "serviceNotSupportedInActiveSession");
+        assert_eq!(nrc_text(0xAB), "unknownNRC");
+    }
+
+    #[test]
+    fn expect_positive_formats_error() {
+        let err = expect_positive(0x10, &[0x7F, 0x10, 0x7E]).unwrap_err();
+        assert!(err.contains("0x7E"));
+        assert!(err.contains("0x10"));
+        assert!(err.contains("subFunctionNotSupportedInActiveSession"));
+    }
+
+    #[test]
+    fn expect_positive_ok() {
+        let p = expect_positive(0x3E, &[0x7E, 0x00]).unwrap();
+        assert_eq!(p, vec![0x00]);
+    }
+
+    // ── Session / keep-alive / reset builders ───────────────────────────────
+
+    #[test]
+    fn tester_present_suppress_bit() {
+        assert_eq!(build_tester_present(false), vec![0x00]);
+        assert_eq!(build_tester_present(true), vec![0x80]);
+    }
+
+    #[test]
+    fn ecu_reset_types() {
+        assert_eq!(build_ecu_reset(0x01), vec![0x01]); // hard
+        assert_eq!(build_ecu_reset(0x02), vec![0x02]); // keyOffOn
+        assert_eq!(build_ecu_reset(0x03), vec![0x03]); // soft
+    }
+
+    #[test]
+    fn communication_control_payload() {
+        assert_eq!(build_communication_control(0x03, 0x01), vec![0x03, 0x01]);
+        assert_eq!(build_communication_control(0x00, 0x01), vec![0x00, 0x01]);
+    }
+
+    #[test]
+    fn control_dtc_setting_on_off() {
+        assert_eq!(build_control_dtc_setting(0x01), vec![0x01]);
+        assert_eq!(build_control_dtc_setting(0x02), vec![0x02]);
+    }
+
+    // ── DID / Security / Routine ────────────────────────────────────────────
+
+    #[test]
+    fn build_read_did_be() {
+        assert_eq!(build_read_did(0xF190), vec![0xF1, 0x90]); // VIN
+        assert_eq!(build_read_did(0xF187), vec![0xF1, 0x87]);
+    }
+
+    #[test]
+    fn build_write_did_appends_data() {
+        let p = build_write_did(0xF190, b"TEST");
+        assert_eq!(&p[..2], &[0xF1, 0x90]);
+        assert_eq!(&p[2..], b"TEST");
+    }
+
+    #[test]
+    fn security_seed_and_key_levels() {
+        assert_eq!(build_security_request_seed(0x01), vec![0x01]);
+        assert_eq!(build_security_request_seed(0x03), vec![0x03]);
+        let key = build_security_send_key(0x01, &[0xAA, 0xBB, 0xCC, 0xDD]);
+        assert_eq!(key, vec![0x02, 0xAA, 0xBB, 0xCC, 0xDD]);
+        let key2 = build_security_send_key(0x03, &[0x11, 0x22]);
+        assert_eq!(key2, vec![0x04, 0x11, 0x22]);
+    }
+
+    #[test]
+    fn routine_control_start_stop_results() {
+        let start = build_routine_control(0x01, 0xFF00, &[0x01]);
+        assert_eq!(start, vec![0x01, 0xFF, 0x00, 0x01]);
+        let stop = build_routine_control(0x02, 0xFF00, &[]);
+        assert_eq!(stop, vec![0x02, 0xFF, 0x00]);
+        let results = build_routine_control(0x03, 0x0202, &[]);
+        assert_eq!(results, vec![0x03, 0x02, 0x02]);
+    }
+
+    // ── Download / transfer ───────────────────────────────────────────────────
+
+    #[test]
+    fn build_request_download_44() {
+        let p = build_request_download(0x00, Alfi(0x44), 0x80000, 0x20000).unwrap();
+        assert_eq!(p[0], 0x00); // dataFormatIdentifier
+        assert_eq!(p[1], 0x44);
+        assert_eq!(&p[2..6], &[0x00, 0x08, 0x00, 0x00]);
+        assert_eq!(&p[6..10], &[0x00, 0x02, 0x00, 0x00]);
+        assert_eq!(p.len(), 10);
+    }
+
+    #[test]
+    fn build_request_download_24() {
+        let p = build_request_download(0x00, Alfi::ADDR4_SIZE2, 0x0008_0000, 0x1000).unwrap();
+        assert_eq!(p[0], 0x00);
+        assert_eq!(p[1], 0x24);
+        assert_eq!(p.len(), 2 + 4 + 2);
+    }
+
+    #[test]
+    fn transfer_data_sequence_counter() {
+        assert_eq!(build_transfer_data(1, &[0xAA, 0xBB]), vec![0x01, 0xAA, 0xBB]);
+        assert_eq!(build_transfer_data(0xFF, &[]), vec![0xFF]);
+        assert_eq!(build_transfer_data(0, &[0x00]), vec![0x00, 0x00]);
+    }
+
+    #[test]
+    fn transfer_exit_empty_and_params() {
+        assert!(build_transfer_exit(&[]).is_empty());
+        assert_eq!(build_transfer_exit(&[0x01, 0x02]), vec![0x01, 0x02]);
+    }
+
+    /// Simulate parsing maxNumberOfBlockLength from a positive 0x74 response payload.
+    #[test]
+    fn parse_max_block_length_from_rd_payload() {
+        // lengthFormatIdentifier = 0x20 → 2 bytes length; max block = 0x0402
+        let payload = [0x20u8, 0x04, 0x02];
+        let n = (payload[0] >> 4) as usize;
+        assert_eq!(n, 2);
+        let mut max_block: u32 = 0;
+        for &b in &payload[1..1 + n] {
+            max_block = (max_block << 8) | (b as u32);
+        }
+        assert_eq!(max_block, 0x0402);
+        // chunk size for TransferData data bytes
+        let chunk = (max_block as usize).saturating_sub(1).max(1).min(0x800);
+        assert_eq!(chunk, 0x401);
+    }
+
+    #[test]
+    fn parse_max_block_single_byte() {
+        let payload = [0x10u8, 0x80]; // 1-byte max = 128
+        let n = (payload[0] >> 4) as usize;
+        let mut max_block: u32 = 0;
+        for &b in &payload[1..1 + n] {
+            max_block = (max_block << 8) | (b as u32);
+        }
+        assert_eq!(max_block, 0x80);
+    }
+
+    // ── DTC builders ────────────────────────────────────────────────────────
+
+    #[test]
+    fn clear_dtc_all_group() {
+        assert_eq!(build_clear_dtc(0x00FF_FFFF), vec![0xFF, 0xFF, 0xFF]);
+        assert_eq!(build_clear_dtc(0), vec![0x00, 0x00, 0x00]);
+        assert_eq!(build_clear_dtc(0x00_1234), vec![0x00, 0x12, 0x34]);
+    }
+
+    #[test]
+    fn read_dtc_status_mask_subfunctions() {
+        assert_eq!(build_read_dtc_by_status_mask(0xFF), vec![0x02, 0xFF]);
+        assert_eq!(build_read_dtc_number_by_status_mask(0x09), vec![0x01, 0x09]);
+        assert_eq!(build_read_dtc_by_status_mask(0x00), vec![0x02, 0x00]);
+    }
+
+    // ── Sequence counter wrap behaviour (documented in download_image) ──────
+
+    #[test]
+    fn block_sequence_skips_zero_after_wrap() {
+        let mut seq: u8 = 0xFF;
+        seq = seq.wrapping_add(1);
+        if seq == 0 {
+            seq = 1;
+        }
+        assert_eq!(seq, 1);
+
+        seq = 1;
+        for _ in 0..254 {
+            seq = seq.wrapping_add(1);
+            if seq == 0 {
+                seq = 1;
+            }
+        }
+        assert_eq!(seq, 0xFF);
+        seq = seq.wrapping_add(1);
+        if seq == 0 {
+            seq = 1;
+        }
+        assert_eq!(seq, 1);
+    }
+
+    // ── Positive SID arithmetic ─────────────────────────────────────────────
+
+    #[test]
+    fn positive_response_sid_offset() {
+        assert_eq!(SID_DSC.wrapping_add(0x40), 0x50);
+        assert_eq!(SID_RMBA.wrapping_add(0x40), 0x63);
+        assert_eq!(SID_RD.wrapping_add(0x40), 0x74);
+        assert_eq!(SID_TD.wrapping_add(0x40), 0x76);
+        assert_eq!(SID_RTE.wrapping_add(0x40), 0x77);
+        assert_eq!(SID_TP.wrapping_add(0x40), 0x7E);
+        assert_eq!(SID_SA.wrapping_add(0x40), 0x67);
     }
 }
