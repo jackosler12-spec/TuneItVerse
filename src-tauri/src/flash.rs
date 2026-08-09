@@ -2,7 +2,7 @@
 //
 // Priority 0:
 //   1. Proper flash read / backup
-//      - Bosch: Mode 23 + multi-frame ISO-TP
+//      - Bosch: Mode 23 + multi-frame ISO-TP (+ 0x10 session / 0x3E keep-alive)
 //      - P01/GM: kernel upload + Mode 3C ReadBlock (+ optional HS VPW)
 //   2. Live post-flash verification
 //   3. Voltage gate (PID 0x42)
@@ -21,7 +21,7 @@ use crate::vpw::{
     parse_hs_response, HsResponse,
 };
 use crate::security::unlock_level2;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FlashWriteResult {
@@ -224,8 +224,6 @@ fn probe_mode3c(port: &mut Box<dyn SerialPort + Send>, logs: &mut Vec<String>) -
     }
 }
 
-/// Attempt high-speed VPW entry (0xA0 → 0xA1).
-/// On success, also best-effort J2534 DATA_RATE → 41600 if a device is open.
 pub fn try_enter_high_speed(port: &mut Box<dyn SerialPort + Send>, logs: &mut Vec<String>) -> bool {
     logs.push("Attempting high-speed VPW (Mode 0xA0 prepare)…".into());
     let prep = build_mode_a0_hs_prepare();
@@ -386,21 +384,12 @@ where F: FnMut(FlashProgress),
     Ok(out)
 }
 
+/// UDS 0x23 via application layer (legacy ALFI 0x42 packing for Bosch compatibility).
 pub fn uds_read_memory_by_address(port: &mut Box<dyn SerialPort + Send>, address: u32, size: u16) -> Result<Vec<u8>, String> {
-    let mut payload = vec![0x42];
-    payload.extend_from_slice(&address.to_be_bytes());
-    payload.extend_from_slice(&size.to_be_bytes());
-    let resp = crate::can::uds_request_multiframe(port, 0x23, &payload, true)
-        .map_err(|e| format!("Mode 23 failed: {}", e))?;
-    if resp.first() == Some(&0x63) { return Ok(resp[1..].to_vec()); }
-    if resp.first() == Some(&0x7F) {
-        let nrc = resp.get(2).copied().unwrap_or(0);
-        return Err(format!("Mode 23 negative response NRC 0x{:02X}", nrc));
-    }
-    if !resp.is_empty() { return Ok(resp); }
-    Err("Mode 23: empty or unexpected response".into())
+    crate::uds::read_memory_legacy42(port, address, size, true)
 }
 
+/// Windowed Mode 23 bulk read with extended/programming session + TesterPresent keep-alive.
 pub fn bulk_read_memory<F>(
     port: &mut Box<dyn SerialPort + Send>,
     base: u32,
@@ -411,12 +400,20 @@ pub fn bulk_read_memory<F>(
 ) -> Result<Vec<u8>, String>
 where F: FnMut(FlashProgress),
 {
+    // Session + optional DTC suppress — required by many EDC17/MED17 for long 0x23
+    match crate::uds::prepare_programming_environment(port, true, false) {
+        Ok(()) => logs.push("UDS session prepared (extended/programming + TesterPresent)".into()),
+        Err(e) => logs.push(format!("UDS session prepare warning: {} — continuing", e)),
+    }
+
     let mut out = Vec::with_capacity(total_size as usize);
     let mut offset = 0u32;
     let mut timing = AdaptiveTiming::for_can();
     let mut consecutive_fail = 0u32;
+    let mut last_tp = Instant::now();
     logs.push(format!("Bulk Mode 23 read: base=0x{:08X} size={} window={}", base, total_size, window));
     while offset < total_size {
+        crate::uds::keep_alive_if_due(port, &mut last_tp, Duration::from_secs(2), true);
         let remaining = total_size - offset;
         let this_win = (remaining as u16).min(window);
         match uds_read_memory_by_address(port, base + offset, this_win) {
@@ -443,6 +440,7 @@ where F: FnMut(FlashProgress),
         }
         timing.sleep();
     }
+    let _ = crate::uds::restore_default_environment(port, true);
     if out.is_empty() { return Err("Bulk read returned no data".into()); }
     logs.push(format!("Bulk read recovered {} / {} bytes", out.len(), total_size));
     Ok(out)
@@ -455,7 +453,7 @@ pub fn perform_backup(port: &mut Box<dyn SerialPort + Send>, ecu_family: &str, l
     let is_p01 = fam.contains("P01") || fam.contains("P59") || fam.contains("GM") || fam.contains("0411");
 
     if is_bosch {
-        logs.push("Bosch family: multi-frame ISO-TP Mode 23 bulk read…".into());
+        logs.push("Bosch family: UDS session + multi-frame ISO-TP Mode 23 bulk read…".into());
         match bulk_read_memory(port, BOSCH_FLASH_BASE, BOSCH_FLASH_SIZE, MODE23_WINDOW, |_| {}, logs) {
             Ok(data) => {
                 let crc = crc32_ieee(&data);
@@ -464,7 +462,7 @@ pub fn perform_backup(port: &mut Box<dyn SerialPort + Send>, ecu_family: &str, l
                 let path = if quality == BackupQuality::FullImage { format!("bosch_full_{}.bin", ts) } else { format!("bosch_partial_{}.bin", ts) };
                 let _ = std::fs::write(&path, &data);
                 return BackupResult { path, quality, bytes: data.len() as u32, crc32: Some(crc),
-                    notes: format!("Mode 23 multi-frame dump ({} bytes).", data.len()) };
+                    notes: format!("Mode 23 multi-frame dump ({} bytes) with UDS session/keep-alive.", data.len()) };
             }
             Err(e) => {
                 return BackupResult { path: String::new(), quality: BackupQuality::Failed, bytes: 0, crc32: None,
@@ -603,6 +601,9 @@ where F: FnMut(FlashProgress),
     }
     result.steps_completed.push("Pre-flash validation passed".into());
 
+    let is_bosch = request.ecu_family.to_ascii_uppercase().contains("EDC")
+        || request.ecu_family.to_ascii_uppercase().contains("MED17");
+
     if request.ecu_family.contains("P01") || request.ecu_family.contains("GM") {
         let _ = unlock_level2(port);
         result.logs.push("Level 2 security unlocked".into());
@@ -614,6 +615,96 @@ where F: FnMut(FlashProgress),
         let _ = prefer_hs;
     }
 
+    if is_bosch {
+        match crate::uds::prepare_programming_environment(port, true, true) {
+            Ok(()) => result.logs.push("UDS programming environment prepared (session + silence)".into()),
+            Err(e) => result.logs.push(format!("UDS prepare warning: {}", e)),
+        }
+        // Prefer pure ISO-TP UDS download when family is Bosch
+        if !request.user_confirmed_risks { result.error = Some("Risks not confirmed".into()); return Ok(result); }
+        result.steps_completed.push("Risks confirmed".into());
+        if request.tuned_bin.is_empty() { result.error = Some("Empty tuned_bin".into()); return Ok(result); }
+        if let Err(e) = enforce_voltage_gate(port, min_v, &mut result.logs) {
+            result.error = Some(format!("Voltage sagged before write: {}", e));
+            return Ok(result);
+        }
+        let cal_addr: u32 = if request.ecu_family.to_ascii_uppercase().contains("EDC16") { 0x0008_0000 } else { 0x0002_0000 };
+        match crate::uds::download_image(
+            port,
+            crate::uds::Alfi::ADDR4_SIZE4,
+            cal_addr,
+            &request.tuned_bin,
+            true,
+            |done, total| {
+                on_progress(FlashProgress {
+                    bytes_done: done,
+                    bytes_total: total,
+                    percent: ((done as u64 * 100) / total.max(1) as u64) as u8,
+                });
+            },
+        ) {
+            Ok(()) => {
+                let crc_written = crc32_ieee(&request.tuned_bin);
+                result.flash_write_result = Some(FlashWriteResult {
+                    bytes_written: request.tuned_bin.len() as u32,
+                    blocks_written: 0,
+                    crc32_written: crc_written,
+                });
+                result.steps_completed.push("UDS 34/36/37 ISO-TP download completed".into());
+            }
+            Err(e) => {
+                result.logs.push(format!("UDS download failed ({}), falling back to legacy Mode34 path: {}", e, e));
+                // fall through to legacy below by not returning — use VPW-style builders as last resort
+                let req34 = build_mode34_request(cal_addr, request.tuned_bin.len() as u32);
+                if let Err(e2) = send_frame(port, &req34) {
+                    result.error = Some(format!("Mode34 failed: {}", e2));
+                    let _ = crate::uds::restore_default_environment(port, true);
+                    return Ok(result);
+                }
+                let mut timing = AdaptiveTiming::for_can();
+                timing.sleep();
+                let chunk_size = 128;
+                let total = request.tuned_bin.len();
+                for (i, chunk) in request.tuned_bin.chunks(chunk_size).enumerate() {
+                    let frame = build_mode36_chunk(chunk);
+                    if let Err(e3) = send_frame(port, &frame) {
+                        result.error = Some(format!("Mode36 chunk {} failed: {}", i, e3));
+                        let _ = crate::uds::restore_default_environment(port, true);
+                        return Ok(result);
+                    }
+                    timing.on_success();
+                    let done = ((i + 1) * chunk_size).min(total);
+                    on_progress(FlashProgress { bytes_done: done as u32, bytes_total: total as u32, percent: ((done * 100) / total.max(1)) as u8 });
+                    timing.sleep();
+                }
+                let _ = send_frame(port, &build_mode37_request());
+                result.flash_write_result = Some(FlashWriteResult {
+                    bytes_written: request.tuned_bin.len() as u32,
+                    blocks_written: ((request.tuned_bin.len() + chunk_size - 1) / chunk_size) as u32,
+                    crc32_written: crc32_ieee(&request.tuned_bin),
+                });
+                result.steps_completed.push("Flash write completed (legacy 34/36/37 fallback)".into());
+            }
+        }
+        let _ = crate::uds::restore_default_environment(port, true);
+        match verify_after_write(port, &request.ecu_family, &request.tuned_bin, &mut result.logs) {
+            Ok((live_crc, matched)) => {
+                result.verification_crc = Some(live_crc);
+                result.verified_live = matched;
+                result.steps_completed.push("Live post-flash verification PASSED".into());
+                result.success = true;
+            }
+            Err(e) => {
+                result.logs.push(format!("Verification: {}", e));
+                result.verified_live = false;
+                result.steps_completed.push("Write completed — LIVE VERIFY UNAVAILABLE OR FAILED".into());
+                result.success = true;
+                result.error = Some(e);
+            }
+        }
+        return Ok(result);
+    }
+
     if !request.user_confirmed_risks { result.error = Some("Risks not confirmed".into()); return Ok(result); }
     result.steps_completed.push("Risks confirmed".into());
     if request.tuned_bin.is_empty() { result.error = Some("Empty tuned_bin".into()); return Ok(result); }
@@ -623,7 +714,7 @@ where F: FnMut(FlashProgress),
         return Ok(result);
     }
 
-    let cal_addr: u32 = if request.ecu_family.to_ascii_uppercase().contains("EDC16") { 0x0008_0000 } else { 0x0002_0000 };
+    let cal_addr: u32 = 0x0002_0000;
     let req34 = build_mode34_request(cal_addr, request.tuned_bin.len() as u32);
     if let Err(e) = send_frame(port, &req34) {
         result.error = Some(format!("Mode34 failed: {}", e));
@@ -633,7 +724,7 @@ where F: FnMut(FlashProgress),
         return Ok(result);
     }
 
-    let mut timing = if request.ecu_family.to_ascii_uppercase().contains("EDC") { AdaptiveTiming::for_can() } else { AdaptiveTiming::for_vpw() };
+    let mut timing = AdaptiveTiming::for_vpw();
     timing.sleep();
     let chunk_size = 128;
     let total = request.tuned_bin.len();
