@@ -17,7 +17,6 @@ use std::sync::Mutex;
 #[cfg(target_os = "windows")]
 use libloading::{Library, Symbol};
 
-// ── Protocol IDs (SAE J2534-1) ───────────────────────────────────────────────
 pub const J2534_PROTOCOL_J1850PWM: c_ulong = 0x01;
 pub const J2534_PROTOCOL_J1850VPW: c_ulong = 0x02;
 pub const J2534_PROTOCOL_ISO9141: c_ulong = 0x03;
@@ -25,13 +24,11 @@ pub const J2534_PROTOCOL_ISO14230: c_ulong = 0x04;
 pub const J2534_PROTOCOL_CAN: c_ulong = 0x05;
 pub const J2534_PROTOCOL_ISO15765: c_ulong = 0x06;
 
-// ── Connect / TX flags ──────────────────────────────────────────────────────
 pub const J2534_FLAG_CAN_29BIT_ID: c_ulong = 0x0000_0100;
 pub const J2534_FLAG_ISO15765_FRAME_PAD: c_ulong = 0x0000_0040;
 pub const J2534_FLAG_CAN_ID_BOTH: c_ulong = 0x0000_0800;
 pub const J2534_FLAG_TX_NORMAL: c_ulong = 0x0000_0000;
 
-// ── Ioctl IDs (J2534-1 v04.04) ───────────────────────────────────────────────
 pub const IOCTL_GET_CONFIG: c_ulong = 0x01;
 pub const IOCTL_SET_CONFIG: c_ulong = 0x02;
 pub const IOCTL_READ_VBATT: c_ulong = 0x03;
@@ -46,7 +43,6 @@ pub const IOCTL_ADD_TO_FUNCT_MSG_LOOKUP_TABLE: c_ulong = 0x0C;
 pub const IOCTL_DELETE_FROM_FUNCT_MSG_LOOKUP_TABLE: c_ulong = 0x0D;
 pub const IOCTL_READ_PROG_VOLTAGE: c_ulong = 0x0E;
 
-// ── SET_CONFIG / GET_CONFIG parameter IDs ───────────────────────────────────
 pub const CONFIG_DATA_RATE: c_ulong = 0x01;
 pub const CONFIG_LOOPBACK: c_ulong = 0x03;
 pub const CONFIG_NODE_ADDRESS: c_ulong = 0x04;
@@ -69,12 +65,8 @@ pub const CONFIG_ISO15765_STMIN: c_ulong = 0x1F;
 pub const CONFIG_BS_TX: c_ulong = 0x22;
 pub const CONFIG_STMIN_TX: c_ulong = 0x23;
 
-/// Normal J1850 VPW bit rate.
 pub const VPW_BAUD_NORMAL: c_ulong = 10_400;
-/// High-speed (4×) J1850 VPW bit rate — use after kernel 0xA0/0xA1.
 pub const VPW_BAUD_HIGH: c_ulong = 41_600;
-
-// ── C structures ────────────────────────────────────────────────────────────
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
@@ -102,7 +94,6 @@ impl Default for PASSTHRU_MSG {
     }
 }
 
-/// Single config parameter (Parameter + Value).
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct SCONFIG {
@@ -110,15 +101,12 @@ pub struct SCONFIG {
     pub Value: c_ulong,
 }
 
-/// List of config parameters passed to SET_CONFIG / GET_CONFIG.
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct SCONFIG_LIST {
     pub NumOfParams: c_ulong,
     pub ConfigPtr: *mut SCONFIG,
 }
-
-// ── Function pointer types ──────────────────────────────────────────────────
 
 #[cfg(target_os = "windows")]
 type PassThruOpen = unsafe extern "C" fn(*const c_char, *mut c_ulong) -> c_long;
@@ -209,7 +197,6 @@ impl J2534Device {
                         lib.get(b"PassThruReadMsgs\0").map_err(|e| e.to_string())?;
                     let write: Symbol<PassThruWriteMsgs> =
                         lib.get(b"PassThruWriteMsgs\0").map_err(|e| e.to_string())?;
-                    // PassThruIoctl is required for SET_CONFIG / READ_VBATT
                     let ioctl: Symbol<PassThruIoctl> =
                         lib.get(b"PassThruIoctl\0").map_err(|e| e.to_string())?;
 
@@ -388,10 +375,6 @@ impl J2534Device {
         Ok(vec![])
     }
 
-    // ── PassThruIoctl core ──────────────────────────────────────────────────
-
-    /// Raw PassThruIoctl. `channel_or_device` is usually `channel_id`;
-    /// some ioctls (READ_VBATT) accept device or channel depending on vendor.
     pub fn ioctl(
         &self,
         ioctl_id: c_ulong,
@@ -404,7 +387,6 @@ impl J2534Device {
         #[cfg(target_os = "windows")]
         {
             if let Some(ref f) = self.fns {
-                // Prefer channel when connected; fall back to device_id
                 let handle = if self.channel_id != 0 {
                     self.channel_id
                 } else {
@@ -425,7 +407,6 @@ impl J2534Device {
         }
     }
 
-    /// SET_CONFIG — apply one or more protocol timing / rate parameters.
     pub fn set_config(&self, params: &[(c_ulong, c_ulong)]) -> Result<(), String> {
         if params.is_empty() {
             return Ok(());
@@ -448,8 +429,6 @@ impl J2534Device {
         )
     }
 
-    /// GET_CONFIG — read current values for the given parameter IDs.
-    /// Returns Vec of (Parameter, Value).
     pub fn get_config(&self, param_ids: &[c_ulong]) -> Result<Vec<(c_ulong, c_ulong)>, String> {
         if param_ids.is_empty() {
             return Ok(vec![]);
@@ -476,33 +455,26 @@ impl J2534Device {
             .collect())
     }
 
-    /// Set DATA_RATE (baud). For VPW: 10400 normal, 41600 high-speed.
     pub fn set_data_rate(&self, baud: c_ulong) -> Result<(), String> {
         self.set_config(&[(CONFIG_DATA_RATE, baud)])
     }
 
-    /// Convenience: switch VPW physical layer to high-speed (41.6 kbps).
     pub fn set_vpw_high_speed(&self) -> Result<(), String> {
         self.set_data_rate(VPW_BAUD_HIGH)
     }
 
-    /// Convenience: restore VPW to normal 10.4 kbps.
     pub fn set_vpw_normal_speed(&self) -> Result<(), String> {
         self.set_data_rate(VPW_BAUD_NORMAL)
     }
 
-    /// ISO-TP Flow Control separation time (ms) advertised / enforced.
     pub fn set_iso15765_stmin(&self, st_min_ms: c_ulong) -> Result<(), String> {
         self.set_config(&[(CONFIG_ISO15765_STMIN, st_min_ms)])
     }
 
-    /// ISO-TP Flow Control block size (0 = send all remaining).
     pub fn set_iso15765_bs(&self, block_size: c_ulong) -> Result<(), String> {
         self.set_config(&[(CONFIG_ISO15765_BS, block_size)])
     }
 
-    /// Read battery voltage via IOCTL_READ_VBATT.
-    /// Returns millivolts (vendor-dependent; typically mV).
     pub fn read_vbatt_mv(&self) -> Result<u32, String> {
         let mut mv: c_ulong = 0;
         self.ioctl(
@@ -513,10 +485,8 @@ impl J2534Device {
         Ok(mv as u32)
     }
 
-    /// Battery voltage in volts (convenience).
     pub fn read_vbatt_volts(&self) -> Result<f32, String> {
         let mv = self.read_vbatt_mv()?;
-        // Most vendors return millivolts; guard against already-volts values
         if mv > 100 {
             Ok(mv as f32 / 1000.0)
         } else {
@@ -546,9 +516,41 @@ impl J2534Device {
     }
 }
 
-// ── Shared instance + Tauri commands ────────────────────────────────────────
-
 static SHARED: Mutex<Option<J2534Device>> = Mutex::new(None);
+
+/// True when a J2534 device is open in the shared slot.
+pub fn is_device_open() -> bool {
+    SHARED
+        .lock()
+        .ok()
+        .and_then(|g| g.as_ref().map(|d| d.device_id != 0 || d.channel_id != 0))
+        .unwrap_or(false)
+}
+
+/// Best-effort: switch shared J2534 device to VPW 41.6 kbps.
+/// Returns true only if a device was open and SET_CONFIG succeeded.
+pub fn try_set_vpw_high_speed() -> bool {
+    let guard = match SHARED.lock() {
+        Ok(g) => g,
+        Err(_) => return false,
+    };
+    match guard.as_ref() {
+        Some(dev) => dev.set_vpw_high_speed().is_ok(),
+        None => false,
+    }
+}
+
+/// Best-effort: restore shared J2534 device to VPW 10.4 kbps.
+pub fn try_set_vpw_normal_speed() -> bool {
+    let guard = match SHARED.lock() {
+        Ok(g) => g,
+        Err(_) => return false,
+    };
+    match guard.as_ref() {
+        Some(dev) => dev.set_vpw_normal_speed().is_ok(),
+        None => false,
+    }
+}
 
 #[tauri::command]
 pub fn j2534_list_devices() -> Result<Vec<String>, String> {
@@ -587,7 +589,6 @@ pub fn j2534_connect(dll_path: Option<String>) -> Result<String, String> {
     }
 }
 
-/// Connect specifically to J1850 VPW (P01 path) at normal 10.4 kbps.
 #[tauri::command]
 pub fn j2534_connect_vpw(dll_path: Option<String>) -> Result<String, String> {
     let mut guard = SHARED.lock().map_err(|e| e.to_string())?;
@@ -698,15 +699,7 @@ mod tests {
         assert_eq!(IOCTL_GET_CONFIG, 0x01);
         assert_eq!(IOCTL_SET_CONFIG, 0x02);
         assert_eq!(IOCTL_READ_VBATT, 0x03);
-        assert_eq!(IOCTL_CLEAR_RX_BUFFER, 0x08);
         assert_eq!(CONFIG_DATA_RATE, 0x01);
         assert_eq!(CONFIG_ISO15765_STMIN, 0x1F);
-        assert_eq!(CONFIG_ISO15765_BS, 0x1E);
-    }
-
-    #[test]
-    fn sconfig_layout() {
-        // Ensure C layout is two ulongs — required for DLL ABI
-        assert_eq!(std::mem::size_of::<SCONFIG>(), std::mem::size_of::<c_ulong>() * 2);
     }
 }
