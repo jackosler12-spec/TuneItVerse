@@ -1,62 +1,174 @@
 #![allow(unused, dead_code)]
-//! can.rs — CAN / ISO-TP (ISO 15765-2) support for TuneItVerse
+//! can.rs — CAN / ISO-TP (ISO 15765-2) for TuneItVerse
 //!
-//! - ELM327 / STN / OBDLink over serial
-//! - Lawicel-style raw CAN
-//! - Full ISO-TP: SF / FF / CF + Flow Control (CTS)
-//! - Configurable BS / STmin with automatic gentler retry on incomplete RX
+//! Architecture:
+//!   1. Pure ISO-TP layer  — parse/encode SF·FF·CF·FC, MultiframeAssembler
+//!   2. Transport adapters — ELM327 ASCII, Lawicel raw CAN
+//!   3. UDS façade         — sid + payload → multi-frame aware request
+//!
+//! Flow control is owned by the pure layer (`FlowControlParams`, `FcFlag`,
+//! `FlowControlFrame`). Transports only send/receive the encoded bytes.
 
 use serialport::SerialPort;
 use std::time::{Duration, Instant};
 
+// ── Addressing ──────────────────────────────────────────────────────────────
+
 pub const ECM_REQUEST_ID: u32 = 0x7E0;
 pub const ECM_RESPONSE_ID: u32 = 0x7E8;
 pub const BROADCAST_ID: u32 = 0x7DF;
+
+// ── PCI type nibbles ────────────────────────────────────────────────────────
 
 const PCI_SF: u8 = 0x00;
 const PCI_FF: u8 = 0x10;
 const PCI_CF: u8 = 0x20;
 const PCI_FC: u8 = 0x30;
 
-pub const FC_CTS: u8 = 0x00;
-pub const FC_WAIT: u8 = 0x01;
-pub const FC_OVFLW: u8 = 0x02;
+// ── Flow Control ────────────────────────────────────────────────────────────
 
-pub const DEFAULT_FC_BLOCK_SIZE: u8 = 0;
-pub const DEFAULT_FC_STMIN_MS: u8 = 0;
+/// ISO 15765-2 Flow Control flag (low nibble of PCI).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum FcFlag {
+    /// Continue To Send — remaining CFs may follow.
+    Cts = 0x00,
+    /// Wait — sender must pause until another FC arrives.
+    Wait = 0x01,
+    /// Overflow — receiver cannot accept; abort transfer.
+    Overflow = 0x02,
+}
 
-/// Gentler FC used on incomplete multi-frame RX retry (cheap ELM clones).
-pub const RETRY_FC_BLOCK_SIZE: u8 = 16;
-pub const RETRY_FC_STMIN_MS: u8 = 2;
+impl FcFlag {
+    pub fn from_nibble(n: u8) -> Option<Self> {
+        match n & 0x0F {
+            0x00 => Some(Self::Cts),
+            0x01 => Some(Self::Wait),
+            0x02 => Some(Self::Overflow),
+            _ => None,
+        }
+    }
 
-/// Flow Control parameters advertised to the sender (ECU) after a First Frame.
+    pub fn as_u8(self) -> u8 {
+        self as u8
+    }
+}
+
+/// Parameters we advertise in a CTS Flow Control frame.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct FlowControlParams {
+    /// 0 = send all remaining CFs without further FC; 1..=255 = CFs per grant.
     pub block_size: u8,
+    /// Separation time: 0x00..=0x7F = milliseconds.
     pub st_min_ms: u8,
 }
 
 impl Default for FlowControlParams {
     fn default() -> Self {
-        Self {
-            block_size: DEFAULT_FC_BLOCK_SIZE,
-            st_min_ms: DEFAULT_FC_STMIN_MS,
-        }
+        Self::fast()
     }
 }
 
 impl FlowControlParams {
-    pub fn fast() -> Self {
-        Self::default()
-    }
-    /// Safer pacing for weak adapters / large Mode 23 windows.
-    pub fn gentle() -> Self {
+    /// Maximum throughput (BS=0, STmin=0). Preferred default.
+    pub const fn fast() -> Self {
         Self {
-            block_size: RETRY_FC_BLOCK_SIZE,
-            st_min_ms: RETRY_FC_STMIN_MS,
+            block_size: 0,
+            st_min_ms: 0,
+        }
+    }
+
+    /// Safer pacing for weak ELM clones / large Mode 23 windows.
+    pub const fn gentle() -> Self {
+        Self {
+            block_size: 16,
+            st_min_ms: 2,
         }
     }
 }
+
+/// Fully decoded Flow Control frame (PCI + BS + STmin).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FlowControlFrame {
+    pub flag: FcFlag,
+    pub block_size: u8,
+    pub st_min: u8,
+}
+
+impl FlowControlFrame {
+    pub fn cts(params: FlowControlParams) -> Self {
+        Self {
+            flag: FcFlag::Cts,
+            block_size: params.block_size,
+            st_min: params.st_min_ms,
+        }
+    }
+
+    pub fn encode(self) -> [u8; 8] {
+        let mut frame = [0u8; 8];
+        frame[0] = PCI_FC | self.flag.as_u8();
+        frame[1] = self.block_size;
+        frame[2] = self.st_min;
+        frame
+    }
+
+    /// Meaningful bytes only (3) — sufficient for most adapters.
+    pub fn encode_short(self) -> [u8; 3] {
+        [
+            PCI_FC | self.flag.as_u8(),
+            self.block_size,
+            self.st_min,
+        ]
+    }
+
+    pub fn try_parse(data: &[u8]) -> Option<Self> {
+        if data.is_empty() || (data[0] & 0xF0) != PCI_FC {
+            return None;
+        }
+        let flag = FcFlag::from_nibble(data[0])?;
+        Some(Self {
+            flag,
+            block_size: data.get(1).copied().unwrap_or(0),
+            st_min: data.get(2).copied().unwrap_or(0),
+        })
+    }
+
+    /// How a multi-frame *sender* should react to this peer FC.
+    pub fn interpret_for_sender(self) -> Result<FlowControlParams, String> {
+        match self.flag {
+            FcFlag::Cts => Ok(FlowControlParams {
+                block_size: self.block_size,
+                st_min_ms: self.st_min,
+            }),
+            FcFlag::Wait => Err("FC WAIT — peer not ready".into()),
+            FcFlag::Overflow => Err("FC OVFLW — peer buffer overflow, abort".into()),
+        }
+    }
+}
+
+// Backward-compatible aliases
+pub const FC_CTS: u8 = 0x00;
+pub const FC_WAIT: u8 = 0x01;
+pub const FC_OVFLW: u8 = 0x02;
+pub const DEFAULT_FC_BLOCK_SIZE: u8 = 0;
+pub const DEFAULT_FC_STMIN_MS: u8 = 0;
+pub const RETRY_FC_BLOCK_SIZE: u8 = 16;
+pub const RETRY_FC_STMIN_MS: u8 = 2;
+
+/// Build CTS frame (legacy helper).
+pub fn build_flow_control(flag: u8, block_size: u8, st_min_ms: u8) -> [u8; 8] {
+    let mut frame = [0u8; 8];
+    frame[0] = PCI_FC | (flag & 0x0F);
+    frame[1] = block_size;
+    frame[2] = st_min_ms;
+    frame
+}
+
+pub fn build_flow_control_params(fc: FlowControlParams) -> [u8; 8] {
+    FlowControlFrame::cts(fc).encode()
+}
+
+// ── Segment parse / assemble ────────────────────────────────────────────────
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CanFrame {
@@ -70,7 +182,7 @@ pub enum IsoTpSegment {
     Single(Vec<u8>),
     First { total_len: usize, data: Vec<u8> },
     Consecutive { seq: u8, data: Vec<u8> },
-    FlowControl { flag: u8, block_size: u8, st_min: u8 },
+    FlowControl(FlowControlFrame),
     Unknown(Vec<u8>),
 }
 
@@ -78,53 +190,31 @@ pub fn parse_isotp_segment(data: &[u8]) -> IsoTpSegment {
     if data.is_empty() {
         return IsoTpSegment::Unknown(data.to_vec());
     }
-    let pci = data[0];
-    match pci & 0xF0 {
+    match data[0] & 0xF0 {
         PCI_SF => {
-            let len = (pci & 0x0F) as usize;
-            let payload = data.get(1..1 + len).unwrap_or(&[]).to_vec();
-            IsoTpSegment::Single(payload)
+            let len = (data[0] & 0x0F) as usize;
+            IsoTpSegment::Single(data.get(1..1 + len).unwrap_or(&[]).to_vec())
         }
         PCI_FF => {
             if data.len() < 2 {
                 return IsoTpSegment::Unknown(data.to_vec());
             }
-            let total_len = (((pci & 0x0F) as usize) << 8) | (data[1] as usize);
-            let payload = data.get(2..).unwrap_or(&[]).to_vec();
+            let total_len = (((data[0] & 0x0F) as usize) << 8) | (data[1] as usize);
             IsoTpSegment::First {
                 total_len,
-                data: payload,
+                data: data.get(2..).unwrap_or(&[]).to_vec(),
             }
         }
-        PCI_CF => {
-            let seq = pci & 0x0F;
-            let payload = data.get(1..).unwrap_or(&[]).to_vec();
-            IsoTpSegment::Consecutive { seq, data: payload }
-        }
-        PCI_FC => {
-            let flag = pci & 0x0F;
-            let bs = data.get(1).copied().unwrap_or(0);
-            let st = data.get(2).copied().unwrap_or(0);
-            IsoTpSegment::FlowControl {
-                flag,
-                block_size: bs,
-                st_min: st,
-            }
-        }
+        PCI_CF => IsoTpSegment::Consecutive {
+            seq: data[0] & 0x0F,
+            data: data.get(1..).unwrap_or(&[]).to_vec(),
+        },
+        PCI_FC => match FlowControlFrame::try_parse(data) {
+            Some(fc) => IsoTpSegment::FlowControl(fc),
+            None => IsoTpSegment::Unknown(data.to_vec()),
+        },
         _ => IsoTpSegment::Unknown(data.to_vec()),
     }
-}
-
-pub fn build_flow_control(flag: u8, block_size: u8, st_min_ms: u8) -> [u8; 8] {
-    let mut frame = [0u8; 8];
-    frame[0] = PCI_FC | (flag & 0x0F);
-    frame[1] = block_size;
-    frame[2] = st_min_ms;
-    frame
-}
-
-pub fn build_flow_control_params(fc: FlowControlParams) -> [u8; 8] {
-    build_flow_control(FC_CTS, fc.block_size, fc.st_min_ms)
 }
 
 pub fn build_single_frame(payload: &[u8]) -> Result<[u8; 8], String> {
@@ -133,68 +223,118 @@ pub fn build_single_frame(payload: &[u8]) -> Result<[u8; 8], String> {
     }
     let mut frame = [0u8; 8];
     frame[0] = PCI_SF | (payload.len() as u8);
-    for (i, &b) in payload.iter().enumerate() {
-        frame[1 + i] = b;
-    }
+    frame[1..1 + payload.len()].copy_from_slice(payload);
     Ok(frame)
+}
+
+/// Stateful assembler for FF + CF → complete payload.
+/// Shared by ELM and raw transports so sequence / length logic lives once.
+#[derive(Debug, Clone)]
+pub struct MultiframeAssembler {
+    total_len: usize,
+    buf: Vec<u8>,
+    expected_seq: u8,
+    strict_seq: bool,
+}
+
+impl MultiframeAssembler {
+    pub fn from_first(total_len: usize, first_data: Vec<u8>) -> Self {
+        Self {
+            total_len,
+            buf: first_data,
+            expected_seq: 1,
+            strict_seq: false, // adapters often desync; strict optional
+        }
+    }
+
+    pub fn with_strict_seq(mut self, strict: bool) -> Self {
+        self.strict_seq = strict;
+        self
+    }
+
+    pub fn is_complete(&self) -> bool {
+        self.buf.len() >= self.total_len
+    }
+
+    pub fn total_len(&self) -> usize {
+        self.total_len
+    }
+
+    pub fn received(&self) -> usize {
+        self.buf.len().min(self.total_len)
+    }
+
+    /// Feed one CF. Returns Ok(true) when assembly is complete.
+    pub fn push_cf(&mut self, seq: u8, data: &[u8]) -> Result<bool, String> {
+        if self.strict_seq && seq != (self.expected_seq & 0x0F) {
+            return Err(format!(
+                "CF sequence error: got {}, expected {}",
+                seq,
+                self.expected_seq & 0x0F
+            ));
+        }
+        self.buf.extend_from_slice(data);
+        self.expected_seq = self.expected_seq.wrapping_add(1);
+        Ok(self.is_complete())
+    }
+
+    /// Feed any segment; ignores non-CF.
+    pub fn push_segment(&mut self, seg: &IsoTpSegment) -> Result<bool, String> {
+        match seg {
+            IsoTpSegment::Consecutive { seq, data } => self.push_cf(*seq, data),
+            _ => Ok(self.is_complete()),
+        }
+    }
+
+    pub fn finish(mut self) -> Result<Vec<u8>, String> {
+        if self.buf.len() < self.total_len {
+            return Err(format!(
+                "ISO-TP incomplete: got {}/{} bytes",
+                self.buf.len(),
+                self.total_len
+            ));
+        }
+        self.buf.truncate(self.total_len);
+        Ok(self.buf)
+    }
 }
 
 pub fn assemble_multiframe(segments: &[IsoTpSegment]) -> Result<Vec<u8>, String> {
     if segments.is_empty() {
         return Err("No segments".into());
     }
-    let (total_len, mut buf) = match &segments[0] {
-        IsoTpSegment::First { total_len, data } => (*total_len, data.clone()),
-        IsoTpSegment::Single(data) => return Ok(data.clone()),
-        _ => return Err("First segment must be First or Single frame".into()),
-    };
-
-    let mut expected_seq: u8 = 1;
-    for seg in &segments[1..] {
-        match seg {
-            IsoTpSegment::Consecutive { seq, data } => {
-                if *seq != expected_seq & 0x0F {
-                    return Err(format!(
-                        "CF sequence error: got {}, expected {}",
-                        seq,
-                        expected_seq & 0x0F
-                    ));
+    match &segments[0] {
+        IsoTpSegment::Single(data) => Ok(data.clone()),
+        IsoTpSegment::First { total_len, data } => {
+            let mut asm = MultiframeAssembler::from_first(*total_len, data.clone()).with_strict_seq(true);
+            for seg in &segments[1..] {
+                if asm.push_segment(seg)? {
+                    break;
                 }
-                buf.extend_from_slice(data);
-                expected_seq = expected_seq.wrapping_add(1);
             }
-            _ => return Err("Expected Consecutive Frame".into()),
+            asm.finish()
         }
-        if buf.len() >= total_len {
-            break;
-        }
+        _ => Err("First segment must be First or Single frame".into()),
     }
-
-    if buf.len() < total_len {
-        return Err(format!(
-            "Incomplete multi-frame: got {} of {} bytes",
-            buf.len(),
-            total_len
-        ));
-    }
-    buf.truncate(total_len);
-    Ok(buf)
 }
 
-// ── ELM327 ──────────────────────────────────────────────────────────────────
+/// Run `op` with fast FC; on incomplete multi-frame error, retry once with gentle FC.
+fn with_fc_retry<F>(mut op: F) -> Result<Vec<u8>, String>
+where
+    F: FnMut(FlowControlParams) -> Result<Vec<u8>, String>,
+{
+    match op(FlowControlParams::fast()) {
+        Ok(v) => Ok(v),
+        Err(e) if e.contains("incomplete") => op(FlowControlParams::gentle())
+            .map_err(|e2| format!("{} (gentle retry: {})", e, e2)),
+        Err(e) => Err(e),
+    }
+}
+
+// ── ELM327 transport ────────────────────────────────────────────────────────
 
 pub fn elm_init_can_500k(port: &mut Box<dyn SerialPort + Send>) -> Result<(), String> {
-    let cmds = [
-        "AT Z",
-        "AT E0",
-        "AT L0",
-        "AT S0",
-        "AT H0",
-        "AT SP 6",
-        "AT AL",
-        "AT CAF 0",
-    ];
-    for c in cmds {
+    for c in ["AT Z", "AT E0", "AT L0", "AT S0", "AT H0", "AT SP 6", "AT AL", "AT CAF 0"] {
         let _ = send_elm_cmd(port, c);
         std::thread::sleep(Duration::from_millis(60));
     }
@@ -202,14 +342,14 @@ pub fn elm_init_can_500k(port: &mut Box<dyn SerialPort + Send>) -> Result<(), St
 }
 
 fn send_elm_cmd(port: &mut Box<dyn SerialPort + Send>, cmd: &str) -> Result<String, String> {
-    let line = format!("{}\r", cmd);
-    port.write_all(line.as_bytes()).map_err(|e| e.to_string())?;
+    port.write_all(format!("{}\r", cmd).as_bytes())
+        .map_err(|e| e.to_string())?;
     port.flush().ok();
     std::thread::sleep(Duration::from_millis(40));
     let mut buf = [0u8; 512];
     let n = port.read(&mut buf).unwrap_or(0);
     let resp = String::from_utf8_lossy(&buf[..n]).to_string();
-    if resp.contains("?") || resp.contains("UNABLE") {
+    if resp.contains('?') || resp.contains("UNABLE") {
         Err(format!("ELM cmd failed: {} -> {}", cmd, resp.trim()))
     } else {
         Ok(resp.trim().to_string())
@@ -217,8 +357,7 @@ fn send_elm_cmd(port: &mut Box<dyn SerialPort + Send>, cmd: &str) -> Result<Stri
 }
 
 pub fn elm_set_header(port: &mut Box<dyn SerialPort + Send>, can_id: u32) -> Result<(), String> {
-    let cmd = format!("AT SH {:03X}", can_id);
-    send_elm_cmd(port, &cmd)?;
+    send_elm_cmd(port, &format!("AT SH {:03X}", can_id))?;
     Ok(())
 }
 
@@ -239,7 +378,6 @@ fn elm_read_raw(port: &mut Box<dyn SerialPort + Send>, timeout: Duration) -> Res
     let deadline = Instant::now() + timeout;
     let mut collected = String::new();
     let mut buf = [0u8; 512];
-
     while Instant::now() < deadline {
         match port.read(&mut buf) {
             Ok(0) => std::thread::sleep(Duration::from_millis(5)),
@@ -258,33 +396,32 @@ fn elm_read_raw(port: &mut Box<dyn SerialPort + Send>, timeout: Duration) -> Res
             Err(e) => return Err(e.to_string()),
         }
     }
-
     if collected.is_empty() {
         return Err("ELM: no data".into());
     }
     Ok(elm_hex_to_bytes(&collected))
 }
 
+fn elm_send_fc(port: &mut Box<dyn SerialPort + Send>, request_id: u32, fc: FlowControlParams) -> Result<(), String> {
+    let bytes = FlowControlFrame::cts(fc).encode_short();
+    let hex: String = bytes.iter().map(|b| format!("{:02X}", b)).collect();
+    let _ = elm_set_header(port, request_id);
+    port.write_all(format!("{}\r", hex).as_bytes())
+        .map_err(|e| e.to_string())
+}
+
 fn elm_collect_cfs(
     port: &mut Box<dyn SerialPort + Send>,
-    total_len: usize,
-    mut buf: Vec<u8>,
+    mut asm: MultiframeAssembler,
     overall_ms: u64,
 ) -> Result<Vec<u8>, String> {
     let deadline = Instant::now() + Duration::from_millis(overall_ms);
-    let mut expected_seq: u8 = 1;
-
-    while buf.len() < total_len && Instant::now() < deadline {
+    while !asm.is_complete() && Instant::now() < deadline {
         match elm_read_raw(port, Duration::from_millis(400)) {
             Ok(raw) if !raw.is_empty() => {
                 for chunk in raw.chunks(8) {
-                    if let IsoTpSegment::Consecutive { seq, data: cf } = parse_isotp_segment(chunk) {
-                        let _ = seq;
-                        let _ = expected_seq;
-                        buf.extend_from_slice(&cf);
-                        expected_seq = expected_seq.wrapping_add(1);
-                    }
-                    if buf.len() >= total_len {
+                    let _ = asm.push_segment(&parse_isotp_segment(chunk));
+                    if asm.is_complete() {
                         break;
                     }
                 }
@@ -292,19 +429,9 @@ fn elm_collect_cfs(
             _ => std::thread::sleep(Duration::from_millis(10)),
         }
     }
-
-    if buf.len() < total_len {
-        return Err(format!(
-            "ISO-TP incomplete: got {}/{} bytes",
-            buf.len(),
-            total_len
-        ));
-    }
-    buf.truncate(total_len);
-    Ok(buf)
+    asm.finish()
 }
 
-/// ISO-TP request with explicit Flow Control parameters.
 pub fn elm_send_iso_tp_request_with_fc(
     port: &mut Box<dyn SerialPort + Send>,
     request_id: u32,
@@ -314,18 +441,18 @@ pub fn elm_send_iso_tp_request_with_fc(
     elm_set_header(port, request_id)?;
     let _ = send_elm_cmd(port, "AT CAF 0");
 
-    if data.len() <= 7 {
-        let sf = build_single_frame(data)?;
-        let hex: String = sf
-            .iter()
-            .take(1 + data.len())
-            .map(|b| format!("{:02X}", b))
-            .collect();
-        port.write_all(format!("{}\r", hex).as_bytes())
-            .map_err(|e| e.to_string())?;
-    } else {
+    if data.len() > 7 {
         return elm_send_multiframe_tx(port, data);
     }
+
+    let sf = build_single_frame(data)?;
+    let hex: String = sf
+        .iter()
+        .take(1 + data.len())
+        .map(|b| format!("{:02X}", b))
+        .collect();
+    port.write_all(format!("{}\r", hex).as_bytes())
+        .map_err(|e| e.to_string())?;
 
     let first_raw = elm_read_raw(port, Duration::from_millis(800))?;
     if first_raw.is_empty() {
@@ -334,45 +461,28 @@ pub fn elm_send_iso_tp_request_with_fc(
 
     match parse_isotp_segment(&first_raw) {
         IsoTpSegment::Single(payload) => Ok(payload),
-        IsoTpSegment::First {
-            total_len,
-            data: ff_data,
-        } => {
-            let fc_frame = build_flow_control_params(fc);
-            let fc_hex: String = fc_frame[..3].iter().map(|b| format!("{:02X}", b)).collect();
-            let _ = elm_set_header(port, request_id);
-            port.write_all(format!("{}\r", fc_hex).as_bytes())
-                .map_err(|e| e.to_string())?;
-
-            elm_collect_cfs(port, total_len, ff_data, 3000)
+        IsoTpSegment::First { total_len, data: ff } => {
+            elm_send_fc(port, request_id, fc)?;
+            elm_collect_cfs(port, MultiframeAssembler::from_first(total_len, ff), 3000)
         }
-        IsoTpSegment::Unknown(raw) => {
-            if raw.len() > 1 && raw[0] == 0x7F {
-                return Ok(raw);
-            }
-            Ok(raw)
-        }
+        IsoTpSegment::Unknown(raw) if raw.first() == Some(&0x7F) => Ok(raw),
+        IsoTpSegment::Unknown(raw) => Ok(raw),
         other => Err(format!("Unexpected ISO-TP segment: {:?}", other)),
     }
 }
 
-/// Default path: fast FC first; on incomplete multi-frame, one gentler retry.
 pub fn elm_send_iso_tp_request(
     port: &mut Box<dyn SerialPort + Send>,
     request_id: u32,
     data: &[u8],
 ) -> Result<Vec<u8>, String> {
-    match elm_send_iso_tp_request_with_fc(port, request_id, data, FlowControlParams::fast()) {
-        Ok(payload) => Ok(payload),
-        Err(e) if e.contains("incomplete") => {
-            // Adapter may have dropped CFs under BS=0/STmin=0 — retry paced
+    with_fc_retry(|fc| {
+        if fc == FlowControlParams::gentle() {
             let _ = send_elm_cmd(port, "AT CAF 0");
             std::thread::sleep(Duration::from_millis(30));
-            elm_send_iso_tp_request_with_fc(port, request_id, data, FlowControlParams::gentle())
-                .map_err(|e2| format!("{} (gentle retry: {})", e, e2))
         }
-        Err(e) => Err(e),
-    }
+        elm_send_iso_tp_request_with_fc(port, request_id, data, fc)
+    })
 }
 
 fn elm_send_multiframe_tx(
@@ -383,38 +493,57 @@ fn elm_send_multiframe_tx(
     if total > 4095 {
         return Err("ISO-TP max length 4095".into());
     }
+
     let mut ff = [0u8; 8];
     ff[0] = PCI_FF | (((total >> 8) as u8) & 0x0F);
     ff[1] = (total & 0xFF) as u8;
     let first_data_len = total.min(6);
     ff[2..2 + first_data_len].copy_from_slice(&data[..first_data_len]);
-
-    let hex: String = ff.iter().map(|b| format!("{:02X}", b)).collect();
-    port.write_all(format!("{}\r", hex).as_bytes())
+    port.write_all(format!("{}\r", ff.iter().map(|b| format!("{:02X}", b)).collect::<String>()).as_bytes())
         .map_err(|e| e.to_string())?;
 
-    let fc_raw = elm_read_raw(port, Duration::from_millis(500))?;
-    match parse_isotp_segment(&fc_raw) {
-        IsoTpSegment::FlowControl { flag, .. } if flag == FC_CTS => {}
-        IsoTpSegment::FlowControl { flag, .. } => {
-            return Err(format!("FC flag 0x{:02X} not CTS", flag));
+    // Peer FC: accept CTS, retry briefly on WAIT, hard-fail on OVFLW
+    let mut peer_params = FlowControlParams::fast();
+    for attempt in 0..4 {
+        let fc_raw = elm_read_raw(port, Duration::from_millis(500))?;
+        match parse_isotp_segment(&fc_raw) {
+            IsoTpSegment::FlowControl(frame) => match frame.interpret_for_sender() {
+                Ok(p) => {
+                    peer_params = p;
+                    break;
+                }
+                Err(e) if e.contains("WAIT") && attempt < 3 => {
+                    std::thread::sleep(Duration::from_millis(50));
+                    continue;
+                }
+                Err(e) => return Err(e),
+            },
+            _ => break, // some adapters auto-handle FC
         }
-        _ => {}
     }
 
+    let gap = Duration::from_millis(peer_params.st_min_ms.max(2) as u64);
     let mut offset = first_data_len;
     let mut seq: u8 = 1;
+    let mut since_fc: u8 = 0;
     while offset < total {
+        if peer_params.block_size != 0 && since_fc >= peer_params.block_size {
+            // Would need another FC grant; rare for diagnostic TX — stop cleanly
+            return Err("TX block size exhausted without further FC".into());
+        }
         let mut cf = [0u8; 8];
         cf[0] = PCI_CF | (seq & 0x0F);
         let n = (total - offset).min(7);
         cf[1..1 + n].copy_from_slice(&data[offset..offset + n]);
-        let cf_hex: String = cf[..1 + n].iter().map(|b| format!("{:02X}", b)).collect();
-        port.write_all(format!("{}\r", cf_hex).as_bytes())
-            .map_err(|e| e.to_string())?;
+        port.write_all(
+            format!("{}\r", cf[..1 + n].iter().map(|b| format!("{:02X}", b)).collect::<String>())
+                .as_bytes(),
+        )
+        .map_err(|e| e.to_string())?;
         offset += n;
         seq = seq.wrapping_add(1);
-        std::thread::sleep(Duration::from_millis(2));
+        since_fc = since_fc.wrapping_add(1);
+        std::thread::sleep(gap);
     }
 
     elm_read_raw(port, Duration::from_millis(1500)).map(|raw| match parse_isotp_segment(&raw) {
@@ -426,45 +555,42 @@ fn elm_send_multiframe_tx(
 // ── Lawicel / raw CAN ───────────────────────────────────────────────────────
 
 pub fn send_raw_can(port: &mut Box<dyn SerialPort + Send>, frame: &CanFrame) -> Result<(), String> {
-    if !frame.is_extended && frame.data.len() <= 8 {
-        let mut s = format!("t{:03X}{:01X}", frame.id, frame.data.len());
-        for b in &frame.data {
-            s.push_str(&format!("{:02X}", b));
-        }
-        s.push('\r');
-        port.write_all(s.as_bytes()).map_err(|e| e.to_string())?;
-        Ok(())
-    } else {
-        Err("Extended or long frames need framed ISO-TP".into())
+    if frame.is_extended || frame.data.len() > 8 {
+        return Err("Extended or long frames need framed ISO-TP".into());
     }
+    let mut s = format!("t{:03X}{:01X}", frame.id, frame.data.len());
+    for b in &frame.data {
+        s.push_str(&format!("{:02X}", b));
+    }
+    s.push('\r');
+    port.write_all(s.as_bytes()).map_err(|e| e.to_string())
 }
 
 pub fn recv_raw_can(port: &mut Box<dyn SerialPort + Send>) -> Result<CanFrame, String> {
     let mut buf = [0u8; 128];
     let n = port.read(&mut buf).map_err(|e| e.to_string())?;
     let s = String::from_utf8_lossy(&buf[..n]);
-    if let Some(start) = s.find('t') {
-        let frame_str = &s[start..];
-        if frame_str.len() > 5 {
-            let id = u32::from_str_radix(&frame_str[1..4], 16).unwrap_or(0);
-            let dlc = usize::from_str_radix(&frame_str[4..5], 16).unwrap_or(0).min(8);
-            let mut data = Vec::with_capacity(dlc);
-            for i in 0..dlc {
-                let off = 5 + i * 2;
-                if off + 2 <= frame_str.len() {
-                    if let Ok(b) = u8::from_str_radix(&frame_str[off..off + 2], 16) {
-                        data.push(b);
-                    }
-                }
+    let start = s.find('t').ok_or("No parseable CAN frame")?;
+    let frame_str = &s[start..];
+    if frame_str.len() <= 5 {
+        return Err("No parseable CAN frame".into());
+    }
+    let id = u32::from_str_radix(&frame_str[1..4], 16).unwrap_or(0);
+    let dlc = usize::from_str_radix(&frame_str[4..5], 16).unwrap_or(0).min(8);
+    let mut data = Vec::with_capacity(dlc);
+    for i in 0..dlc {
+        let off = 5 + i * 2;
+        if off + 2 <= frame_str.len() {
+            if let Ok(b) = u8::from_str_radix(&frame_str[off..off + 2], 16) {
+                data.push(b);
             }
-            return Ok(CanFrame {
-                id,
-                data,
-                is_extended: false,
-            });
         }
     }
-    Err("No parseable CAN frame".into())
+    Ok(CanFrame {
+        id,
+        data,
+        is_extended: false,
+    })
 }
 
 pub fn raw_isotp_transact_with_fc(
@@ -474,17 +600,18 @@ pub fn raw_isotp_transact_with_fc(
     payload: &[u8],
     fc: FlowControlParams,
 ) -> Result<Vec<u8>, String> {
-    if payload.len() <= 7 {
-        let sf = build_single_frame(payload)?;
-        let frame = CanFrame {
+    if payload.len() > 7 {
+        return Err("Raw multi-frame TX not yet wired — use ELM path".into());
+    }
+    let sf = build_single_frame(payload)?;
+    send_raw_can(
+        port,
+        &CanFrame {
             id: request_id,
             data: sf[..1 + payload.len()].to_vec(),
             is_extended: false,
-        };
-        send_raw_can(port, &frame)?;
-    } else {
-        return Err("Raw multi-frame TX not yet wired — use ELM path".into());
-    }
+        },
+    )?;
 
     let deadline = Instant::now() + Duration::from_millis(2000);
     let mut first: Option<CanFrame> = None;
@@ -502,35 +629,29 @@ pub fn raw_isotp_transact_with_fc(
     match parse_isotp_segment(&first.data) {
         IsoTpSegment::Single(p) => Ok(p),
         IsoTpSegment::First { total_len, data } => {
-            let fc_bytes = build_flow_control_params(fc);
-            let fc_frame = CanFrame {
-                id: request_id,
-                data: fc_bytes[..3].to_vec(),
-                is_extended: false,
-            };
-            send_raw_can(port, &fc_frame)?;
+            let fc_bytes = FlowControlFrame::cts(fc).encode_short();
+            send_raw_can(
+                port,
+                &CanFrame {
+                    id: request_id,
+                    data: fc_bytes.to_vec(),
+                    is_extended: false,
+                },
+            )?;
 
-            let mut buf = data;
+            let mut asm = MultiframeAssembler::from_first(total_len, data);
             let cf_deadline = Instant::now() + Duration::from_millis(3000);
-            while buf.len() < total_len && Instant::now() < cf_deadline {
+            while !asm.is_complete() && Instant::now() < cf_deadline {
                 if let Ok(f) = recv_raw_can(port) {
                     if f.id != response_id && response_id != 0 {
                         continue;
                     }
-                    if let IsoTpSegment::Consecutive { data: cf, .. } =
-                        parse_isotp_segment(&f.data)
-                    {
-                        buf.extend_from_slice(&cf);
-                    }
+                    let _ = asm.push_segment(&parse_isotp_segment(&f.data));
                 } else {
                     std::thread::sleep(Duration::from_millis(3));
                 }
             }
-            if buf.len() < total_len {
-                return Err(format!("Raw ISO-TP incomplete: {}/{}", buf.len(), total_len));
-            }
-            buf.truncate(total_len);
-            Ok(buf)
+            asm.finish()
         }
         other => Err(format!("Unexpected segment: {:?}", other)),
     }
@@ -542,27 +663,10 @@ pub fn raw_isotp_transact(
     response_id: u32,
     payload: &[u8],
 ) -> Result<Vec<u8>, String> {
-    match raw_isotp_transact_with_fc(
-        port,
-        request_id,
-        response_id,
-        payload,
-        FlowControlParams::fast(),
-    ) {
-        Ok(p) => Ok(p),
-        Err(e) if e.contains("incomplete") => raw_isotp_transact_with_fc(
-            port,
-            request_id,
-            response_id,
-            payload,
-            FlowControlParams::gentle(),
-        )
-        .map_err(|e2| format!("{} (gentle retry: {})", e, e2)),
-        Err(e) => Err(e),
-    }
+    with_fc_retry(|fc| raw_isotp_transact_with_fc(port, request_id, response_id, payload, fc))
 }
 
-// ── High-level UDS ──────────────────────────────────────────────────────────
+// ── UDS façade ──────────────────────────────────────────────────────────────
 
 pub fn uds_request(
     port: &mut Box<dyn SerialPort + Send>,
@@ -572,7 +676,6 @@ pub fn uds_request(
 ) -> Result<Vec<u8>, String> {
     let mut payload = vec![sid];
     payload.extend_from_slice(data);
-
     if use_elm {
         elm_send_iso_tp_request(port, ECM_REQUEST_ID, &payload)
     } else {
@@ -589,7 +692,6 @@ pub fn uds_request_multiframe(
     uds_request(port, sid, data, use_elm)
 }
 
-/// Multi-frame UDS with explicit FC (no automatic retry).
 pub fn uds_request_with_fc(
     port: &mut Box<dyn SerialPort + Send>,
     sid: u8,
@@ -620,46 +722,75 @@ pub fn j2534_list_devices() -> Vec<String> {
     vec!["J2534 only supported on Windows".into()]
 }
 
+// ── Tests ───────────────────────────────────────────────────────────────────
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn parse_single_frame() {
-        let data = [0x03, 0x62, 0xF1, 0x90, 0, 0, 0, 0];
-        match parse_isotp_segment(&data) {
+    fn fc_flag_roundtrip() {
+        assert_eq!(FcFlag::from_nibble(0x00), Some(FcFlag::Cts));
+        assert_eq!(FcFlag::from_nibble(0x01), Some(FcFlag::Wait));
+        assert_eq!(FcFlag::from_nibble(0x02), Some(FcFlag::Overflow));
+        assert_eq!(FcFlag::from_nibble(0x03), None);
+    }
+
+    #[test]
+    fn flow_control_frame_encode_parse() {
+        let f = FlowControlFrame::cts(FlowControlParams::gentle());
+        let enc = f.encode();
+        assert_eq!(enc[0], 0x30);
+        assert_eq!(enc[1], 16);
+        assert_eq!(enc[2], 2);
+        let parsed = FlowControlFrame::try_parse(&enc).unwrap();
+        assert_eq!(parsed.flag, FcFlag::Cts);
+        assert_eq!(parsed.block_size, 16);
+    }
+
+    #[test]
+    fn interpret_ovflw_aborts() {
+        let f = FlowControlFrame {
+            flag: FcFlag::Overflow,
+            block_size: 0,
+            st_min: 0,
+        };
+        assert!(f.interpret_for_sender().unwrap_err().contains("OVFLW"));
+    }
+
+    #[test]
+    fn assembler_completes() {
+        let mut a = MultiframeAssembler::from_first(10, vec![0x63, 1, 2, 3, 4, 5]);
+        assert!(!a.is_complete());
+        a.push_cf(1, &[6, 7, 8, 9]).unwrap();
+        assert!(a.is_complete());
+        assert_eq!(a.finish().unwrap(), vec![0x63, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+    }
+
+    #[test]
+    fn assembler_incomplete_errors() {
+        let a = MultiframeAssembler::from_first(20, vec![1, 2, 3]);
+        assert!(a.finish().unwrap_err().contains("incomplete"));
+    }
+
+    #[test]
+    fn parse_segments() {
+        match parse_isotp_segment(&[0x03, 0x62, 0xF1, 0x90]) {
             IsoTpSegment::Single(p) => assert_eq!(p, vec![0x62, 0xF1, 0x90]),
-            other => panic!("expected Single, got {:?}", other),
+            o => panic!("{:?}", o),
+        }
+        match parse_isotp_segment(&[0x10, 0x14, 0x63, 1, 2, 3, 4, 5]) {
+            IsoTpSegment::First { total_len, .. } => assert_eq!(total_len, 20),
+            o => panic!("{:?}", o),
+        }
+        match parse_isotp_segment(&[0x30, 0x00, 0x00]) {
+            IsoTpSegment::FlowControl(f) => assert_eq!(f.flag, FcFlag::Cts),
+            o => panic!("{:?}", o),
         }
     }
 
     #[test]
-    fn parse_first_frame() {
-        let data = [0x10, 0x14, 0x63, 0x01, 0x02, 0x03, 0x04, 0x05];
-        match parse_isotp_segment(&data) {
-            IsoTpSegment::First { total_len, data: d } => {
-                assert_eq!(total_len, 20);
-                assert_eq!(d, vec![0x63, 0x01, 0x02, 0x03, 0x04, 0x05]);
-            }
-            other => panic!("expected First, got {:?}", other),
-        }
-    }
-
-    #[test]
-    fn flow_control_encode() {
-        let fc = build_flow_control(FC_CTS, 0, 0);
-        assert_eq!(fc[0], 0x30);
-        assert_eq!(fc[1], 0);
-        assert_eq!(fc[2], 0);
-
-        let gentle = build_flow_control_params(FlowControlParams::gentle());
-        assert_eq!(gentle[0], 0x30);
-        assert_eq!(gentle[1], RETRY_FC_BLOCK_SIZE);
-        assert_eq!(gentle[2], RETRY_FC_STMIN_MS);
-    }
-
-    #[test]
-    fn assemble_ff_cf() {
+    fn assemble_multiframe_strict() {
         let segs = vec![
             IsoTpSegment::First {
                 total_len: 10,
@@ -670,13 +801,15 @@ mod tests {
                 data: vec![6, 7, 8, 9],
             },
         ];
-        let out = assemble_multiframe(&segs).unwrap();
-        assert_eq!(out, vec![0x63, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+        assert_eq!(
+            assemble_multiframe(&segs).unwrap(),
+            vec![0x63, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+        );
     }
 
     #[test]
-    fn fc_params_defaults() {
+    fn fc_params_presets() {
         assert_eq!(FlowControlParams::fast().block_size, 0);
-        assert_eq!(FlowControlParams::gentle().block_size, 16);
+        assert_eq!(FlowControlParams::gentle().st_min_ms, 2);
     }
 }
