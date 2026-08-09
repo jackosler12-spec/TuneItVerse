@@ -1,8 +1,8 @@
 {
   "name": "tuneitverse",
   "private": true,
-  "version": "1.8.0",
-  "description": "TuneItVerse - Industry-leading open ECU tuning platform (Tauri + Rust) - free alternative to expensive commercial tools. Fully operational DIY powerhouse for P01, EDC16, EDC17, MED17, P59. v1.8.0 completes Bosch UDS SecurityAccess end-to-end unlock + production key starters + full recovery + zero core blockers.",
+  "version": "2.0.0",
+  "description": "TuneItVerse - Industry-leading open ECU tuning platform (Tauri + Rust) - free alternative to expensive commercial tools. Fully operational DIY powerhouse for P01, EDC16, EDC17, MED17, P59. v2.0.0 completes Priority 0 safety + real algorithms + scalable DB + production J2534 + full guided pipeline.",
   "type": "module",
   "scripts": {
     "tauri": "tauri",
