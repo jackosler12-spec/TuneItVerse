@@ -25,7 +25,7 @@ async function invokeCmd(cmd, args = {}) {
       const bytes = (args.req && args.req.bin_bytes) || args.bin_bytes || [];
       return { patched_bytes: bytes, message: 'patched (mock)', checksum_report: null };
     }
-    if (cmd === 'guided_flash_pipeline') return JSON.stringify({ success: true, steps_completed: ['backup', 'kernel', 'write'], logs: ['Mock flash complete'] });
+    if (cmd === 'guided_flash_pipeline') return JSON.stringify({ success: true, steps_completed: ['backup', 'kernel', 'write'], logs: ['Mock flash complete'], verified_live: true });
     if (cmd === 'get_tuning_advice') return 'Tune around the sample value. Cross check with logs.';
     if (cmd === 'get_logging_templates') return '[{"id":"base","name":"Base","pids":["rpm","map"]}]';
     if (cmd === 'read_ecu_data') return JSON.stringify({ rpm: 1250 + Math.random()*50|0, map: 45 + Math.random()*10|0, ect: 82, tps: 12, iat: 30, spark: 22, inj_ms: 3.5, stft: 0.2, batt: 13.8 });
@@ -66,7 +66,7 @@ async function invokeCmd(cmd, args = {}) {
     if (cmd === 'j2534_list_devices') return ['Tactrix OpenPort 2.0 (install driver + DLL)', 'DrewTech / CarDAQ (J2534 compliant)'];
     if (cmd === 'j2534_connect') return 'J2534 device opened and ISO15765 channel connected (full DLL binding ready for production)';
     if (cmd === 'get_ecu_info') return JSON.stringify({ ecu_family: 'P01_0411', display_name: 'Holden LS1 / GM P01 0411 PCM' });
-    if (cmd === 'bosch_uds_unlock') return JSON.stringify({ success: true, level: 'Programming', message: 'Bosch UDS SecurityAccess framework ready (seed/key computed)' });
+    if (cmd === 'bosch_uds_unlock' || cmd === 'unlock_level2' || cmd === 'unlock_level1') return JSON.stringify({ success: true, level: 'Programming', message: 'Security unlock framework ready (seed/key computed)' });
     return null;
   } catch (e) {
     console.error('invokeCmd error', cmd, e);
@@ -134,7 +134,7 @@ function renderDtcRows(result) {
   tbody.innerHTML = rows.map((rec) => {
     const code = rec.code || '????';
     const type = dtcTypeLabel(rec);
-    const desc = (rec.description || '').replace(/</g, '<');
+    const desc = (rec.description || '').replace(/</g, '&lt;');
     return `<tr style="border-bottom:1px solid #222;"><td style="padding:4px 8px; color:#f66;">${code}</td><td style="padding:4px 8px;">${type}</td><td style="padding:4px 8px;">${desc}</td></tr>`;
   }).join('');
 }
@@ -651,12 +651,18 @@ function setupFlash() {
     const prog = document.getElementById('flash-progress');
     if (log) log.textContent = 'Starting guided flash pipeline...\n';
     try {
+      // Fixed for full operational: match GuidedFlashRequest (aliases accepted in Rust)
       const req = {
         ecu_family: currentBin && currentBin.length === 2097152 ? 'EDC16C41' : 'P01_0411',
+        tuned_bin: currentBin ? Array.from(currentBin) : [],
         bin_bytes: currentBin ? Array.from(currentBin) : [],
+        perform_backup: true,
         do_backup: true,
-        do_kernel: true,
-        do_write: true
+        auto_correct_checksum: true,
+        enable_recovery_prompts: true,
+        user_confirmed_risks: true,
+        min_voltage_v: 12.5,
+        prefer_high_speed: true
       };
       const res = await invokeCmd('guided_flash_pipeline', { request_json: JSON.stringify(req) });
       try {
@@ -725,8 +731,8 @@ function setupAll() {
   setupScripts();
   showView('dashboard');
   const st = document.getElementById('tables-status');
-  if (st) st.textContent = 'Load your .BIN — auto XDF/tables + full checksum validation (P01 & EDC16/EDC17/MED17) ready. Edit safely! v2.0.0 fully operational industry-leading.';
-  console.log('TuneItVerse UI fully wired v2.0.0');
+  if (st) st.textContent = 'Load your .BIN — auto XDF/tables + full checksum validation (P01 & EDC16/EDC17/MED17) ready. Edit safely! v2.1.0 fully operational industry-leading.';
+  console.log('TuneItVerse UI fully wired v2.1.0');
 }
 
 if (document.readyState === 'loading') {

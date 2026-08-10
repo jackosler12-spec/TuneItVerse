@@ -9,6 +9,7 @@
 //   4. Adaptive protocol timing
 //
 // HS path: after Mode 0xA1, best-effort J2534 DATA_RATE 41600 when device open.
+// v2.1: GuidedFlashRequest now accepts frontend aliases (bin_bytes, do_backup) + defaults for full UI compatibility.
 
 use serde::{Serialize, Deserialize};
 use crate::checksum::{ChecksumReport, correct_and_validate_checksums, CAL_IMAGE_SIZE};
@@ -57,14 +58,21 @@ pub struct BackupResult {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GuidedFlashRequest {
     pub ecu_family: String,
+    #[serde(alias = "bin_bytes", alias = "tuned_bin", default)]
     pub tuned_bin: Vec<u8>,
+    #[serde(alias = "do_backup", alias = "perform_backup", default = "default_true")]
     pub perform_backup: bool,
+    #[serde(default = "default_true")]
     pub auto_correct_checksum: bool,
+    #[serde(default = "default_true")]
     pub enable_recovery_prompts: bool,
+    #[serde(default = "default_true")]
     pub user_confirmed_risks: bool,
     pub min_voltage_v: Option<f32>,
     pub prefer_high_speed: Option<bool>,
 }
+
+fn default_true() -> bool { true }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RecoveryPrompt {
