@@ -5,6 +5,7 @@
 // v1.2.1: Completed missing torque_limiter + start_of_injection handlers in auto_load so DB refined_map_addrs are fully honored (industry-leading map coverage)
 // v1.7.0: J2534 PassThruIoctl — SET_CONFIG DATA_RATE, READ_VBATT, ISO15765 STMIN/BS, VPW high-speed helpers
 // v2.0-prep: ISO 14229 UDS application layer (session, TesterPresent, RMBA ALFI, 34/36/37, routines, DTCs)
+// v2.1: expose unlock_level1, unlock_level2, bosch_uds_unlock for full UI security access
 #![allow(unused_imports, dead_code, unused_variables, unused_mut)]
 
 use std::sync::Mutex;
@@ -769,6 +770,31 @@ fn get_recovery_prompt(ecu_family: String, error_context: String) -> Result<Stri
     serde_json::to_string(&p).map_err(|e| e.to_string())
 }
 
+// v2.1 Security unlock surface — fully operational
+#[tauri::command]
+fn unlock_level1(state: State<AppState>) -> Result<String, String> {
+    let mut port_guard = state.port.lock().map_err(|e| e.to_string())?;
+    let port = port_guard.as_mut().ok_or("No connection — call connect_ecu first")?;
+    let st = crate::security::unlock_level1(port)?;
+    serde_json::to_string(&st).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn unlock_level2(state: State<AppState>) -> Result<String, String> {
+    let mut port_guard = state.port.lock().map_err(|e| e.to_string())?;
+    let port = port_guard.as_mut().ok_or("No connection — call connect_ecu first")?;
+    let st = crate::security::unlock_level2(port)?;
+    serde_json::to_string(&st).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn bosch_uds_unlock(state: State<AppState>, family: String, level: Option<String>) -> Result<String, String> {
+    let mut port_guard = state.port.lock().map_err(|e| e.to_string())?;
+    let port = port_guard.as_mut().ok_or("No connection — call connect_ecu first")?;
+    let lvl = crate::security::BoschSecurityLevel::from_str(level.as_deref().unwrap_or("programming"));
+    crate::security::bosch_uds_unlock_full(port, &family, lvl)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -815,6 +841,9 @@ pub fn run() {
             read_nissan_consult_data,
             send_can_uds,
             send_kwp_request,
+            unlock_level1,
+            unlock_level2,
+            bosch_uds_unlock,
             // J2534 PassThru + Ioctl
             j2534::j2534_list_devices,
             j2534::j2534_connect,
