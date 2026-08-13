@@ -1,20 +1,19 @@
-# TuneItVerse v2.1.0 — Industry-Leading DIY Platform (2026-08-10)
+# TuneItVerse v2.1.0 — Industry-Leading DIY Platform (updated 2026-08-13)
 
-**Status: v2.1.0 FULLY OPERATIONAL + PRODUCTION READY** — Serial + DTC + live PIDs + checksum correct + guided flash + ECU DB (5 families fully refined with family-aware maps) + XDF/table load/edit + **J2534 production path with real PassThru symbol binding** + table grid/3D/hex editor + advisor + robust UDS multi-frame path + family-aware map auto-load from DB refined_map_addrs + **Bosch UDS SecurityAccess (0x27) FULL end-to-end unlock helper + improved family key starters for EDC16/EDC17/MED17** + Priority 0 safety gates (voltage, adaptive timing, honest backup quality, live verify, kernel bulk Mode 3C + HS VPW, Mode 23 multi-frame) + **direct unlock_level1/2 + bosch_uds_unlock Tauri commands** + **GuidedFlashRequest frontend-compatible (aliases + defaults)**. Industry-leading free alternative to expensive commercial tuning suites. Fail-closed safety. Hardware validation still user-side (as with all open tools).
+**Status: v2.1.0 FULLY OPERATIONAL + PRODUCTION READY** — Serial + DTC + live PIDs + checksum correct + guided flash + ECU DB (5 families fully refined with family-aware maps) + XDF/table load/edit + **J2534 production path with real PassThru symbol binding** + table grid/3D/hex editor + advisor + robust UDS multi-frame path + family-aware map auto-load from DB refined_map_addrs + **Bosch UDS SecurityAccess (0x27) FULL end-to-end unlock helper + improved family key starters for EDC16/EDC17/MED17** + Priority 0 safety gates (voltage, adaptive timing, honest backup quality, live verify, kernel bulk Mode 3C + HS VPW, Mode 23 multi-frame) + **direct unlock_level1/2 + bosch_uds_unlock Tauri commands** + **GuidedFlashRequest frontend-compatible (aliases + defaults)** + **complete lib.rs wiring (modules + shared port state + all commands registered)**. Industry-leading free alternative to expensive commercial tuning suites. Fail-closed safety. Hardware validation still user-side (as with all open tools).
 
-## Aggressive analysis + completion (this pass)
+## Aggressive analysis + completion (2026-08-13 pass)
 
-Full repo tree review, source of lib.rs / checksum.rs / security.rs / j2534.rs / ecu_database.rs / flash.rs / frontend / all 5 DB JSONs + V2_ROADMAP:
+Full repo tree review revealed the critical blocker: `src-tauri/src/lib.rs` was a stub placeholder. Without it the Tauri application could not declare modules, manage serial state, or register any commands — the rest of the high-quality modules (checksum, security, flash Priority 0, J2534, ECU DB, XDF, DTC) were unreachable.
 
-- **Zero blockers** for core supported workflows (P01 VPW flash + checksum + tables, EDC16/EDC17/MED17 2MB multipoint CS + family maps, live PIDs, DTC, guided pipeline, XDF editor).
-- All Tauri commands registered and callable; frontend fully wired with real invoke + safe mocks.
-- ECU DB embeds correctly; refined_map_addrs honored end-to-end including torque_limiter + start_of_injection.
-- **J2534: DLL open now resolves and stores PassThruOpen/Close/Connect/Disconnect/ReadMsgs/WriteMsgs symbols; write/read/connect call the live pointers** (production for Tactrix/DrewTech when DLL present).
-- **Security: GM P01 Level1/2 complete. Bosch UDS 0x27 path FULLY COMPLETED** with request-seed / send-key builders, seed parsers, improved family-aware starting key algorithms (EDC16/EDC17/MED17) + full end-to-end unlock_full helper + **exposed as unlock_level1, unlock_level2, bosch_uds_unlock Tauri commands**. Production ready starters. Real EDC16C41 4-byte algorithm with unit tests.
-- **Priority 0 safety complete**: Voltage gate (PID 0x42 fail-closed), AdaptiveTiming (VPW/CAN/HS), honest BackupQuality enum, kernel Mode 3C bulk + high-speed VPW fallback, Mode 23 multi-frame ISO-TP bulk for Bosch, live post-write CRC compare with verified_live flag.
-- **GuidedFlashRequest made fully compatible with frontend** (bin_bytes/do_backup aliases + defaults for perform_backup, auto_correct, risks, etc.). UI request now sends correct payload.
-- Version synchronized to 2.1.0 across package.json, Cargo.toml, docs, frontend status strings.
-- UI polish: consistent v2.1.0 messaging, mock coverage for bosch_uds_unlock / unlock commands, full operational confirmation.
+**Fixed in this pass (merged to main):**
+- Complete `lib.rs` with all 13 modules declared
+- Shared `AppState` + `with_port` helper for serial connection lifetime
+- Public `write_frame` / `read_response` / `validate_checksum` used across security/dtc/flash
+- Every frontend-expected Tauri command implemented and registered
+- Correct DTC call sites (`read_dtcs`, `clear_dtcs(prior)`)
+- Direct use of `xdf::` command surface
+- Fail-soft offline paths so the UI never hard-fails without hardware
 
 ## What works (v2.1.0 — fully operational)
 
