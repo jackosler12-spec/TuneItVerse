@@ -9,11 +9,11 @@
 
 <!-- Top Navigation -->
 <nav class="top-nav">
-  <div class="nav-brand">TuneItVerse <span class="version">v0.3</span></div>
+  <div class="nav-brand">TuneItVerse <span class="version">v2.4</span></div>
   <div class="nav-links">
     <a href="#" class="nav-item active" data-view="dashboard">Dashboard</a>
     <a href="#" class="nav-item" data-view="connect">Connect</a>
-    <a href="#" class="nav-item" data-view="live">Live Data</a>
+    <a href="#" class="nav-item" data-view="live">Data Logging</a>
     <a href="#" class="nav-item" data-view="diagnostics">Diagnostics / DTC</a>
     <a href="#" class="nav-item" data-view="tables">Tables / Maps</a>
     <a href="#" class="nav-item" data-view="flash">Flash</a>
@@ -32,7 +32,7 @@
   <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px;">
     <div class="pro-badge" style="background:#0a0; color:#000; padding:2px 8px; border-radius:3px; font-size:11px; font-weight:700;">PRO</div>
     <h1 style="margin:0; font-size:22px;">TuneItVerse</h1>
-    <span style="color:#666; font-size:12px;">v0.3 • DIY ECU Tuning Platform</span>
+    <span style="color:#666; font-size:12px;">v2.4 • Full Data Logging • DIY ECU Tuning Platform</span>
   </div>
 
   <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px,1fr)); gap:12px;">
@@ -42,6 +42,7 @@
       <button id="dash-flash-btn" class="btn" style="margin-top:6px;">Guided Flash</button>
       <button id="dash-dtc-btn" class="btn" style="margin-top:6px;">Diagnostics / DTC</button>
       <button id="dash-connect-btn" class="btn" style="margin-top:6px;">Connect ECU</button>
+      <button id="dash-log-btn" class="btn" style="margin-top:6px;">Data Logging</button>
     </div>
     <div class="panel" style="padding:12px; font-size:12px;">
       <strong>Connection Status</strong><br>
@@ -50,7 +51,7 @@
     </div>
     <div class="panel" style="padding:12px; font-size:12px;">
       <strong>Features</strong><br>
-      Real XDF parsing • 3-col editor (Grid/3D/Hex) • Live patch • Guided flash with kernel • Multi-protocol (VPW/CAN/KWP/Consult) • DTC • Full Rust backend.
+      Full data logging (rate + channels + CSV) • Real XDF parsing • 3-col editor • Guided flash • Multi-protocol • DTC • Checksum • ECU DB.
     </div>
   </div>
 </div>
@@ -111,23 +112,58 @@
   </div>
 </div>
 
-<!-- LIVE DATA -->
+<!-- DATA LOGGING (full section) -->
 <div id="view-live" class="content content--hidden">
-  <h2>Live Data</h2>
-  <div style="display:flex; gap:8px; margin-bottom:8px;">
-    <button id="btn-start-log">Start Logging / Poll</button>
-    <button id="btn-stop-log">Stop</button>
-    <button id="btn-read-once">Read Once</button>
-    <span id="live-status" style="margin-left:12px; color:#0c0;"></span>
+  <h2>Data Logging</h2>
+  <p style="font-size:12px; color:var(--text-muted); max-width:900px;">
+    Full session logger: pick channels, set rate, start/stop, live values, export CSV. Works offline with realistic simulation so you can build templates and test workflows before connecting hardware. When live ECU frames are available the same path accepts real PID values.
+  </p>
+
+  <div class="panel" style="padding:12px; margin-bottom:12px;">
+    <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center;">
+      <label style="font-size:12px;">Rate (Hz)
+        <select id="log-rate" style="margin-left:4px; padding:4px;">
+          <option value="5">5</option>
+          <option value="10" selected>10</option>
+          <option value="20">20</option>
+          <option value="25">25</option>
+        </select>
+      </label>
+      <label style="font-size:12px;">Template
+        <select id="log-template" style="margin-left:4px; padding:4px; min-width:140px;"></select>
+      </label>
+      <button id="btn-log-apply-tmpl" class="btn btn-sm">Apply Template</button>
+      <button id="btn-log-start" class="btn btn-primary">Start Log</button>
+      <button id="btn-log-stop" class="btn btn-danger">Stop</button>
+      <button id="btn-log-clear" class="btn">Clear</button>
+      <button id="btn-log-export" class="btn">Export CSV</button>
+      <span id="log-status" style="margin-left:8px; font-size:12px; color:#0c0;">Idle</span>
+    </div>
+    <div id="log-session-meta" style="margin-top:8px; font-size:11px; color:#888; font-family:monospace;">—</div>
   </div>
-  <canvas id="live-chart" width="640" height="180" style="border:1px solid #333; background:#111;"></canvas>
-  <div style="display:flex; gap:16px; margin-top:8px; font-size:14px;">
-    <div>RPM: <strong id="kpi-rpm">--</strong></div>
-    <div>MAP: <strong id="kpi-map">--</strong></div>
-    <div>ECT: <strong id="kpi-ect">--</strong></div>
-    <div>TPS: <strong id="kpi-tps">--</strong></div>
+
+  <div style="display:grid; grid-template-columns: 280px 1fr; gap:12px;">
+    <div class="panel" style="padding:10px;">
+      <strong style="font-size:13px;">Channels</strong>
+      <div id="log-channels" style="margin-top:8px; max-height:360px; overflow:auto; font-size:12px;"></div>
+      <button id="btn-log-apply-ch" class="btn btn-sm" style="margin-top:8px; width:100%;">Apply Channel Selection</button>
+    </div>
+    <div>
+      <div class="panel" style="padding:10px; margin-bottom:8px;">
+        <strong style="font-size:13px;">Live KPIs</strong>
+        <div id="log-kpis" style="display:flex; flex-wrap:wrap; gap:12px; margin-top:8px; font-size:14px;"></div>
+      </div>
+      <div class="panel" style="padding:10px;">
+        <strong style="font-size:13px;">Recent Samples</strong>
+        <div style="overflow:auto; max-height:280px; margin-top:6px;">
+          <table id="log-table" style="width:100%; border-collapse:collapse; font-size:11px; font-family:var(--font-mono);">
+            <thead id="log-thead"></thead>
+            <tbody id="log-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
   </div>
-  <div id="live-pids" style="margin-top:8px; font-size:12px; font-family:monospace;"></div>
 </div>
 
 <!-- DIAGNOSTICS / DTC -->
@@ -167,7 +203,7 @@
   </div>
 </div>
 
-<!-- TABLES / MAPS (PRO 3-col) -->
+<!-- TABLES / MAPS -->
 <div id="view-tables" class="content content--hidden">
   <div class="toolbar" style="padding:8px 12px; border-bottom:1px solid var(--border-subtle); display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
     <button id="btn-load-bin" class="btn btn-primary">Load .BIN</button>
@@ -220,7 +256,7 @@
 <div id="view-flash" class="content content--hidden">
   <h2>Flash / Guided Pipeline</h2>
   <div style="margin-bottom:8px; display:flex; gap:8px; flex-wrap:wrap;">
-    <button id="btn-show-risk" class="btn btn-danger">Show Risk Confirmation &amp; Run Guided Flash</button>
+    <button id="btn-show-risk" class="btn btn-danger">Show Risk Confirmation & Run Guided Flash</button>
     <button id="btn-compare-bin" class="btn">Compare Loaded BIN to ECU</button>
     <button id="btn-verify-write" class="btn">Verify After Write</button>
   </div>
@@ -260,7 +296,7 @@
   </div>
 </div>
 
-<!-- RISK MODAL (full) -->
+<!-- RISK MODAL -->
 <div id="risk-modal" class="modal hidden">
   <div class="modal-content" style="max-width:520px;">
     <h2 style="color:#c33;">⚠️ FLASH RISK CONFIRMATION</h2>
