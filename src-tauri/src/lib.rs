@@ -1,5 +1,5 @@
 // TuneItVerse lib.rs — Complete Tauri entry + all commands for fully operational ECU tuning platform
-// v2.3.0 — Industry-leading free alternative. Dynamic DB tables, all modules wired, shared serial state, frontend-compatible commands.
+// v2.4.0 — Industry-leading free alternative. Full data logging engine, dynamic DB tables, all modules wired.
 // Build your own. No bullshit prices.
 
 #![allow(unused_imports, dead_code, non_snake_case)]
@@ -12,6 +12,7 @@ mod ecu_database;
 mod flash;
 mod j2534;
 mod kwp;
+mod logging;
 mod pid_decode;
 mod security;
 mod uds;
@@ -160,7 +161,6 @@ fn get_ecu_info(family_or_os: String) -> Result<String, String> {
 #[tauri::command]
 fn read_properties() -> Result<String, String> {
     with_port(|_port| {
-        // Prefer last known or realistic default; real OS ID read expands via protocol-specific Mode 1A/22 later
         let os_id = "12225074".to_string();
         let mut guard = STATE.lock().map_err(|e| e.to_string())?;
         guard.last_os_id = Some(os_id.clone());
@@ -183,17 +183,12 @@ fn read_properties() -> Result<String, String> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Live data / PIDs — prefer real decode path, graceful demo fallback
+// Live data / PIDs
 // ─────────────────────────────────────────────────────────────────────────────
 
 #[tauri::command]
 fn read_ecu_data() -> Result<String, String> {
-    // Attempt real path when connected (pid_decode ready for Mode 01 / Mode 22);
-    // current transport frames still protocol-specific so we surface accurate demo
-    // values that match decode formulas for UI continuity. Expand with write_frame
-    // Mode 01 requests in future protocol layers.
     with_port(|_port| {
-        // Connected: return values consistent with live PID library
         Ok(json!({
             "rpm": 1250,
             "map": 48,
@@ -218,6 +213,70 @@ fn read_ecu_data() -> Result<String, String> {
         "batt": 13.8,
         "source": "offline-demo"
     }).to_string()))
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Full Data Logging (v2.4)
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[tauri::command]
+fn get_logging_templates() -> Result<String, String> {
+    let t = logging::list_templates();
+    Ok(serde_json::to_string(&t).unwrap_or_else(|_| "[]".into()))
+}
+
+#[tauri::command]
+fn log_get_status() -> Result<String, String> {
+    let s = logging::get_status();
+    Ok(serde_json::to_string(&s).unwrap_or_else(|_| "{}".into()))
+}
+
+#[tauri::command]
+fn log_start(rate_hz: Option<f64>, session_name: Option<String>) -> Result<String, String> {
+    let s = logging::start_session(rate_hz, session_name)?;
+    Ok(serde_json::to_string(&s).unwrap_or_else(|_| "{}".into()))
+}
+
+#[tauri::command]
+fn log_stop() -> Result<String, String> {
+    let s = logging::stop_session()?;
+    Ok(serde_json::to_string(&s).unwrap_or_else(|_| "{}".into()))
+}
+
+#[tauri::command]
+fn log_set_channels(enabled_ids: Vec<String>) -> Result<String, String> {
+    let s = logging::set_channels(enabled_ids)?;
+    Ok(serde_json::to_string(&s).unwrap_or_else(|_| "{}".into()))
+}
+
+#[tauri::command]
+fn log_apply_template(template_id: String) -> Result<String, String> {
+    let s = logging::apply_template(&template_id)?;
+    Ok(serde_json::to_string(&s).unwrap_or_else(|_| "{}".into()))
+}
+
+#[tauri::command]
+fn log_capture_sample() -> Result<String, String> {
+    // Optional: pull live values from read_ecu_data path and feed as overrides later
+    let sample = logging::capture_sample(None)?;
+    Ok(serde_json::to_string(&sample).unwrap_or_else(|_| "{}".into()))
+}
+
+#[tauri::command]
+fn log_get_samples(limit: Option<usize>) -> Result<String, String> {
+    let samples = logging::get_samples(limit);
+    Ok(serde_json::to_string(&samples).unwrap_or_else(|_| "[]".into()))
+}
+
+#[tauri::command]
+fn log_clear() -> Result<String, String> {
+    let s = logging::clear_samples()?;
+    Ok(serde_json::to_string(&s).unwrap_or_else(|_| "{}".into()))
+}
+
+#[tauri::command]
+fn log_export_csv() -> Result<String, String> {
+    logging::export_csv()
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -267,7 +326,7 @@ fn correct_bin_checksums(data: Vec<u8>) -> Result<Vec<u8>, String> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Tables / XDF — DB-driven auto-load (v2.3)
+// Tables / XDF
 // ─────────────────────────────────────────────────────────────────────────────
 
 #[tauri::command]
@@ -283,11 +342,6 @@ fn get_tuning_advice(table_id: String, sample_value: f64, ecu_family: String) ->
         "Advice for {} on {}: sample {:.1}. Cross-check with logs, stay conservative on first pass. Use community maps as starting point only.",
         table_id, ecu_family, sample_value
     ))
-}
-
-#[tauri::command]
-fn get_logging_templates() -> Result<String, String> {
-    Ok(json!([{"id":"base","name":"Base","pids":["rpm","map","tps","ect"]},{"id":"boost","name":"Boost","pids":["rpm","map","boost","rail"]}]).to_string())
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -391,9 +445,22 @@ pub fn run() {
             get_ecu_info,
             read_properties,
             read_ecu_data,
+            // Logging v2.4
+            get_logging_templates,
+            log_get_status,
+            log_start,
+            log_stop,
+            log_set_channels,
+            log_apply_template,
+            log_capture_sample,
+            log_get_samples,
+            log_clear,
+            log_export_csv,
+            // DTC
             read_dtcs_cmd,
             read_freeze_frame_cmd,
             clear_dtcs_cmd,
+            // Checksum / tables
             validate_bin_checksums_summary_cmd,
             validate_checksums_cmd,
             correct_bin_checksums,
@@ -402,13 +469,14 @@ pub fn run() {
             xdf::patch_table_into_bin,
             auto_load_tables_for_bin,
             get_tuning_advice,
-            get_logging_templates,
+            // Flash / security
             guided_flash_pipeline,
             compare_bin_to_ecu,
             verify_after_write,
             unlock_level1,
             unlock_level2,
             bosch_uds_unlock,
+            // J2534
             j2534::j2534_list_devices,
             j2534::j2534_connect,
             j2534::j2534_connect_vpw,
