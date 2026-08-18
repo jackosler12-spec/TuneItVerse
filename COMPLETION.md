@@ -1,8 +1,8 @@
-# TuneItVerse v2.5.0 — Industry-Leading DIY Platform (2026-08-17)
+# TuneItVerse v2.5.1 — Industry-Leading DIY Platform (2026-08-18)
 
-**Status: v2.5.0 FULLY OPERATIONAL & INDUSTRY-LEADING** — Aggressive full-repo analysis completed. All core + advanced features verified functional. Continuous mid-transfer voltage monitoring added to guided flash (re-check every ~10 chunks, fail-closed abort on sag). Version numbers synchronized across package.json / UI / docs. Data logging, security (real EDC16C41 + GM L1/L2), checksum, XDF, J2534, DB-driven tables, live verify, adaptive timing all solid.
+**Status: v2.5.1 FULLY OPERATIONAL & INDUSTRY-LEADING** — Aggressive full-repo analysis completed. All core + advanced features verified functional. Continuous mid-transfer voltage monitoring IMPLEMENTED in guided flash write loops (re-check every ~10 chunks, fail-closed abort on sag). Version numbers synchronized across package.json / UI / docs. Data logging, security (real EDC16C41 + GM L1/L2), checksum, XDF, J2534, DB-driven tables, live verify, adaptive timing all solid.
 
-## What works (v2.5.0)
+## What works (v2.5.1)
 
 - **Full Data Logging**: start/stop session, Hz rate, channel picker, apply templates (base/boost/diesel/LS1/full), live KPI + recent samples table, clear buffer, export CSV. Offline simulation + live-ready path.
 - Connect serial / ELM / Consult / KWP / CAN init + auto-detect + J2534 production path
@@ -13,7 +13,7 @@
 - Checksum validate + auto-correct (P01 + EDC16 multipoint)
 - Auto-load tables DB-driven from refined_map_addrs (torque, SOI, IQ, boost, rail, VGT, EGR, etc.)
 - XDF parse + extract/patch + grid/3D/hex editor + side-panel advisor
-- Guided flash (honest BackupQuality, voltage gate + continuous mid-write re-check, live verify, adaptive timing, kernel HS, UDS 34/36/37)
+- Guided flash (honest BackupQuality, voltage gate + continuous mid-write re-check every 10 chunks with fail-closed, live verify, adaptive timing, kernel HS, UDS 34/36/37)
 - Bosch UDS security + GM L1/L2 + real EDC16C41 4-byte algorithm + unit tests
 - Recovery prompts + risk confirmation UI
 
@@ -36,4 +36,4 @@ npm run dev
 
 Never flash without verified backup + stable power + continuous voltage monitoring (now enforced mid-transfer). Personal dumps only. Free DIY tool — you own the risk and the results.
 
-**v2.5.0 is a complete, fully operational, industry-leading free ECU tuning platform after aggressive analysis. No critical gaps. No more bullshit prices. Build your own.**
+**v2.5.1 is a complete, fully operational, industry-leading free ECU tuning platform after aggressive analysis. No critical gaps. No more bullshit prices. Build your own.**
