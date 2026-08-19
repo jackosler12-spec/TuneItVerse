@@ -5,12 +5,12 @@
 //      - Bosch: Mode 23 + multi-frame ISO-TP (+ 0x10 session / 0x3E keep-alive)
 //      - P01/GM: kernel upload + Mode 3C ReadBlock (+ optional HS VPW)
 //   2. Live post-flash verification
-//   3. Voltage gate (PID 0x42)
+//   3. Voltage gate (PID 0x42) + CONTINUOUS mid-transfer re-check every ~10 chunks (fail-closed)
 //   4. Adaptive protocol timing
 //
 // HS path: after Mode 0xA1, best-effort J2534 DATA_RATE 41600 when device open.
 //
-// v2.1.1: GuidedFlashRequest fully frontend-compatible (aliases for bin_bytes/do_backup + defaults)
+// v2.5.2: Continuous mid-transfer voltage monitoring fully implemented in write loops.
 
 use serde::{Serialize, Deserialize};
 use crate::checksum::{ChecksumReport, correct_and_validate_checksums, CAL_IMAGE_SIZE};
@@ -679,6 +679,15 @@ where F: FnMut(FlashProgress),
                 let chunk_size = 128;
                 let total = request.tuned_bin.len();
                 for (i, chunk) in request.tuned_bin.chunks(chunk_size).enumerate() {
+                    // Continuous mid-transfer voltage monitoring (every 10 chunks)
+                    if i > 0 && i % 10 == 0 {
+                        if let Err(e) = enforce_voltage_gate(port, min_v, &mut result.logs) {
+                            result.error = Some(format!("Mid-transfer voltage sag abort at chunk {}: {}", i, e));
+                            let _ = crate::uds::restore_default_environment(port, true);
+                            return Ok(result);
+                        }
+                        result.logs.push(format!("Mid-transfer voltage re-check OK at chunk {}", i));
+                    }
                     let frame = build_mode36_chunk(chunk);
                     if let Err(e3) = send_frame(port, &frame) {
                         result.error = Some(format!("Mode36 chunk {} failed: {}", i, e3));
@@ -742,6 +751,14 @@ where F: FnMut(FlashProgress),
     let chunk_size = 128;
     let total = request.tuned_bin.len();
     for (i, chunk) in request.tuned_bin.chunks(chunk_size).enumerate() {
+        // Continuous mid-transfer voltage monitoring (every 10 chunks) — industry-leading fail-closed safety
+        if i > 0 && i % 10 == 0 {
+            if let Err(e) = enforce_voltage_gate(port, min_v, &mut result.logs) {
+                result.error = Some(format!("Mid-transfer voltage sag abort at chunk {}: {}", i, e));
+                return Ok(result);
+            }
+            result.logs.push(format!("Mid-transfer voltage re-check OK at chunk {}", i));
+        }
         let frame = build_mode36_chunk(chunk);
         if let Err(e) = send_frame(port, &frame) {
             result.error = Some(format!("Mode36 chunk {} failed: {}", i, e));

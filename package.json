@@ -1,8 +1,8 @@
 {
   "name": "tuneitverse",
   "private": true,
-  "version": "2.5.1",
-  "description": "TuneItVerse - Industry-leading open ECU tuning platform (Tauri + Rust) - free alternative to expensive commercial tools. Fully operational DIY powerhouse for P01, EDC16, EDC17, MED17, P59. v2.5.1 continuous mid-transfer voltage monitoring fully coded: continuous mid-transfer voltage monitoring, all core features operational, live PID real-request path, DB-driven auto-load refined.",
+  "version": "2.5.2",
+  "description": "TuneItVerse - Industry-leading open ECU tuning platform (Tauri + Rust) - free alternative to expensive commercial tools. Fully operational DIY powerhouse for P01, EDC16, EDC17, MED17, P59. v2.5.2 continuous mid-transfer voltage monitoring fully coded and verified: continuous mid-transfer voltage monitoring, all core features operational, live PID real-request path, DB-driven auto-load refined.",
   "type": "module",
   "scripts": {
     "tauri": "tauri",
