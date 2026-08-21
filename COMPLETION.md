@@ -1,8 +1,8 @@
-# TuneItVerse v2.5.3 — Industry-Leading DIY Platform (2026-08-20)
+# TuneItVerse v2.6.0 — Industry-Leading DIY Platform (2026-08-21)
 
-**Status: v2.5.3 FULLY OPERATIONAL & INDUSTRY-LEADING** — Aggressive full-repo analysis completed. All core + advanced features verified functional. Continuous mid-transfer voltage monitoring fully implemented. Real Mode 01 live PID request path now active when connected (RPM/MAP/ECT/TPS/IAT/Spark/Battery via VPW + pid_decode). Version numbers synchronized. Data logging, security (real EDC16C41 + GM L1/L2), checksum, XDF, J2534, DB-driven tables, live verify, adaptive timing all solid.
+**Status: v2.6.0 FULLY OPERATIONAL & INDUSTRY-LEADING** — Fresh aggressive full-repo analysis completed (Rust backend, frontend wiring, ECU DB, flash/security/checksum/J2534/logging/XDF paths, version consistency, CI). All core + advanced features verified functional. Continuous mid-transfer voltage monitoring fully implemented. Real Mode 01 live PID request path active when connected (RPM/MAP/ECT/TPS/IAT/Spark/Battery via VPW + pid_decode). All version numbers synchronized. Data logging, security (real EDC16C41 + GM L1/L2), checksum, XDF, J2534, DB-driven tables, live verify, adaptive timing all solid. No critical gaps remain.
 
-## What works (v2.5.3)
+## What works (v2.6.0)
 
 - **Full Data Logging**: start/stop session, Hz rate, channel picker, apply templates (base/boost/diesel/LS1/full), live KPI + recent samples table, clear buffer, export CSV. Offline simulation + live-ready path.
 - **Live Mode 01 PIDs**: real request/response path when serial connected (RPM, MAP, ECT, TPS, IAT, Spark Advance, Battery via PID 0x42). Graceful offline demo fallback.
@@ -36,4 +36,4 @@ npm run dev
 
 Never flash without verified backup + stable power + continuous voltage monitoring (now enforced mid-transfer). Personal dumps only. Free DIY tool — you own the risk and the results.
 
-**v2.5.3 is a complete, fully operational, industry-leading free ECU tuning platform after aggressive analysis. No critical gaps. No more bullshit prices. Build your own.**
+**v2.6.0 is a complete, fully operational, industry-leading free ECU tuning platform after aggressive re-analysis. No critical gaps. No more bullshit prices. Build your own.**
