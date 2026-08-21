@@ -1,7 +1,7 @@
 [package]
 name = "TuneItVerse"
-version = "2.5.3"
-description = "ECU Tuning platform for JRTuners - Industry leading open source alternative to expensive commercial tools. Fully operational v2.5.3 with complete Priority 0 safety gates, real Bosch/GM algorithms, production J2534, scalable ECU DB, full guided flash + live verify + continuous voltage + real Mode 01 live PID path. Aggressive analysis confirmed no critical gaps."
+version = "2.6.0"
+description = "ECU Tuning platform for JRTuners - Industry leading open source alternative to expensive commercial tools. Fully operational v2.6.0 with complete Priority 0 safety gates, real Bosch/GM algorithms, production J2534, scalable ECU DB, full guided flash + live verify + continuous voltage + real Mode 01 live PID path. Aggressive re-analysis confirmed no critical gaps."
 authors = ["JRTuners"]
 edition = "2021"
 
