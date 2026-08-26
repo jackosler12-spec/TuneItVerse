@@ -1,11 +1,11 @@
-# TuneItVerse v2.7.0 — Industry-Leading DIY Platform (2026-08-25)
+# TuneItVerse v2.8.0 — Industry-Leading DIY Platform (2026-08-26)
 
-**Status: v2.7.0 FULLY OPERATIONAL & INDUSTRY-LEADING** — Fresh aggressive full-repo analysis completed (Rust backend every module, frontend wiring, ECU DB, flash/security/checksum/J2534/logging/XDF paths, version consistency, CI). All core + advanced features verified functional. Continuous mid-transfer voltage monitoring fully implemented and active in write loops. Real Mode 01 live PID request path active when connected (RPM/MAP/ECT/TPS/IAT/Spark/Battery via VPW + pid_decode). All version numbers synchronized (package, Cargo, tauri.conf, UI). Data logging, security (real EDC16C41 + GM L1/L2), checksum, XDF, J2534, DB-driven tables, live verify, adaptive timing all solid. No critical gaps remain.
+**Status: v2.8.0 FULLY OPERATIONAL & INDUSTRY-LEADING** — Fresh aggressive full-repo analysis completed (Rust backend every module, frontend wiring, ECU DB, flash/security/checksum/J2534/logging/XDF paths, version consistency, CI). All core + advanced features verified functional. Continuous mid-transfer voltage monitoring fully implemented and active in write loops. Real Mode 01 live PID request path active when connected (RPM/MAP/ECT/TPS/IAT/Spark/Battery via VPW + pid_decode) **and now feeds the data logging engine live** (v2.8.0 closes the remaining live-feed gap). All version numbers synchronized (package, Cargo, tauri.conf, UI). Data logging, security (real EDC16C41 + GM L1/L2), checksum, XDF, J2534, DB-driven tables, live verify, adaptive timing all solid. No critical gaps remain.
 
-## What works (v2.7.0)
+## What works (v2.8.0)
 
-- **Full Data Logging**: start/stop session, Hz rate, channel picker, apply templates (base/boost/diesel/LS1/full), live KPI + recent samples table, clear buffer, export CSV. Offline simulation + live-ready path.
-- **Live Mode 01 PIDs**: real request/response path when serial connected (RPM, MAP, ECT, TPS, IAT, Spark Advance, Battery via PID 0x42). Graceful offline demo fallback.
+- **Full Data Logging**: start/stop session, Hz rate, channel picker, apply templates (base/boost/diesel/LS1/full), live KPI + recent samples table, clear buffer, export CSV. Offline simulation + **live Mode-01 overrides when connected** (v2.8.0).
+- **Live Mode 01 PIDs**: real request/response path when serial connected (RPM, MAP, ECT, TPS, IAT, Spark Advance, Battery via PID 0x42). Graceful offline demo fallback. Now powers logging samples.
 - Connect serial / ELM / Consult / KWP / CAN init + auto-detect + J2534 production path
 - Read properties + ECU DB lookup (5 families) + get_ecu_info
 - Full DTC read (03/07/0A) + freeze frame + clear
@@ -36,4 +36,4 @@ npm run dev
 
 Never flash without verified backup + stable power + continuous voltage monitoring (now enforced mid-transfer). Personal dumps only. Free DIY tool — you own the risk and the results.
 
-**v2.7.0 is a complete, fully operational, industry-leading free ECU tuning platform after aggressive re-analysis on 2026-08-25. No critical gaps. No more bullshit prices. Build your own.**
+**v2.8.0 is a complete, fully operational, industry-leading free ECU tuning platform after aggressive re-analysis on 2026-08-26. Live logging feed integrated. No critical gaps. No more bullshit prices. Build your own.**
