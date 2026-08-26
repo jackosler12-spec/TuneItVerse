@@ -1,6 +1,6 @@
 // TuneItVerse lib.rs — Complete Tauri entry + all commands for fully operational ECU tuning platform
-// v2.5.3 — Industry-leading free alternative. Full data logging engine, dynamic DB tables, all modules wired.
-// Live Mode 01 PID path now active when connected. Build your own. No bullshit prices.
+// v2.8.0 — Industry-leading free alternative. Full data logging engine with live PID feed, dynamic DB tables, all modules wired.
+// Live Mode 01 PID path active + now feeds data logging. Build your own. No bullshit prices.
 
 #![allow(unused_imports, dead_code, non_snake_case)]
 
@@ -23,6 +23,7 @@ use serialport::SerialPort;
 use std::sync::Mutex;
 use std::time::Duration;
 use serde_json::json;
+use std::collections::HashMap;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Shared connection state
@@ -183,7 +184,7 @@ fn read_properties() -> Result<String, String> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Live data / PIDs — REAL Mode 01 path when connected (v2.5.3)
+// Live data / PIDs — REAL Mode 01 path when connected (v2.5.3+)
 // ─────────────────────────────────────────────────────────────────────────────
 
 #[tauri::command]
@@ -271,7 +272,7 @@ fn read_ecu_data() -> Result<String, String> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Full Data Logging (v2.4)
+// Full Data Logging (v2.4 + v2.8.0 live feed)
 // ─────────────────────────────────────────────────────────────────────────────
 
 #[tauri::command]
@@ -312,8 +313,51 @@ fn log_apply_template(template_id: String) -> Result<String, String> {
 
 #[tauri::command]
 fn log_capture_sample() -> Result<String, String> {
-    // Optional: pull live values from read_ecu_data path and feed as overrides later
-    let sample = logging::capture_sample(None)?;
+    // v2.8.0: Pull real live Mode-01 values when connected and feed as overrides.
+    // Offline / fail-soft still uses realistic simulation from logging engine.
+    let live_overrides = with_port(|port| {
+        use crate::vpw::{build_obd_request, request_response, parse_mode01_response};
+        use crate::pid_decode::{decode_engine_rpm, decode_map, decode_ect, decode_throttle_pos, decode_iat, decode_timing_advance};
+
+        let mut map: HashMap<String, f64> = HashMap::new();
+
+        if let Ok(resp) = request_response(port, &build_obd_request(0x0C)) {
+            if let Some(data) = parse_mode01_response(&resp, 0x0C) {
+                if let Some(v) = decode_engine_rpm(&data) { map.insert("rpm".into(), v as f64); }
+            }
+        }
+        if let Ok(resp) = request_response(port, &build_obd_request(0x0B)) {
+            if let Some(data) = parse_mode01_response(&resp, 0x0B) {
+                if let Some(v) = decode_map(&data) { map.insert("map".into(), v as f64); map.insert("boost".into(), (v as f64 - 101.3).max(0.0)); }
+            }
+        }
+        if let Ok(resp) = request_response(port, &build_obd_request(0x05)) {
+            if let Some(data) = parse_mode01_response(&resp, 0x05) {
+                if let Some(v) = decode_ect(&data) { map.insert("ect".into(), v as f64); }
+            }
+        }
+        if let Ok(resp) = request_response(port, &build_obd_request(0x11)) {
+            if let Some(data) = parse_mode01_response(&resp, 0x11) {
+                if let Some(v) = decode_throttle_pos(&data) { map.insert("tps".into(), v as f64); }
+            }
+        }
+        if let Ok(resp) = request_response(port, &build_obd_request(0x0F)) {
+            if let Some(data) = parse_mode01_response(&resp, 0x0F) {
+                if let Some(v) = decode_iat(&data) { map.insert("iat".into(), v as f64); }
+            }
+        }
+        if let Ok(resp) = request_response(port, &build_obd_request(0x0E)) {
+            if let Some(data) = parse_mode01_response(&resp, 0x0E) {
+                if let Some(v) = decode_timing_advance(&data) { map.insert("spark".into(), v as f64); }
+            }
+        }
+        if let Some(v) = crate::flash::read_battery_voltage(port) {
+            map.insert("batt".into(), v as f64);
+        }
+        Ok(map)
+    }).ok();
+
+    let sample = logging::capture_sample(live_overrides)?;
     Ok(serde_json::to_string(&sample).unwrap_or_else(|_| "{}".into()))
 }
 
@@ -500,7 +544,7 @@ pub fn run() {
             get_ecu_info,
             read_properties,
             read_ecu_data,
-            // Logging v2.4
+            // Logging v2.4 + v2.8 live feed
             get_logging_templates,
             log_get_status,
             log_start,
