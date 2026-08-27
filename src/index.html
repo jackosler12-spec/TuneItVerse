@@ -6,7 +6,6 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-
 <nav class="top-nav">
   <div class="nav-brand">TuneItVerse <span class="version">v2.9.0</span></div>
   <div class="nav-links">
@@ -23,7 +22,6 @@
     <button id="btn-connect-top" class="btn btn-primary">Connect ECU</button>
   </div>
 </nav>
-
 <div id="view-dashboard" class="content">
   <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px;">
     <div class="pro-badge" style="background:#0a0; color:#000; padding:2px 8px; border-radius:3px; font-size:11px; font-weight:700;">PRO</div>
@@ -42,11 +40,10 @@
     <div class="panel" style="padding:12px; font-size:12px;">
       <strong>Connection Status</strong><br>
       <span id="dash-conn-hint">Disconnected. Use Connect tab.</span>
-      <div id="dash-quick-status" style="margin-top:8px; font-family:monospace; font-size:11px;"></div>
     </div>
     <div class="panel" style="padding:12px; font-size:12px;">
       <strong>Features</strong><br>
-      Full data logging • XDF editor • Guided flash + voltage gate • DTC • 512KB P01 checksum • BIN identify • BIN vs BIN diff • Map-from-log.
+      Full data logging • XDF editor • Guided flash • DTC • BIN identify • BIN vs BIN diff • Map-from-log.
     </div>
     <div class="panel" style="padding:12px; font-size:12px;">
       <strong>BIN Identity</strong><br>
@@ -54,28 +51,19 @@
     </div>
   </div>
 </div>
-
 <div id="view-connect" class="content content--hidden">
   <h2>ECU Connection</h2>
   <div class="panel" style="max-width:600px;">
-    <div class="form-group">
-      <label>Serial Port</label>
-      <div style="display:flex; gap:8px;">
-        <select id="port-select" style="flex:1; padding:6px;"></select>
-        <button id="btn-refresh-ports" class="btn btn-sm">Refresh</button>
-      </div>
+    <div class="form-group"><label>Serial Port</label>
+      <div style="display:flex; gap:8px;"><select id="port-select" style="flex:1; padding:6px;"></select><button id="btn-refresh-ports" class="btn btn-sm">Refresh</button></div>
     </div>
-    <div class="form-group">
-      <label>Baud Rate</label>
+    <div class="form-group"><label>Baud Rate</label>
       <select id="baud-select" style="width:100%; padding:6px;">
-        <option value="10400">10400 (VPW)</option>
-        <option value="9600">9600 (Consult)</option>
-        <option value="115200" selected>115200 (ELM/CAN)</option>
-        <option value="500000">500000 (CAN FD)</option>
+        <option value="10400">10400 (VPW)</option><option value="9600">9600 (Consult)</option>
+        <option value="115200" selected>115200 (ELM/CAN)</option><option value="500000">500000 (CAN FD)</option>
       </select>
     </div>
-    <div class="form-group">
-      <label>Protocol / Interface</label>
+    <div class="form-group"><label>Protocol / Interface</label>
       <div style="display:flex; gap:16px; margin-top:4px;">
         <label><input type="radio" name="proto" value="auto" checked> Auto</label>
         <label><input type="radio" name="proto" value="vpw"> VPW/J1850</label>
@@ -84,8 +72,7 @@
         <label><input type="radio" name="proto" value="consult"> Consult</label>
       </div>
     </div>
-    <div class="form-group">
-      <label>Hardware</label>
+    <div class="form-group"><label>Hardware</label>
       <div style="display:flex; gap:16px;">
         <label><input type="radio" name="hw" value="elm" checked> ELM327 / Serial</label>
         <label><input type="radio" name="hw" value="j2534"> J2534</label>
@@ -103,23 +90,12 @@
     <div id="connect-log" style="margin-top:12px; font-family:monospace; font-size:11px; white-space:pre-wrap; background:#111; padding:8px; min-height:60px; border:1px solid #333;"></div>
   </div>
 </div>
-
 <div id="view-live" class="content content--hidden">
   <h2>Data Logging</h2>
-  <p style="font-size:12px; color:var(--text-muted); max-width:900px;">Full session logger. Offline simulation works; live Mode-01 overrides when connected.</p>
   <div class="panel" style="padding:12px; margin-bottom:12px;">
     <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center;">
-      <label style="font-size:12px;">Rate (Hz)
-        <select id="log-rate" style="margin-left:4px; padding:4px;">
-          <option value="5">5</option>
-          <option value="10" selected>10</option>
-          <option value="20">20</option>
-          <option value="25">25</option>
-        </select>
-      </label>
-      <label style="font-size:12px;">Template
-        <select id="log-template" style="margin-left:4px; padding:4px; min-width:140px;"></select>
-      </label>
+      <label style="font-size:12px;">Rate (Hz)<select id="log-rate" style="margin-left:4px; padding:4px;"><option value="5">5</option><option value="10" selected>10</option><option value="20">20</option></select></label>
+      <label style="font-size:12px;">Template<select id="log-template" style="margin-left:4px; padding:4px; min-width:140px;"></select></label>
       <button id="btn-log-apply-tmpl" class="btn btn-sm">Apply Template</button>
       <button id="btn-log-start" class="btn btn-primary">Start Log</button>
       <button id="btn-log-stop" class="btn btn-danger">Stop</button>
@@ -130,130 +106,72 @@
     <div id="log-session-meta" style="margin-top:8px; font-size:11px; color:#888; font-family:monospace;">—</div>
   </div>
   <div style="display:grid; grid-template-columns: 280px 1fr; gap:12px;">
-    <div class="panel" style="padding:10px;">
-      <strong style="font-size:13px;">Channels</strong>
-      <div id="log-channels" style="margin-top:8px; max-height:360px; overflow:auto; font-size:12px;"></div>
-      <button id="btn-log-apply-ch" class="btn btn-sm" style="margin-top:8px; width:100%;">Apply Channel Selection</button>
-    </div>
+    <div class="panel" style="padding:10px;"><strong>Channels</strong><div id="log-channels" style="margin-top:8px; max-height:360px; overflow:auto; font-size:12px;"></div><button id="btn-log-apply-ch" class="btn btn-sm" style="margin-top:8px; width:100%;">Apply Channel Selection</button></div>
     <div>
-      <div class="panel" style="padding:10px; margin-bottom:8px;">
-        <strong style="font-size:13px;">Live KPIs</strong>
-        <div id="log-kpis" style="display:flex; flex-wrap:wrap; gap:12px; margin-top:8px; font-size:14px;"></div>
-      </div>
-      <div class="panel" style="padding:10px;">
-        <strong style="font-size:13px;">Recent Samples</strong>
-        <div style="overflow:auto; max-height:280px; margin-top:6px;">
-          <table id="log-table" style="width:100%; border-collapse:collapse; font-size:11px; font-family:var(--font-mono);">
-            <thead id="log-thead"></thead>
-            <tbody id="log-tbody"></tbody>
-          </table>
-        </div>
-      </div>
+      <div class="panel" style="padding:10px; margin-bottom:8px;"><strong>Live KPIs</strong><div id="log-kpis" style="display:flex; flex-wrap:wrap; gap:12px; margin-top:8px;"></div></div>
+      <div class="panel" style="padding:10px;"><strong>Recent Samples</strong><table id="log-table" style="width:100%; border-collapse:collapse; font-size:11px;"><thead id="log-thead"></thead><tbody id="log-tbody"></tbody></table></div>
     </div>
   </div>
 </div>
-
 <div id="view-diagnostics" class="content content--hidden">
   <h2>Diagnostics / DTCs</h2>
-  <div style="display:flex; gap:8px; flex-wrap:wrap; margin:12px 0;">
+  <div style="display:flex; gap:8px; margin:12px 0;">
     <button id="btn-read-dtcs" class="btn btn-primary">Read DTCs</button>
     <button id="btn-read-freeze" class="btn">Read Freeze Frame</button>
     <button id="btn-clear-dtcs" class="btn btn-danger">Clear DTCs</button>
   </div>
-  <div id="dtc-status" style="font-size:12px; color:#0c0; margin-bottom:8px;">Idle</div>
-  <div class="panel" style="padding:12px; margin-bottom:12px;">
-    <strong>Codes</strong>
-    <div id="dtc-summary" style="font-size:12px; margin:6px 0; color:var(--text-muted);">No read yet.</div>
-    <table id="dtc-table" style="width:100%; border-collapse:collapse; font-size:12px; font-family:var(--font-mono);">
-      <thead><tr style="text-align:left; border-bottom:1px solid #333;"><th style="padding:4px 8px;">Code</th><th style="padding:4px 8px;">Type</th><th style="padding:4px 8px;">Description</th></tr></thead>
-      <tbody id="dtc-tbody"><tr><td colspan="3" style="padding:8px; color:#666;">Connect ECU and click Read DTCs.</td></tr></tbody>
-    </table>
+  <div id="dtc-status">Idle</div>
+  <div class="panel" style="padding:12px;"><strong>Codes</strong><div id="dtc-summary">No read yet.</div>
+    <table id="dtc-table" style="width:100%; font-size:12px;"><thead><tr><th>Code</th><th>Type</th><th>Description</th></tr></thead><tbody id="dtc-tbody"></tbody></table>
   </div>
-  <div class="panel" style="padding:12px;">
-    <strong>Freeze Frame</strong>
-    <pre id="freeze-frame" style="background:#111; padding:8px; min-height:80px; white-space:pre-wrap; font-size:11px; border:1px solid #333; margin-top:8px;">—</pre>
-  </div>
+  <pre id="freeze-frame" style="background:#111; padding:8px; min-height:80px;">—</pre>
 </div>
-
 <div id="view-tables" class="content content--hidden">
-  <div class="toolbar" style="padding:8px 12px; border-bottom:1px solid var(--border-subtle); display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+  <div class="toolbar" style="padding:8px 12px; display:flex; gap:8px; flex-wrap:wrap;">
     <button id="btn-load-bin" class="btn btn-primary">Load .BIN</button>
     <button id="btn-load-xdf" class="btn">Load XDF / XML</button>
     <button id="btn-demo-tables" class="btn">Demo Tables</button>
-    <span id="tables-status" style="margin-left:12px; font-size:12px; color:var(--text-muted);">No BIN/XDF loaded.</span>
+    <span id="tables-status">No BIN/XDF loaded.</span>
     <button id="btn-identify-bin" class="btn">Identify BIN</button>
     <button id="btn-compare-bins" class="btn">Compare Another BIN</button>
     <button id="btn-map-from-log" class="btn">Map from Log</button>
-    <button id="btn-save-patched" class="btn" style="margin-left:auto;" disabled>Save Patched BIN</button>
+    <button id="btn-save-patched" class="btn" disabled>Save Patched BIN</button>
   </div>
   <div class="tables-layout">
-    <div class="tables-list-panel">
-      <div class="table-filters">
-        <button class="chip-filter active" data-filter="all">All</button>
-        <button class="chip-filter" data-filter="1d">1D</button>
-        <button class="chip-filter" data-filter="2d">2D</button>
-        <button class="chip-filter" data-filter="3d">3D</button>
-      </div>
-      <div id="tables-list" class="tables-list"></div>
-    </div>
+    <div class="tables-list-panel"><div class="table-filters"><button class="chip-filter active" data-filter="all">All</button></div><div id="tables-list" class="tables-list"></div></div>
     <div class="tables-editor-panel">
-      <div class="rw-tabs" id="editor-tabs">
-        <button class="editor-tab active" data-tab="grid">Grid</button>
-        <button class="editor-tab" data-tab="3d">3D Visual</button>
-        <button class="editor-tab" data-tab="hex">Hex Dump</button>
-      </div>
-      <div id="editor-content" style="flex:1; overflow:auto; padding:8px; background:var(--surface-1);"></div>
+      <div class="rw-tabs" id="editor-tabs"><button class="editor-tab active" data-tab="grid">Grid</button><button class="editor-tab" data-tab="3d">3D Visual</button><button class="editor-tab" data-tab="hex">Hex Dump</button></div>
+      <div id="editor-content" style="flex:1; overflow:auto; padding:8px;"></div>
     </div>
-    <div class="tables-side-panel" id="tables-side-panel">
-      <div style="padding:10px 12px; font-weight:600; border-bottom:1px solid var(--border-subtle);">Table Info</div>
-      <div id="side-meta" style="padding:10px 12px; font-size:12px; line-height:1.35;"></div>
-      <div style="padding:10px 12px; border-top:1px solid var(--border-subtle);">
-        <div style="font-weight:600; margin-bottom:4px;">Tuning Advisor</div>
-        <div id="side-advice" style="font-size:11px; color:var(--text-muted); min-height:60px;"></div>
-      </div>
-      <div style="padding:10px 12px; border-top:1px solid var(--border-subtle); font-size:11px;">
-        <strong>Checksum / Notes</strong><br>
-        <span id="side-checksum">Select table for details.</span>
-      </div>
+    <div class="tables-side-panel">
+      <div id="side-meta"></div>
+      <div id="side-advice"></div>
+      <span id="side-checksum">Select table for details.</span>
     </div>
   </div>
 </div>
-
 <div id="view-flash" class="content content--hidden">
   <h2>Flash / Guided Pipeline</h2>
-  <div style="margin-bottom:8px; display:flex; gap:8px; flex-wrap:wrap;">
-    <button id="btn-show-risk" class="btn btn-danger">Show Risk Confirmation & Run Guided Flash</button>
-    <button id="btn-compare-bin" class="btn">Compare Loaded BIN to ECU</button>
-    <button id="btn-verify-write" class="btn">Verify After Write</button>
-  </div>
-  <pre id="compare-result" style="background:#111; padding:8px; min-height:40px; white-space:pre-wrap; font-size:11px; border:1px solid #333; display:none;"></pre>
-  <div id="risk-section" style="display:none; border:1px solid #c33; padding:10px; margin-bottom:8px; background:#1a0a0a;">
-    <strong style="color:#f66;">RISK ACKNOWLEDGEMENT (check all)</strong><br>
-    <label><input type="checkbox" id="risk-backup"> I have a verified backup of the current ECU calibration</label><br>
-    <label><input type="checkbox" id="risk-power"> Stable power supply + battery charger connected</label><br>
-    <label><input type="checkbox" id="risk-ground"> Proper grounding and no open circuits</label><br>
-    <label><input type="checkbox" id="risk-understand"> I understand this can brick the ECU if interrupted</label><br>
-    <button id="btn-run-flash" class="btn btn-danger" disabled style="margin-top:8px;">PROCEED WITH GUIDED FLASH</button>
+  <button id="btn-show-risk" class="btn btn-danger">Show Risk Confirmation & Run Guided Flash</button>
+  <button id="btn-compare-bin" class="btn">Compare Loaded BIN to ECU</button>
+  <button id="btn-verify-write" class="btn">Verify After Write</button>
+  <pre id="compare-result" style="display:none;"></pre>
+  <div id="risk-section" style="display:none; border:1px solid #c33; padding:10px;">
+    <label><input type="checkbox" id="risk-backup"> verified backup</label><br>
+    <label><input type="checkbox" id="risk-power"> stable power</label><br>
+    <label><input type="checkbox" id="risk-ground"> proper grounding</label><br>
+    <label><input type="checkbox" id="risk-understand"> I understand brick risk</label><br>
+    <button id="btn-run-flash" class="btn btn-danger" disabled>PROCEED WITH GUIDED FLASH</button>
   </div>
   <div>Progress: <span id="flash-progress">0%</span></div>
-  <pre id="flash-log" style="background:#111; padding:8px; min-height:120px; white-space:pre-wrap; font-size:11px; border:1px solid #333;"></pre>
+  <pre id="flash-log" style="background:#111; padding:8px; min-height:120px;"></pre>
 </div>
-
 <div id="view-scripts" class="content content--hidden">
   <h2>Python ECU Scripts / Templates</h2>
-  <p style="font-size:12px; color:var(--text-muted);">python/ecu_scripting.py is offline-only — no embedded Python runtime yet.</p>
   <button id="btn-refresh-scripts">Refresh Templates</button>
-  <div id="custom-scripts-list" style="margin-top:8px;"></div>
+  <div id="custom-scripts-list"></div>
 </div>
-
-<div id="recovery-modal" class="modal hidden">
-  <div class="modal-panel" style="max-width:520px; background:var(--surface); border:1px solid #c33; padding:16px;">
-    <h3 style="color:#f66; margin-top:0;">Recovery assistance</h3>
-    <div id="recovery-body" style="font-size:12px; white-space:pre-wrap;"></div>
-    <button id="recovery-close" class="btn" style="margin-top:12px;">Close</button>
-  </div>
-</div>
-
 <script src="main.js"></script>
+<script src="v29.js"></script>
 </body>
 </html>
