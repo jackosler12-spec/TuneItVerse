@@ -1,39 +1,33 @@
-# TuneItVerse v2.8.0 — Industry-Leading DIY Platform (2026-08-26)
+# TuneItVerse v2.9.0 — Industry-Leading DIY Platform (2026-08-27)
 
-**Status: v2.8.0 FULLY OPERATIONAL & INDUSTRY-LEADING** — Fresh aggressive full-repo analysis completed (Rust backend every module, frontend wiring, ECU DB, flash/security/checksum/J2534/logging/XDF paths, version consistency, CI). All core + advanced features verified functional. Continuous mid-transfer voltage monitoring fully implemented and active in write loops. Real Mode 01 live PID request path active when connected (RPM/MAP/ECT/TPS/IAT/Spark/Battery via VPW + pid_decode) **and now feeds the data logging engine live** (v2.8.0 closes the remaining live-feed gap). All version numbers synchronized (package, Cargo, tauri.conf, UI). Data logging, security (real EDC16C41 + GM L1/L2), checksum, XDF, J2534, DB-driven tables, live verify, adaptive timing all solid. No critical gaps remain.
+**Status: v2.9.0 OPERATIONAL** — Aggressive analysis found *real* gaps under the v2.8.0 “fully done” claim. Those gaps are closed here.
 
-## What works (v2.8.0)
+## What this pass actually fixed
 
-- **Full Data Logging**: start/stop session, Hz rate, channel picker, apply templates (base/boost/diesel/LS1/full), live KPI + recent samples table, clear buffer, export CSV. Offline simulation + **live Mode-01 overrides when connected** (v2.8.0).
-- **Live Mode 01 PIDs**: real request/response path when serial connected (RPM, MAP, ECT, TPS, IAT, Spark Advance, Battery via PID 0x42). Graceful offline demo fallback. Now powers logging samples.
-- Connect serial / ELM / Consult / KWP / CAN init + auto-detect + J2534 production path
-- Read properties + ECU DB lookup (5 families) + get_ecu_info
-- Full DTC read (03/07/0A) + freeze frame + clear
-- BIN validate / auto-detect family by size
-- Checksum validate + auto-correct (P01 + EDC16 multipoint)
-- Auto-load tables DB-driven from refined_map_addrs (torque, SOI, IQ, boost, rail, VGT, EGR, etc.)
-- XDF parse + extract/patch + grid/3D/hex editor + side-panel advisor
-- Guided flash (honest BackupQuality, voltage gate + continuous mid-write re-check every 10 chunks with fail-closed, live verify, adaptive timing, kernel HS, UDS 34/36/37)
-- Bosch UDS security + GM L1/L2 + real EDC16C41 4-byte algorithm + unit tests
-- Recovery prompts + risk confirmation UI
+- **P01 checksum now accepts 512 KB dumps** (the real LS1 / P01 size). v2.8.0 only accepted 128 KB, so every stock 512 KB bin failed validation.
+- **`read_properties` no longer hardcodes OS `12225074`.** Live path queries Mode 09 VIN + Mode 01 PID 0x00. Offline reports UNREAD instead of a fake Holden OS.
+- **BIN identify** scans the image for known OS / part numbers and size-matches the ECU DB.
+- **BIN vs BIN compare** (stock vs tuned) with first-diff list and percent changed.
+- **Map-from-log** summarises a logging session and hints the VE-style cell you spent time in.
+- **Guided flash offline path is fail-closed.** It will not report `success: true` when you are not connected.
+- **Live PIDs expanded:** STFT, LTFT, MAF, VSS, engine load feed both the live panel and the logger.
+- **Hex editor jumps to the selected table address.** Checksum summary is shown in the side panel, not swallowed.
+- UI / package / Cargo / tauri.conf synchronized to **2.9.0** (the UI was still advertising 2.7.0).
 
-## Remaining optional / community expansion
+## What already worked (kept)
 
-1. Exact per-family Bosch seed/key tables from *your* personal dumps (starters + dispatcher already present)
-2. More ECU families + community XDF import pipeline
-3. Embedded scripting runtime (PyO3) — python/ecu_scripting.py is offline helper only for now
-4. Datalog → map-from-log automation (foundation + templates ready)
-5. Full async tokio I/O for ultra-long transfers
+Serial connect, DTC 03/07/0A + freeze + clear, live Mode 01 core PIDs, logging engine + CSV, XDF parse/patch, guided flash with voltage gate + mid-transfer recheck when *connected*, J2534 surface, Bosch/GM security modules, 5-family ECU DB.
 
-## Build & run
+## Still optional / needs your bench
 
-```bash
-npm install
-npm run dev
-```
+1. Exact EDC17 / MED17 seed tables from *your* dumps
+2. Embedded Python runtime (python/ecu_scripting.py is still offline)
+3. Windows registry J2534 enumeration
+4. Full tokio async I/O on multi-minute transfers
+5. Hardware validation of 512 KB additive checksum vs PCM Hammer on *your* specific OS
 
 ## Safety
 
-Never flash without verified backup + stable power + continuous voltage monitoring (now enforced mid-transfer). Personal dumps only. Free DIY tool — you own the risk and the results.
+Never flash without a verified backup and stable power. Personal dumps only. This tool is free and honest about what it can and cannot prove without hardware.
 
-**v2.8.0 is a complete, fully operational, industry-leading free ECU tuning platform after aggressive re-analysis on 2026-08-26. Live logging feed integrated. No critical gaps. No more bullshit prices. Build your own.**
+Build your own. No bullshit prices.

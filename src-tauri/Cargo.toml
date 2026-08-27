@@ -1,11 +1,9 @@
 [package]
 name = "TuneItVerse"
-version = "2.8.0"
-description = "ECU Tuning platform for JRTuners - Industry leading open source alternative to expensive commercial tools. Fully operational v2.8.0 with complete Priority 0 safety gates, real Bosch/GM algorithms, production J2534, scalable ECU DB, full guided flash + live verify + continuous mid-transfer voltage + real Mode 01 live PID path + live data feed into logging. Aggressive full-repo analysis confirmed no critical gaps."
+version = "2.9.0"
+description = "ECU Tuning platform for JRTuners. v2.9.0: 512KB P01 checksum, live VIN/properties, BIN identify + diff, map-from-log, honest offline flash."
 authors = ["JRTuners"]
 edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [lib]
 name = "tune_it_verse_lib"
@@ -26,5 +24,3 @@ sha2 = "0.10"
 chrono = { version = "0.4", features = ["serde"] }
 quick-xml = { version = "0.31", features = ["serialize"] }
 libloading = "0.8"
-# For future Windows registry scan for J2534 devices (optional, cfg gated)
-# winreg = { version = "0.52", optional = true }
