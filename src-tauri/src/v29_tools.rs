@@ -1,36 +1,134 @@
-//! v2.9.0 helpers: BIN identify, BIN diff, map-from-log glue.
-//! Also re-exports size constants used by checksum dispatch notes.
+//! v2.9.0 standalone tools: BIN identify, BIN diff, map-from-log.
+//! Wired from lib.rs generate_handler once `mod v29_tools;` is added.
 
 use serde_json::json;
-use crate::ecu_database;
 use crate::logging;
+use crate::ecu_database;
 
 #[tauri::command]
 pub fn identify_bin_cmd(data: Vec<u8>) -> Result<String, String> {
-    Ok(ecu_database::identify_from_bin(&data).to_string())
+    Ok(identify_bin(&data).to_string())
 }
 
 #[tauri::command]
 pub fn compare_bins_cmd(a: Vec<u8>, b: Vec<u8>) -> Result<String, String> {
-    Ok(ecu_database::compare_bin_images(&a, &b).to_string())
+    Ok(compare_bins(&a, &b).to_string())
 }
 
 #[tauri::command]
 pub fn map_from_log_cmd() -> Result<String, String> {
-    logging::analyze_session_for_maps().map(|v| v.to_string())
+    analyze_log().map(|v| v.to_string())
 }
 
-/// Fallback identify if ecu_database helpers are not yet linked.
-#[allow(dead_code)]
-pub fn identify_bin_fallback(data: &[u8]) -> serde_json::Value {
+pub fn identify_bin(data: &[u8]) -> serde_json::Value {
+    let size = data.len();
+    let family_by_size = ecu_database::get_ecu_by_bin_size(size).map(|e| e.ecu_family);
+    let display = ecu_database::get_ecu_by_bin_size(size).map(|e| e.display_name);
+    let hay = String::from_utf8_lossy(data);
+    let mut hits = Vec::new();
+    for fam in ecu_database::list_supported_ecu_families() {
+        if let Some(e) = ecu_database::get_ecu_by_family(&fam) {
+            for id in e.part_numbers_or_os_ids {
+                if id.len() >= 5 && id.chars().any(|c| c.is_ascii_digit()) && hay.contains(&id) {
+                    hits.push(json!({"os_or_part": id, "ecu_family": e.ecu_family, "display_name": e.display_name}));
+                }
+            }
+        }
+    }
+    let mut extra = Vec::new();
+    let mut i = 0;
+    while i < data.len() {
+        if data[i].is_ascii_digit() {
+            let start = i;
+            while i < data.len() && data[i].is_ascii_digit() { i += 1; }
+            let n = i - start;
+            if (7..=10).contains(&n) {
+                extra.push(String::from_utf8_lossy(&data[start..i]).into_owned());
+            }
+        } else { i += 1; }
+    }
+    extra.sort();
+    extra.dedup();
+    extra.truncate(12);
     json!({
-        "bin_size_bytes": data.len(),
-        "family_by_size": match data.len() {
-            524288 => Some("P01_0411"),
-            131072 => Some("P01_0411"),
-            2097152 => Some("EDC16C41"),
-            _ => None,
-        },
-        "notes": "Size fingerprint only (fallback)."
+        "bin_size_bytes": size,
+        "family_by_size": family_by_size,
+        "display_name": display,
+        "os_hits_in_image": hits,
+        "numeric_id_candidates": extra,
+        "notes": if family_by_size.is_some() {
+            "Size matched a known family. Confirm OS ID before flashing."
+        } else {
+            "Unknown size — add a JSON entry in reference/ecu_database/."
+        }
     })
+}
+
+pub fn compare_bins(a: &[u8], b: &[u8]) -> serde_json::Value {
+    if a.len() != b.len() {
+        return json!({
+            "same_size": false,
+            "len_a": a.len(),
+            "len_b": b.len(),
+            "diff_bytes": serde_json::Value::Null,
+            "first_diffs": [],
+            "message": "Images are different lengths — cannot do a 1:1 compare."
+        });
+    }
+    let mut diffs = 0usize;
+    let mut first = Vec::new();
+    for (i, (x, y)) in a.iter().zip(b.iter()).enumerate() {
+        if x != y {
+            diffs += 1;
+            if first.len() < 40 {
+                first.push(json!({"offset": format!("0x{:06X}", i), "a": format!("{:02X}", x), "b": format!("{:02X}", y)}));
+            }
+        }
+    }
+    let pct = if a.is_empty() { 0.0 } else { (diffs as f64) * 100.0 / (a.len() as f64) };
+    json!({
+        "same_size": true,
+        "len_a": a.len(),
+        "len_b": b.len(),
+        "diff_bytes": diffs,
+        "same_bytes": a.len() - diffs,
+        "diff_percent": (pct * 1000.0).round() / 1000.0,
+        "identical": diffs == 0,
+        "first_diffs": first,
+        "message": if diffs == 0 { "Images are identical." } else { "Images differ — review first_diffs and re-run checksum after edits." }
+    })
+}
+
+fn analyze_log() -> Result<serde_json::Value, String> {
+    let samples = logging::get_samples(Some(5000));
+    if samples.is_empty() {
+        return Err("No log samples. Start a session and capture data first.".into());
+    }
+    let mut rpm_sum = 0.0; let mut n_rpm = 0.0;
+    let mut map_sum = 0.0; let mut n_map = 0.0;
+    let mut tps_sum = 0.0; let mut n_tps = 0.0;
+    let mut rpm_min = f64::MAX; let mut rpm_max = f64::MIN;
+    let mut map_min = f64::MAX; let mut map_max = f64::MIN;
+    for s in &samples {
+        if let Some(v) = s.values.get("rpm") { rpm_sum += v; n_rpm += 1.0; rpm_min = rpm_min.min(*v); rpm_max = rpm_max.max(*v); }
+        if let Some(v) = s.values.get("map") { map_sum += v; n_map += 1.0; map_min = map_min.min(*v); map_max = map_max.max(*v); }
+        if let Some(v) = s.values.get("tps") { tps_sum += v; n_tps += 1.0; }
+    }
+    let rpm_avg = if n_rpm > 0.0 { rpm_sum / n_rpm } else { 0.0 };
+    let map_avg = if n_map > 0.0 { map_sum / n_map } else { 0.0 };
+    let tps_avg = if n_tps > 0.0 { tps_sum / n_tps } else { 0.0 };
+    let rpm_cell = ((rpm_avg / 500.0).floor() as i32).clamp(0, 15);
+    let map_cell = ((map_avg / 16.0).floor() as i32).clamp(0, 15);
+    Ok(json!({
+        "sample_count": samples.len(),
+        "rpm_avg": (rpm_avg * 10.0).round() / 10.0,
+        "rpm_min": if n_rpm > 0.0 { (rpm_min * 10.0).round() / 10.0 } else { 0.0 },
+        "rpm_max": if n_rpm > 0.0 { (rpm_max * 10.0).round() / 10.0 } else { 0.0 },
+        "map_avg_kpa": (map_avg * 10.0).round() / 10.0,
+        "map_min_kpa": if n_map > 0.0 { (map_min * 10.0).round() / 10.0 } else { 0.0 },
+        "map_max_kpa": if n_map > 0.0 { (map_max * 10.0).round() / 10.0 } else { 0.0 },
+        "tps_avg": (tps_avg * 10.0).round() / 10.0,
+        "suggested_ve_cell": {"row_rpm": rpm_cell, "col_map": map_cell},
+        "advice": format!("Session spent most time near {:.0} RPM / {:.0} kPa MAP (hint cell r{} c{}). Tune that region first. Hint only — not auto-write.", rpm_avg, map_avg, rpm_cell, map_cell)
+    }))
 }
