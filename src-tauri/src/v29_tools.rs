@@ -1,5 +1,5 @@
 //! v2.9.0 standalone tools: BIN identify, BIN diff, map-from-log.
-//! Wired from lib.rs generate_handler once `mod v29_tools;` is added.
+//! Wired from lib.rs generate_handler (v3.0.0).
 
 use serde_json::json;
 use crate::logging;
@@ -131,4 +131,47 @@ fn analyze_log() -> Result<serde_json::Value, String> {
         "suggested_ve_cell": {"row_rpm": rpm_cell, "col_map": map_cell},
         "advice": format!("Session spent most time near {:.0} RPM / {:.0} kPa MAP (hint cell r{} c{}). Tune that region first. Hint only — not auto-write.", rpm_avg, map_avg, rpm_cell, map_cell)
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn identify_unknown_size() {
+        let v = identify_bin(&[0u8; 64]);
+        assert_eq!(v["bin_size_bytes"], 64);
+        assert!(v["family_by_size"].is_null());
+    }
+
+    #[test]
+    fn identify_p01_size() {
+        let v = identify_bin(&vec![0u8; 524288]);
+        assert_eq!(v["bin_size_bytes"], 524288);
+        assert_eq!(v["family_by_size"], "P01_0411");
+    }
+
+    #[test]
+    fn compare_same() {
+        let a = vec![1u8, 2, 3, 4];
+        let v = compare_bins(&a, &a);
+        assert_eq!(v["identical"], true);
+        assert_eq!(v["diff_bytes"], 0);
+    }
+
+    #[test]
+    fn compare_diff_len() {
+        let v = compare_bins(&[1, 2], &[1, 2, 3]);
+        assert_eq!(v["same_size"], false);
+    }
+
+    #[test]
+    fn compare_first_diff() {
+        let a = vec![0u8; 8];
+        let mut b = a.clone();
+        b[3] = 0xFF;
+        let v = compare_bins(&a, &b);
+        assert_eq!(v["diff_bytes"], 1);
+        assert_eq!(v["identical"], false);
+    }
 }

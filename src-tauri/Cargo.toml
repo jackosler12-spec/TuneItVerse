@@ -1,7 +1,7 @@
 [package]
 name = "TuneItVerse"
-version = "2.9.0"
-description = "ECU Tuning platform for JRTuners. v2.9.0: 512KB P01 checksum, live VIN/properties, BIN identify + diff, map-from-log, honest offline flash."
+version = "3.0.0"
+description = "ECU Tuning platform for JRTuners. v3.0.0: wire identify/compare/map-from-log, 512KB P01 CS, live VIN, fail-closed flash."
 authors = ["JRTuners"]
 edition = "2021"
 

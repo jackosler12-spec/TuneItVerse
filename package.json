@@ -1,8 +1,8 @@
 {
   "name": "tuneitverse",
   "private": true,
-  "version": "2.9.0",
-  "description": "TuneItVerse - Industry-leading open ECU tuning platform (Tauri + Rust). v2.9.0: 512KB P01 checksum, live VIN/properties, BIN identify + diff, map-from-log, honest offline flash.",
+  "version": "3.0.0",
+  "description": "TuneItVerse - Industry-leading open ECU tuning platform (Tauri + Rust). v3.0.0: actually wire identify/compare/map-from-log, accept 512KB P01 CS, live VIN, fail-closed flash.",
   "type": "module",
   "scripts": {
     "tauri": "tauri",

@@ -2,12 +2,12 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>TuneItVerse - Professional ECU Tuning Platform v2.9.0</title>
+  <title>TuneItVerse - Professional ECU Tuning Platform v3.0.0</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 <nav class="top-nav">
-  <div class="nav-brand">TuneItVerse <span class="version">v2.9.0</span></div>
+  <div class="nav-brand">TuneItVerse <span class="version">v3.0.0</span></div>
   <div class="nav-links">
     <a href="#" class="nav-item active" data-view="dashboard">Dashboard</a>
     <a href="#" class="nav-item" data-view="connect">Connect</a>
@@ -26,7 +26,7 @@
   <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px;">
     <div class="pro-badge" style="background:#0a0; color:#000; padding:2px 8px; border-radius:3px; font-size:11px; font-weight:700;">PRO</div>
     <h1 style="margin:0; font-size:22px;">TuneItVerse</h1>
-    <span style="color:#666; font-size:12px;">v2.9.0 • 512KB P01 CS • BIN identify • Honest flash • DIY</span>
+    <span style="color:#666; font-size:12px;">v3.0.0 • 512KB CS wired • Identify registered • Fail-closed flash • DIY</span>
   </div>
   <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px,1fr)); gap:12px;">
     <div class="panel" style="padding:12px;">
@@ -168,8 +168,9 @@
 </div>
 <div id="view-scripts" class="content content--hidden">
   <h2>Python ECU Scripts / Templates</h2>
-  <button id="btn-refresh-scripts">Refresh Templates</button>
-  <div id="custom-scripts-list"></div>
+  <p style="font-size:12px;color:#888;max-width:720px;">These are bench helpers, not an embedded interpreter. The live checksum / identify / map-from-log path lives in the Rust backend. Refresh lists the shipped templates.</p>
+  <button id="btn-refresh-scripts" class="btn">Refresh Templates</button>
+  <div id="custom-scripts-list" style="margin-top:12px;"></div>
 </div>
 <script src="main.js"></script>
 <script src="v29.js"></script>
