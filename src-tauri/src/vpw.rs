@@ -28,7 +28,7 @@ pub const PRIO_PHYS: u8 = 0x6C;
 pub const PRIO_FUNC_OBD: u8 = 0x68;
 pub const FUNC_TARGET: u8 = 0x6A;
 
-// ── Mode constants (from VPW.cs Mode) ───────────────────────────────────
+// ── Mode constants (from VPW.cs Mode) ─────────────────────────────────
 pub const MODE_EXIT_KERNEL: u8 = 0x20;
 pub const MODE_READ_BLOCK: u8 = 0x3C;
 pub const MODE_TEST_DEVICE: u8 = 0x3F;
@@ -39,12 +39,51 @@ pub const MODE_HS_ENTER: u8 = 0xA1;
 pub const RESP_HS_PREPARE: u8 = 0xE0; // A0 + 0x40
 pub const RESP_HS_ENTER: u8 = 0xE1;   // A1 + 0x40
 
-// ── Frame builders ──────────────────────────────────────────────────────
+// ── Frame builders ──────────────────────────────────────────
 
 pub fn build_obd_request(pid: u8) -> Vec<u8> {
     let mut frame = vec![PRIO_FUNC_OBD, FUNC_TARGET, TOOL_ADDR, 0x01, pid];
     frame.push(vpw_checksum(&frame));
     frame
+}
+
+/// Mode 09 info request (VIN 0x02, CALID 0x04). Same VPW functional header as Mode 01.
+pub fn build_mode09_request(info_type: u8) -> Vec<u8> {
+    let mut frame = vec![PRIO_FUNC_OBD, FUNC_TARGET, TOOL_ADDR, 0x09, info_type];
+    frame.push(vpw_checksum(&frame));
+    frame
+}
+
+pub fn parse_mode09_response(frame: &[u8], expected_info: u8) -> Option<Vec<u8>> {
+    // Accept 49 <type> [count] <payload...>
+    if frame.len() < 6 {
+        return None;
+    }
+    for i in 0..frame.len().saturating_sub(2) {
+        if frame[i] == 0x49 && frame[i + 1] == expected_info {
+            let start = i + 2;
+            let end = if validate_frame(frame) { frame.len() - 1 } else { frame.len() };
+            if start < end {
+                return Some(frame[start..end].to_vec());
+            }
+        }
+    }
+    None
+}
+
+pub fn ascii_from_obd_payload(data: &[u8]) -> String {
+    let bytes = if data.first().copied().unwrap_or(0) <= 0x04 && data.len() > 1 {
+        &data[1..]
+    } else {
+        data
+    };
+    let s: String = bytes
+        .iter()
+        .copied()
+        .filter(|b| *b >= 0x20 && *b <= 0x7E)
+        .map(|b| b as char)
+        .collect();
+    s.trim().to_string()
 }
 
 pub fn build_physical_request(pid: u8) -> Vec<u8> {
@@ -115,7 +154,7 @@ pub fn build_mode_a1_hs_enter() -> Vec<u8> {
     frame
 }
 
-// ── Checksum ────────────────────────────────────────────────────────────
+// ── Checksum ────────────────────────────────────────────
 
 pub fn vpw_checksum(data: &[u8]) -> u8 {
     data.iter().fold(0u8, |acc, &b| acc.wrapping_add(b))
@@ -129,7 +168,7 @@ pub fn validate_frame(frame: &[u8]) -> bool {
     vpw_checksum(payload) == frame[frame.len() - 1]
 }
 
-// ── Response parsers ────────────────────────────────────────────────────
+// ── Response parsers ────────────────────────────────────
 
 pub fn parse_mode01_response(frame: &[u8], expected_pid: u8) -> Option<Vec<u8>> {
     if frame.len() < 6 {
@@ -223,7 +262,7 @@ pub fn parse_hs_response(frame: &[u8]) -> HsResponse {
     HsResponse::Unknown
 }
 
-// ── Serial I/O ──────────────────────────────────────────────────────────
+// ── Serial I/O ─────────────────────────────────────────
 
 pub fn send_frame(port: &mut Box<dyn SerialPort + Send>, frame: &[u8]) -> Result<(), String> {
     port.write_all(frame).map_err(|e| format!("VPW send error: {}", e))
@@ -254,7 +293,7 @@ pub fn request_response(
     Err("VPW: no response after 4 attempts".to_string())
 }
 
-// ── Flash / Kernel protocol builders ────────────────────────────────────
+// ── Flash / Kernel protocol builders ──────────────────────────────────
 
 pub fn build_mode34_request(address: u32, size: u32) -> Vec<u8> {
     let mut frame = vec![PRIO_HIGH_PHYS, PCM_ADDR, TOOL_ADDR, 0x34, 0x00];
