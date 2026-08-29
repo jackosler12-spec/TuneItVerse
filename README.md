@@ -22,11 +22,11 @@ python3 python/ecu_scripting.py identify path/to/dump.bin
 python3 python/ecu_scripting.py checksum path/to/dump.bin
 ```
 
-## Current status (v3.0.0)
+## Current status (v3.1.0)
 
-See [COMPLETION.md](COMPLETION.md). That file is the honest matrix — v2.9 docs claimed identify/512KB CS/fail-closed flash were wired; some of that lived only in `v29_tools.rs` / the UI until this pass.
+See [COMPLETION.md](COMPLETION.md). v3.0.0 docs claimed identify / 512 KB CS / fail-closed flash were wired; `lib.rs` on main had not registered those commands. v3.1.0 lands that wiring.
 
-Working core: serial connect, DTC 03/07/0A, live Mode 01 PIDs + logger, XDF parse/patch, P01 + EDC16 checksums, guided flash when *connected*, J2534 surface, 5-family ECU DB, BIN identify/compare/map-from-log helpers.
+Working core: serial connect, DTC 03/07/0A, live Mode 01 PIDs + logger (including STFT/LTFT/MAF/VSS/load), XDF parse/patch, P01 128/512 KB + EDC16 checksums, guided flash only when *connected*, J2534 surface, 5-family ECU DB, BIN identify/compare/map-from-log.
 
 Still needs your bench: EDC17/MED17 seed tables from your dumps, Windows J2534 registry enum, embedded Python, hardware validation of 512 KB P01 CS vs PCM Hammer.
 
