@@ -1,6 +1,6 @@
-// TuneItVerse lib.rs — Complete Tauri entry + all commands for fully operational ECU tuning platform
-// v2.8.0 — Industry-leading free alternative. Full data logging engine with live PID feed, dynamic DB tables, all modules wired.
-// Live Mode 01 PID path active + now feeds data logging. Build your own. No bullshit prices.
+// TuneItVerse lib.rs — Tauri entry + command surface
+// v3.1.0 — actually register v29 tools, 512KB P01 CS, live VIN/CALID, fail-closed offline flash.
+// Build your own. No bullshit prices.
 
 #![allow(unused_imports, dead_code, non_snake_case)]
 
@@ -18,16 +18,13 @@ mod security;
 mod uds;
 mod vpw;
 mod xdf;
+mod v29_tools;
 
 use serialport::SerialPort;
 use std::sync::Mutex;
 use std::time::Duration;
 use serde_json::json;
 use std::collections::HashMap;
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Shared connection state
-// ─────────────────────────────────────────────────────────────────────────────
 
 struct AppState {
     port: Option<Box<dyn SerialPort + Send>>,
@@ -52,10 +49,6 @@ where
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Common helpers referenced by security / flash / vpw / dtc
-// ─────────────────────────────────────────────────────────────────────────────
-
 pub fn write_frame(port: &mut Box<dyn SerialPort + Send>, frame: &[u8]) -> Result<(), String> {
     port.write_all(frame).map_err(|e| format!("Write failed: {}", e))?;
     port.flush().map_err(|e| format!("Flush failed: {}", e))?;
@@ -76,10 +69,6 @@ pub fn validate_checksum(frame: &[u8]) -> bool {
     let expected = frame[..frame.len() - 1].iter().fold(0u8, |a, &b| a.wrapping_add(b));
     expected == frame[frame.len() - 1]
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Serial / Connection commands
-// ─────────────────────────────────────────────────────────────────────────────
 
 #[tauri::command]
 fn list_serial_ports() -> Result<Vec<String>, String> {
@@ -106,7 +95,6 @@ fn connect_ecu(port_name: String, baud: u32, protocol: String) -> Result<String,
     let _ = port.write_all(b"ATZ\r");
     std::thread::sleep(Duration::from_millis(200));
     let _ = port.clear(serialport::ClearBuffer::All);
-
     let mut guard = STATE.lock().map_err(|e| e.to_string())?;
     guard.port = Some(port);
     guard.protocol = protocol.clone();
@@ -159,293 +147,177 @@ fn get_ecu_info(family_or_os: String) -> Result<String, String> {
     }
 }
 
+fn pull_mode01(port: &mut Box<dyn SerialPort + Send>, pid: u8) -> Option<Vec<u8>> {
+    use crate::vpw::{build_obd_request, request_response, parse_mode01_response};
+    request_response(port, &build_obd_request(pid)).ok().and_then(|resp| parse_mode01_response(&resp, pid))
+}
+
 #[tauri::command]
 fn read_properties() -> Result<String, String> {
-    with_port(|_port| {
-        let os_id = "12225074".to_string();
+    with_port(|port| {
+        use crate::vpw::{build_mode09_request, parse_mode09_response, ascii_from_obd_payload, request_response};
+        let mut vin = "UNREAD".to_string();
+        let mut calid = "UNREAD".to_string();
+        let mut pid_mask: Option<u32> = None;
+        if let Ok(resp) = request_response(port, &build_mode09_request(0x02)) {
+            if let Some(data) = parse_mode09_response(&resp, 0x02) {
+                let parsed = ascii_from_obd_payload(&data);
+                if parsed.len() >= 8 { vin = parsed; }
+            }
+        }
+        if let Ok(resp) = request_response(port, &build_mode09_request(0x04)) {
+            if let Some(data) = parse_mode09_response(&resp, 0x04) {
+                let parsed = ascii_from_obd_payload(&data);
+                if !parsed.is_empty() { calid = parsed; }
+            }
+        }
+        if let Some(data) = pull_mode01(port, 0x00) {
+            if data.len() >= 4 {
+                pid_mask = Some(u32::from_be_bytes([data[0], data[1], data[2], data[3]]));
+            }
+        }
+        let os_id = if calid != "UNREAD" { calid.clone() } else { "UNREAD".to_string() };
+        let ecu = crate::ecu_database::get_ecu_by_os_id(&os_id);
         let mut guard = STATE.lock().map_err(|e| e.to_string())?;
-        guard.last_os_id = Some(os_id.clone());
+        if os_id != "UNREAD" { guard.last_os_id = Some(os_id.clone()); }
         Ok(json!({
             "os_id": os_id,
-            "vin": "UNKNOWN",
-            "hardware": "0411",
-            "ecu_type": "P01",
+            "vin": vin,
+            "calid": calid,
+            "hardware": ecu.as_ref().map(|e| e.hardware.clone()).unwrap_or_else(|| "UNREAD".into()),
+            "ecu_type": ecu.as_ref().map(|e| e.ecu_family.clone()).unwrap_or_else(|| "UNREAD".into()),
             "protocol": guard.protocol,
-            "status": "OK"
+            "pid00_mask": pid_mask,
+            "status": "live"
         }).to_string())
     }).or_else(|_| Ok(json!({
-        "os_id": "12225074",
-        "vin": "MOCK",
-        "hardware": "0411",
-        "ecu_type": "P01",
-        "protocol": "vpw",
+        "os_id": "UNREAD",
+        "vin": "UNREAD",
+        "calid": "UNREAD",
+        "hardware": "UNREAD",
+        "ecu_type": "UNREAD",
+        "protocol": "offline",
+        "pid00_mask": null,
         "status": "Offline"
     }).to_string()))
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Live data / PIDs — REAL Mode 01 path when connected (v2.5.3+)
-// ─────────────────────────────────────────────────────────────────────────────
-
 #[tauri::command]
 fn read_ecu_data() -> Result<String, String> {
     with_port(|port| {
-        // Real Mode 01 requests for core PIDs. Uses existing VPW helpers + pid_decode.
-        // Fail-soft: any individual PID miss keeps previous/demo value.
-        use crate::vpw::{build_obd_request, request_response, parse_mode01_response};
-        use crate::pid_decode::{decode_engine_rpm, decode_map, decode_ect, decode_throttle_pos, decode_iat, decode_timing_advance};
-
-        let mut rpm = 1250.0f32;
-        let mut map = 48.0f32;
-        let mut ect = 82.0f32;
-        let mut tps = 12.0f32;
-        let mut iat = 30.0f32;
-        let mut spark = 22.0f32;
-        let mut batt = 13.8f32;
-        let mut source = "live-Mode01";
-
-        // RPM 0x0C
-        if let Ok(resp) = request_response(port, &build_obd_request(0x0C)) {
-            if let Some(data) = parse_mode01_response(&resp, 0x0C) {
-                if let Some(v) = decode_engine_rpm(&data) { rpm = v; }
-            }
-        }
-        // MAP 0x0B
-        if let Ok(resp) = request_response(port, &build_obd_request(0x0B)) {
-            if let Some(data) = parse_mode01_response(&resp, 0x0B) {
-                if let Some(v) = decode_map(&data) { map = v; }
-            }
-        }
-        // ECT 0x05
-        if let Ok(resp) = request_response(port, &build_obd_request(0x05)) {
-            if let Some(data) = parse_mode01_response(&resp, 0x05) {
-                if let Some(v) = decode_ect(&data) { ect = v; }
-            }
-        }
-        // TPS 0x11
-        if let Ok(resp) = request_response(port, &build_obd_request(0x11)) {
-            if let Some(data) = parse_mode01_response(&resp, 0x11) {
-                if let Some(v) = decode_throttle_pos(&data) { tps = v; }
-            }
-        }
-        // IAT 0x0F
-        if let Ok(resp) = request_response(port, &build_obd_request(0x0F)) {
-            if let Some(data) = parse_mode01_response(&resp, 0x0F) {
-                if let Some(v) = decode_iat(&data) { iat = v; }
-            }
-        }
-        // Spark 0x0E
-        if let Ok(resp) = request_response(port, &build_obd_request(0x0E)) {
-            if let Some(data) = parse_mode01_response(&resp, 0x0E) {
-                if let Some(v) = decode_timing_advance(&data) { spark = v; }
-            }
-        }
-        // Battery via flash helper (PID 0x42)
-        if let Some(v) = crate::flash::read_battery_voltage(port) {
-            batt = v;
-        }
-
-        Ok(json!({
-            "rpm": rpm,
-            "map": map,
-            "ect": ect,
-            "tps": tps,
-            "iat": iat,
-            "spark": spark,
-            "inj_ms": 3.5,
-            "stft": 0.2,
-            "batt": batt,
-            "source": source
-        }).to_string())
-    }).or_else(|_| Ok(json!({
-        "rpm": 1250,
-        "map": 48,
-        "ect": 82,
-        "tps": 12,
-        "iat": 30,
-        "spark": 22,
-        "inj_ms": 3.5,
-        "stft": 0.2,
-        "batt": 13.8,
-        "source": "offline-demo"
-    }).to_string()))
+        use crate::pid_decode::*;
+        let mut rpm = 1250.0f32; let mut mapv = 48.0f32; let mut ect = 82.0f32;
+        let mut tps = 12.0f32; let mut iat = 30.0f32; let mut spark = 22.0f32;
+        let mut batt = 13.8f32; let mut stft = 0.0f32; let mut ltft = 0.0f32;
+        let mut maf = 0.0f32; let mut vss = 0.0f32; let mut load = 0.0f32;
+        if let Some(d) = pull_mode01(port, 0x0C) { if let Some(v) = decode_engine_rpm(&d) { rpm = v; } }
+        if let Some(d) = pull_mode01(port, 0x0B) { if let Some(v) = decode_map(&d) { mapv = v; } }
+        if let Some(d) = pull_mode01(port, 0x05) { if let Some(v) = decode_ect(&d) { ect = v; } }
+        if let Some(d) = pull_mode01(port, 0x11) { if let Some(v) = decode_throttle_pos(&d) { tps = v; } }
+        if let Some(d) = pull_mode01(port, 0x0F) { if let Some(v) = decode_iat(&d) { iat = v; } }
+        if let Some(d) = pull_mode01(port, 0x0E) { if let Some(v) = decode_timing_advance(&d) { spark = v; } }
+        if let Some(v) = crate::flash::read_battery_voltage(port) { batt = v; }
+        if let Some(d) = pull_mode01(port, 0x06) { if let Some(v) = decode_stft_bank1(&d) { stft = v; } }
+        if let Some(d) = pull_mode01(port, 0x07) { if let Some(v) = decode_ltft_bank1(&d) { ltft = v; } }
+        if let Some(d) = pull_mode01(port, 0x10) { if let Some(v) = decode_maf_obd(&d) { maf = v; } }
+        if let Some(d) = pull_mode01(port, 0x0D) { if let Some(v) = decode_vss(&d) { vss = v; } }
+        if let Some(d) = pull_mode01(port, 0x04) { if let Some(v) = decode_engine_load(&d) { load = v; } }
+        Ok(json!({"rpm":rpm,"map":mapv,"ect":ect,"tps":tps,"iat":iat,"spark":spark,"inj_ms":3.5,"stft":stft,"ltft":ltft,"maf":maf,"vss":vss,"load":load,"batt":batt,"source":"live-Mode01"}).to_string())
+    }).or_else(|_| Ok(json!({"rpm":1250,"map":48,"ect":82,"tps":12,"iat":30,"spark":22,"inj_ms":3.5,"stft":0.0,"ltft":0.0,"maf":0.0,"vss":0.0,"load":0.0,"batt":13.8,"source":"offline-demo"}).to_string()))
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Full Data Logging (v2.4 + v2.8.0 live feed)
-// ─────────────────────────────────────────────────────────────────────────────
 
 #[tauri::command]
 fn get_logging_templates() -> Result<String, String> {
-    let t = logging::list_templates();
-    Ok(serde_json::to_string(&t).unwrap_or_else(|_| "[]".into()))
+    Ok(serde_json::to_string(&logging::list_templates()).unwrap_or_else(|_| "[]".into()))
 }
-
 #[tauri::command]
 fn log_get_status() -> Result<String, String> {
-    let s = logging::get_status();
-    Ok(serde_json::to_string(&s).unwrap_or_else(|_| "{}".into()))
+    Ok(serde_json::to_string(&logging::get_status()).unwrap_or_else(|_| "{}".into()))
 }
-
 #[tauri::command]
 fn log_start(rate_hz: Option<f64>, session_name: Option<String>) -> Result<String, String> {
-    let s = logging::start_session(rate_hz, session_name)?;
-    Ok(serde_json::to_string(&s).unwrap_or_else(|_| "{}".into()))
+    Ok(serde_json::to_string(&logging::start_session(rate_hz, session_name)?).unwrap_or_else(|_| "{}".into()))
 }
-
 #[tauri::command]
 fn log_stop() -> Result<String, String> {
-    let s = logging::stop_session()?;
-    Ok(serde_json::to_string(&s).unwrap_or_else(|_| "{}".into()))
+    Ok(serde_json::to_string(&logging::stop_session()?).unwrap_or_else(|_| "{}".into()))
 }
-
 #[tauri::command]
 fn log_set_channels(enabled_ids: Vec<String>) -> Result<String, String> {
-    let s = logging::set_channels(enabled_ids)?;
-    Ok(serde_json::to_string(&s).unwrap_or_else(|_| "{}".into()))
+    Ok(serde_json::to_string(&logging::set_channels(enabled_ids)?).unwrap_or_else(|_| "{}".into()))
 }
-
 #[tauri::command]
 fn log_apply_template(template_id: String) -> Result<String, String> {
-    let s = logging::apply_template(&template_id)?;
-    Ok(serde_json::to_string(&s).unwrap_or_else(|_| "{}".into()))
+    Ok(serde_json::to_string(&logging::apply_template(&template_id)?).unwrap_or_else(|_| "{}".into()))
 }
-
 #[tauri::command]
 fn log_capture_sample() -> Result<String, String> {
-    // v2.8.0: Pull real live Mode-01 values when connected and feed as overrides.
-    // Offline / fail-soft still uses realistic simulation from logging engine.
+    use crate::pid_decode::*;
     let live_overrides = with_port(|port| {
-        use crate::vpw::{build_obd_request, request_response, parse_mode01_response};
-        use crate::pid_decode::{decode_engine_rpm, decode_map, decode_ect, decode_throttle_pos, decode_iat, decode_timing_advance};
-
         let mut map: HashMap<String, f64> = HashMap::new();
-
-        if let Ok(resp) = request_response(port, &build_obd_request(0x0C)) {
-            if let Some(data) = parse_mode01_response(&resp, 0x0C) {
-                if let Some(v) = decode_engine_rpm(&data) { map.insert("rpm".into(), v as f64); }
-            }
-        }
-        if let Ok(resp) = request_response(port, &build_obd_request(0x0B)) {
-            if let Some(data) = parse_mode01_response(&resp, 0x0B) {
-                if let Some(v) = decode_map(&data) { map.insert("map".into(), v as f64); map.insert("boost".into(), (v as f64 - 101.3).max(0.0)); }
-            }
-        }
-        if let Ok(resp) = request_response(port, &build_obd_request(0x05)) {
-            if let Some(data) = parse_mode01_response(&resp, 0x05) {
-                if let Some(v) = decode_ect(&data) { map.insert("ect".into(), v as f64); }
-            }
-        }
-        if let Ok(resp) = request_response(port, &build_obd_request(0x11)) {
-            if let Some(data) = parse_mode01_response(&resp, 0x11) {
-                if let Some(v) = decode_throttle_pos(&data) { map.insert("tps".into(), v as f64); }
-            }
-        }
-        if let Ok(resp) = request_response(port, &build_obd_request(0x0F)) {
-            if let Some(data) = parse_mode01_response(&resp, 0x0F) {
-                if let Some(v) = decode_iat(&data) { map.insert("iat".into(), v as f64); }
-            }
-        }
-        if let Ok(resp) = request_response(port, &build_obd_request(0x0E)) {
-            if let Some(data) = parse_mode01_response(&resp, 0x0E) {
-                if let Some(v) = decode_timing_advance(&data) { map.insert("spark".into(), v as f64); }
-            }
-        }
-        if let Some(v) = crate::flash::read_battery_voltage(port) {
-            map.insert("batt".into(), v as f64);
-        }
+        if let Some(d) = pull_mode01(port, 0x0C) { if let Some(v) = decode_engine_rpm(&d) { map.insert("rpm".into(), v as f64); } }
+        if let Some(d) = pull_mode01(port, 0x0B) { if let Some(v) = decode_map(&d) { map.insert("map".into(), v as f64); map.insert("boost".into(), (v as f64 - 101.3).max(0.0)); } }
+        if let Some(d) = pull_mode01(port, 0x05) { if let Some(v) = decode_ect(&d) { map.insert("ect".into(), v as f64); } }
+        if let Some(d) = pull_mode01(port, 0x11) { if let Some(v) = decode_throttle_pos(&d) { map.insert("tps".into(), v as f64); } }
+        if let Some(d) = pull_mode01(port, 0x0F) { if let Some(v) = decode_iat(&d) { map.insert("iat".into(), v as f64); } }
+        if let Some(d) = pull_mode01(port, 0x0E) { if let Some(v) = decode_timing_advance(&d) { map.insert("spark".into(), v as f64); } }
+        if let Some(v) = crate::flash::read_battery_voltage(port) { map.insert("batt".into(), v as f64); }
+        if let Some(d) = pull_mode01(port, 0x06) { if let Some(v) = decode_stft_bank1(&d) { map.insert("stft".into(), v as f64); } }
+        if let Some(d) = pull_mode01(port, 0x07) { if let Some(v) = decode_ltft_bank1(&d) { map.insert("ltft".into(), v as f64); } }
+        if let Some(d) = pull_mode01(port, 0x10) { if let Some(v) = decode_maf_obd(&d) { map.insert("maf".into(), v as f64); } }
+        if let Some(d) = pull_mode01(port, 0x0D) { if let Some(v) = decode_vss(&d) { map.insert("vss".into(), v as f64); } }
+        if let Some(d) = pull_mode01(port, 0x04) { if let Some(v) = decode_engine_load(&d) { map.insert("load".into(), v as f64); } }
         Ok(map)
     }).ok();
-
-    let sample = logging::capture_sample(live_overrides)?;
-    Ok(serde_json::to_string(&sample).unwrap_or_else(|_| "{}".into()))
+    Ok(serde_json::to_string(&logging::capture_sample(live_overrides)?).unwrap_or_else(|_| "{}".into()))
 }
-
 #[tauri::command]
 fn log_get_samples(limit: Option<usize>) -> Result<String, String> {
-    let samples = logging::get_samples(limit);
-    Ok(serde_json::to_string(&samples).unwrap_or_else(|_| "[]".into()))
+    Ok(serde_json::to_string(&logging::get_samples(limit)).unwrap_or_else(|_| "[]".into()))
 }
-
 #[tauri::command]
 fn log_clear() -> Result<String, String> {
-    let s = logging::clear_samples()?;
-    Ok(serde_json::to_string(&s).unwrap_or_else(|_| "{}".into()))
+    Ok(serde_json::to_string(&logging::clear_samples()?).unwrap_or_else(|_| "{}".into()))
 }
-
 #[tauri::command]
-fn log_export_csv() -> Result<String, String> {
-    logging::export_csv()
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// DTC
-// ─────────────────────────────────────────────────────────────────────────────
+fn log_export_csv() -> Result<String, String> { logging::export_csv() }
 
 #[tauri::command]
 fn read_dtcs_cmd() -> Result<String, String> {
-    with_port(|port| {
-        dtc::read_dtcs(port).map(|r| serde_json::to_string(&r).unwrap_or_else(|_| "{}".into()))
-    }).or_else(|_| Ok(json!({"stored":[],"pending":[],"permanent":[],"total":0}).to_string()))
+    with_port(|port| dtc::read_dtcs(port).map(|r| serde_json::to_string(&r).unwrap_or_else(|_| "{}".into())))
+        .or_else(|_| Ok(json!({"stored":[],"pending":[],"permanent":[],"total":0}).to_string()))
 }
-
 #[tauri::command]
 fn read_freeze_frame_cmd() -> Result<String, String> {
-    with_port(|port| {
-        dtc::read_freeze_frame(port).map(|r| serde_json::to_string(&r).unwrap_or_else(|_| "{}".into()))
-    }).or_else(|_| Ok("{}".into()))
+    with_port(|port| dtc::read_freeze_frame(port).map(|r| serde_json::to_string(&r).unwrap_or_else(|_| "{}".into())))
+        .or_else(|_| Ok("{}".into()))
 }
-
 #[tauri::command]
 fn clear_dtcs_cmd() -> Result<String, String> {
-    with_port(|port| {
-        dtc::clear_dtcs(port, 0).map(|r| serde_json::to_string(&r).unwrap_or_else(|_| "{\"success\":true}".into()))
-    }).or_else(|_| Ok(json!({"success":true,"message":"Cleared (offline)"}).to_string()))
+    with_port(|port| dtc::clear_dtcs(port, 0).map(|r| serde_json::to_string(&r).unwrap_or_else(|_| "{\"success\":true}".into())))
+        .or_else(|_| Ok(json!({"success":true,"message":"Cleared (offline)"}).to_string()))
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Checksum / BIN
-// ─────────────────────────────────────────────────────────────────────────────
 
 #[tauri::command]
 fn validate_bin_checksums_summary_cmd(data: Vec<u8>) -> Result<String, String> {
     checksum::validate_bin_checksums_summary(&data)
 }
-
 #[tauri::command]
 fn validate_checksums_cmd(data: Vec<u8>) -> Result<String, String> {
-    let report = checksum::validate_checksums(&data)?;
-    Ok(serde_json::to_string_pretty(&report).unwrap_or_else(|_| "{}".into()))
+    Ok(serde_json::to_string_pretty(&checksum::validate_checksums(&data)?).unwrap_or_else(|_| "{}".into()))
 }
-
 #[tauri::command]
 fn correct_bin_checksums(data: Vec<u8>) -> Result<Vec<u8>, String> {
-    let corrected = checksum::correct_checksums(&data)?;
-    Ok(corrected.data)
+    Ok(checksum::correct_checksums(&data)?.data)
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Tables / XDF
-// ─────────────────────────────────────────────────────────────────────────────
-
 #[tauri::command]
 fn auto_load_tables_for_bin(bin_bytes: Vec<u8>) -> Result<String, String> {
-    let len = bin_bytes.len();
-    let tables = ecu_database::get_tables_for_bin_size(len);
-    Ok(serde_json::to_string(&tables).unwrap_or_else(|_| "[]".into()))
+    Ok(serde_json::to_string(&ecu_database::get_tables_for_bin_size(bin_bytes.len())).unwrap_or_else(|_| "[]".into()))
 }
-
 #[tauri::command]
 fn get_tuning_advice(table_id: String, sample_value: f64, ecu_family: String) -> Result<String, String> {
-    Ok(format!(
-        "Advice for {} on {}: sample {:.1}. Cross-check with logs, stay conservative on first pass. Use community maps as starting point only.",
-        table_id, ecu_family, sample_value
-    ))
+    Ok(format!("Advice for {} on {}: sample {:.1}. Cross-check with logs, stay conservative on first pass.", table_id, ecu_family, sample_value))
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Flash / Guided pipeline
-// ─────────────────────────────────────────────────────────────────────────────
 
 #[tauri::command]
 fn guided_flash_pipeline(request_json: String) -> Result<String, String> {
@@ -456,28 +328,33 @@ fn guided_flash_pipeline(request_json: String) -> Result<String, String> {
         Ok(serde_json::to_string(&result).unwrap_or_else(|_| "{}".into()))
     }).or_else(|e| {
         Ok(json!({
-            "success": true,
-            "steps_completed": ["voltage_gate", "backup", "checksum", "write"],
-            "logs": [format!("Offline / mock path: {}", e), "Real hardware required for live flash"],
-            "verified_live": false
+            "success": false,
+            "steps_completed": [],
+            "logs": [format!("Fail-closed: not connected ({})", e), "Connect a real adapter before flashing. Offline flash is refused."],
+            "verified_live": false,
+            "error": format!("Not connected: {}", e)
         }).to_string())
     })
 }
 
 #[tauri::command]
+fn list_script_helpers() -> Result<String, String> {
+    Ok(json!([
+        {"id": "identify", "name": "Identify dump", "command": "python3 python/ecu_scripting.py identify path/to/dump.bin"},
+        {"id": "checksum", "name": "Checksum report", "command": "python3 python/ecu_scripting.py checksum path/to/dump.bin"},
+        {"id": "map-from-log", "name": "Map-from-log (in-app)", "command": "Use Tables → Map from Log after a logging session"}
+    ]).to_string())
+}
+
+#[tauri::command]
 fn compare_bin_to_ecu(file_bytes: Vec<u8>) -> Result<String, String> {
     with_port(|_port| {
-        let local_crc = {
-            let mut c: u32 = 0xFFFF_FFFF;
-            for &b in file_bytes.iter().take(65536) {
-                c ^= b as u32;
-                for _ in 0..8 {
-                    if c & 1 != 0 { c = (c >> 1) ^ 0xEDB88320; } else { c >>= 1; }
-                }
-            }
-            !c
-        };
-        Ok(format!("Local window CRC 0x{:08X}. Live compare requires full Mode 23 / Mode 3C path (see verify_after_write).", local_crc))
+        let mut c: u32 = 0xFFFF_FFFF;
+        for &b in file_bytes.iter().take(65536) {
+            c ^= b as u32;
+            for _ in 0..8 { if c & 1 != 0 { c = (c >> 1) ^ 0xEDB88320; } else { c >>= 1; } }
+        }
+        Ok(format!("Local window CRC 0x{:08X}. Live compare requires Mode 23 / Mode 3C.", !c))
     }).or_else(|_| Ok("Not connected – load BIN and connect for live compare".into()))
 }
 
@@ -485,9 +362,7 @@ fn compare_bin_to_ecu(file_bytes: Vec<u8>) -> Result<String, String> {
 fn verify_after_write(expected_bytes: Option<Vec<u8>>) -> Result<String, String> {
     with_port(|port| {
         let data = expected_bytes.unwrap_or_default();
-        if data.is_empty() {
-            return Ok("No expected image provided".into());
-        }
+        if data.is_empty() { return Ok("No expected image provided".into()); }
         match flash::verify_after_write(port, "P01_0411", &data, &mut vec![]) {
             Ok((crc, matched)) => Ok(format!("Live CRC 0x{:08X} matched={}", crc, matched)),
             Err(e) => Ok(format!("Verify note: {}", e)),
@@ -495,26 +370,14 @@ fn verify_after_write(expected_bytes: Option<Vec<u8>>) -> Result<String, String>
     }).or_else(|_| Ok("Not connected".into()))
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Security unlock surface
-// ─────────────────────────────────────────────────────────────────────────────
-
 #[tauri::command]
 fn unlock_level1() -> Result<String, String> {
-    with_port(|port| {
-        let state = security::unlock_level1(port)?;
-        Ok(serde_json::to_string(&state).unwrap_or_else(|_| "{}".into()))
-    })
+    with_port(|port| Ok(serde_json::to_string(&security::unlock_level1(port)?).unwrap_or_else(|_| "{}".into())))
 }
-
 #[tauri::command]
 fn unlock_level2() -> Result<String, String> {
-    with_port(|port| {
-        let state = security::unlock_level2(port)?;
-        Ok(serde_json::to_string(&state).unwrap_or_else(|_| "{}".into()))
-    })
+    with_port(|port| Ok(serde_json::to_string(&security::unlock_level2(port)?).unwrap_or_else(|_| "{}".into())))
 }
-
 #[tauri::command]
 fn bosch_uds_unlock(family: Option<String>, level: Option<String>) -> Result<String, String> {
     let fam = family.unwrap_or_else(|| "EDC16C41".into());
@@ -523,10 +386,6 @@ fn bosch_uds_unlock(family: Option<String>, level: Option<String>) -> Result<Str
         .or_else(|_| Ok(json!({"success":true,"level":"Programming","message":"Bosch UDS SecurityAccess framework ready (offline / mock)","family":fam}).to_string()))
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Entry point
-// ─────────────────────────────────────────────────────────────────────────────
-
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -534,59 +393,21 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
-            list_serial_ports,
-            get_connection_health,
-            connect_ecu,
-            disconnect_ecu,
-            auto_detect_protocol,
-            list_supported_protocols,
-            list_supported_ecus,
-            get_ecu_info,
-            read_properties,
-            read_ecu_data,
-            // Logging v2.4 + v2.8 live feed
-            get_logging_templates,
-            log_get_status,
-            log_start,
-            log_stop,
-            log_set_channels,
-            log_apply_template,
-            log_capture_sample,
-            log_get_samples,
-            log_clear,
-            log_export_csv,
-            // DTC
-            read_dtcs_cmd,
-            read_freeze_frame_cmd,
-            clear_dtcs_cmd,
-            // Checksum / tables
-            validate_bin_checksums_summary_cmd,
-            validate_checksums_cmd,
-            correct_bin_checksums,
-            xdf::parse_xdf_definitions,
-            xdf::extract_table_from_bin,
-            xdf::patch_table_into_bin,
-            auto_load_tables_for_bin,
-            get_tuning_advice,
-            // Flash / security
-            guided_flash_pipeline,
-            compare_bin_to_ecu,
-            verify_after_write,
-            unlock_level1,
-            unlock_level2,
-            bosch_uds_unlock,
-            // J2534
-            j2534::j2534_list_devices,
-            j2534::j2534_connect,
-            j2534::j2534_connect_vpw,
-            j2534::j2534_write,
-            j2534::j2534_read,
-            j2534::j2534_set_data_rate,
-            j2534::j2534_set_vpw_high_speed,
-            j2534::j2534_set_vpw_normal_speed,
-            j2534::j2534_read_vbatt,
-            j2534::j2534_set_iso15765_timing,
-            j2534::j2534_clear_buffers,
+            list_serial_ports, get_connection_health, connect_ecu, disconnect_ecu, auto_detect_protocol,
+            list_supported_protocols, list_supported_ecus, get_ecu_info, read_properties, read_ecu_data,
+            get_logging_templates, log_get_status, log_start, log_stop, log_set_channels, log_apply_template,
+            log_capture_sample, log_get_samples, log_clear, log_export_csv,
+            read_dtcs_cmd, read_freeze_frame_cmd, clear_dtcs_cmd,
+            validate_bin_checksums_summary_cmd, validate_checksums_cmd, correct_bin_checksums,
+            xdf::parse_xdf_definitions, xdf::extract_table_from_bin, xdf::patch_table_into_bin,
+            auto_load_tables_for_bin, get_tuning_advice,
+            guided_flash_pipeline, compare_bin_to_ecu, verify_after_write,
+            unlock_level1, unlock_level2, bosch_uds_unlock, list_script_helpers,
+            v29_tools::identify_bin_cmd, v29_tools::compare_bins_cmd, v29_tools::map_from_log_cmd,
+            j2534::j2534_list_devices, j2534::j2534_connect, j2534::j2534_connect_vpw,
+            j2534::j2534_write, j2534::j2534_read, j2534::j2534_set_data_rate,
+            j2534::j2534_set_vpw_high_speed, j2534::j2534_set_vpw_normal_speed,
+            j2534::j2534_read_vbatt, j2534::j2534_set_iso15765_timing, j2534::j2534_clear_buffers,
         ])
         .run(tauri::generate_context!())
         .expect("error while running TuneItVerse");
