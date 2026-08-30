@@ -1,47 +1,36 @@
 # TuneItVerse v3.2.0 — Honest operational pass (2026-08-30)
 
-**Status: v3.2.0 closes gaps that v3.1.0 documentation still overstated.**
+**Status: first v3.2.0 slice is on this branch. Larger module rewrites are staged locally.**
 
-v3.1.0 COMPLETION.md said 512 KB P01 checksums, risk-flag default false, hex-at-table-address, identify-on-load, and scripts-tab helpers were landed. On `main` they were not:
+## What is actually on this branch
 
-- `checksum.rs` still rejected anything except 131072 bytes. Real LS1 dumps are 524288. `checksum_sizes.rs` already knew about 512 KB; the live path did not use it.
-- `GuidedFlashRequest.user_confirmed_risks` still defaulted to **true** via `default_true`. Omitting the field would flash.
-- Guided flash auto-correct only ran on 128 KB images.
-- Hex dump in the UI still started at `0x20000`.
-- BIN load did not call `identify_bin_cmd`.
-- Scripts tab still listed logging templates instead of `list_script_helpers`.
-- Flash UI request omitted `user_confirmed_risks`.
-- Browser mock flash returned `success: true`.
-- J2534 device list was a hardcoded marketing string, not a registry walk.
-- Bosch unlock offline path returned `success: true`.
-- 512 KB / 2 MB size collisions (P01 vs P59, EDC16 vs EDC17 vs MED17) were hidden — identify reported one family only.
+- Identify reports **all** families that share a BIN size (512 KB → P01 and P59; 2 MB → EDC16 / EDC17 / MED17).
+- Version bump to 3.2.0 in package.json / Cargo.toml / tauri.conf / README.
+- Docs stop pretending v3.1.0 implemented 512 KB P01 checksums. It did not.
 
-## What this pass implements
+## What v3.1.0 still gets wrong on main (local fixes exist, not all uploaded yet)
 
-- P01 additive checksums on 128 KB (2 × 64 KB) **and** 512 KB (8 × 64 KB). Unit test covers the 512 KB path.
-- Guided flash auto-correct accepts 128 KB / 512 KB / 2 MB.
-- `user_confirmed_risks` defaults to **false**. Pipeline aborts at the start if the UI did not confirm.
-- UI sends `user_confirmed_risks` only when all four risk boxes are checked.
-- Hex editor starts at the selected table address (0 if none).
-- Checksum summary is written into the side panel.
-- BIN load auto-identifies. Identify reports **all** families that share the image size.
-- Scripts tab lists real bench helpers from `list_script_helpers`.
-- CSV import (`log_import_csv`) so map-from-log works on a previous session.
-- Offline `compute_seed_key` for P01 LFSR and EDC16C41 4-byte (does not unlock a bus).
-- Connect tab: J2534 connect path, L1/L2/Bosch unlock buttons.
-- J2534 list walks `HKLM\SOFTWARE\PassThruSupport.04.04` on Windows (`reg query`). Linux stays honest.
-- Offline Bosch unlock and mock flash are fail-closed.
+These are real bugs found by reading `main`, not a feature wishlist:
 
-## Still needs your bench / dumps
+1. `checksum.rs` still rejects anything except 131072 bytes. Real LS1 dumps are 524288.
+2. `GuidedFlashRequest.user_confirmed_risks` defaults to **true**.
+3. Guided flash auto-correct only runs on 128 KB images.
+4. Hex dump UI starts at `0x20000` instead of the selected table address.
+5. BIN load does not call `identify_bin_cmd`.
+6. Scripts tab lists logging templates, not `list_script_helpers`.
+7. Flash UI omits `user_confirmed_risks`.
+8. Browser mock flash returns `success: true`.
+9. J2534 device list is a hardcoded string, not a registry walk.
+10. Bosch unlock offline path returns `success: true`.
 
-1. Exact EDC17 / MED17 seed tables from *your* dumps (starters only — not faked as complete)
-2. Embedded Python runtime (PyO3) — intentionally not faked
-3. Hardware validation of 512 KB additive checksum vs PCM Hammer on *your* specific OS
-4. Full tokio async I/O on multi-minute transfers
-5. Live J2534 on a Windows box with a vendor DLL actually installed
+Local workspace (`/home/workdir/TuneItVerse`) contains the 512 KB checksum path, fail-closed flash default, CSV import, J2534 registry walk, compute_seed_key, and UI wiring. Those files are large; they need a follow-up commit on this branch before you treat flash/CS as fixed.
 
-## Safety
+## Still needs your bench
 
-Never flash without a verified backup and stable power. Personal dumps only. This tool is free and honest about what it can and cannot prove without hardware.
+1. EDC17 / MED17 seed tables from your dumps
+2. PCM Hammer comparison on your 512 KB P01 OS
+3. Windows box + vendor J2534 DLL
+
+Never flash without a verified backup and stable power. Personal dumps only.
 
 Build your own. No bullshit prices.
