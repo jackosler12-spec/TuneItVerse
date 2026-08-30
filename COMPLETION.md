@@ -1,38 +1,44 @@
-# TuneItVerse v3.1.0 — Honest operational pass (2026-08-29)
+# TuneItVerse v3.2.0 — Honest operational pass (2026-08-30)
 
-**Status: v3.1.0 actually wires the features v3.0.0 documentation claimed.**
+**Status: v3.2.0 closes gaps that v3.1.0 documentation still overstated.**
 
-v3.0.0 COMPLETION.md said identify / 512 KB P01 checksums / live VIN / fail-closed flash were landed. On `main` they were not:
+v3.1.0 COMPLETION.md said 512 KB P01 checksums, risk-flag default false, hex-at-table-address, identify-on-load, and scripts-tab helpers were landed. On `main` they were not:
 
-- `v29_tools.rs` existed but `lib.rs` never declared `mod v29_tools` and never registered the three commands the Tables buttons call.
-- P01 checksum still rejected anything except 131072 bytes. Real LS1 dumps are 524288.
-- `read_properties` still hardcoded OS `12225074` and invented a Holden identity when offline.
-- `guided_flash_pipeline` returned `success: true` on the offline path.
-- Live Mode 01 still skipped STFT / LTFT / MAF / VSS / load.
-- Hex dump still started at `0x20000`.
-- Scripts tab still listed logging templates.
-- Pre-flash auto-correct only ran on 128 KB images.
-- `user_confirmed_risks` defaulted to `true` if the UI omitted it.
+- `checksum.rs` still rejected anything except 131072 bytes. Real LS1 dumps are 524288. `checksum_sizes.rs` already knew about 512 KB; the live path did not use it.
+- `GuidedFlashRequest.user_confirmed_risks` still defaulted to **true** via `default_true`. Omitting the field would flash.
+- Guided flash auto-correct only ran on 128 KB images.
+- Hex dump in the UI still started at `0x20000`.
+- BIN load did not call `identify_bin_cmd`.
+- Scripts tab still listed logging templates instead of `list_script_helpers`.
+- Flash UI request omitted `user_confirmed_risks`.
+- Browser mock flash returned `success: true`.
+- J2534 device list was a hardcoded marketing string, not a registry walk.
+- Bosch unlock offline path returned `success: true`.
+- 512 KB / 2 MB size collisions (P01 vs P59, EDC16 vs EDC17 vs MED17) were hidden — identify reported one family only.
 
 ## What this pass implements
 
-- `mod v29_tools` + `identify_bin_cmd` / `compare_bins_cmd` / `map_from_log_cmd` in the Tauri handler.
 - P01 additive checksums on 128 KB (2 × 64 KB) **and** 512 KB (8 × 64 KB). Unit test covers the 512 KB path.
 - Guided flash auto-correct accepts 128 KB / 512 KB / 2 MB.
-- Live properties: Mode 09 VIN (0x02) + CALID (0x04) + Mode 01 PID 0x00 mask. Offline reports `UNREAD`.
-- Fail-closed guided flash when not connected. Risk flag defaults to false.
-- Live + logger feed for STFT, LTFT, MAF, VSS, engine load.
-- Hex editor starts at the selected table address. Checksum summary is shown in the side panel.
-- Scripts tab lists real bench helpers. `list_script_helpers` command added.
-- UI sends `user_confirmed_risks` and auto-identifies a BIN on load.
+- `user_confirmed_risks` defaults to **false**. Pipeline aborts at the start if the UI did not confirm.
+- UI sends `user_confirmed_risks` only when all four risk boxes are checked.
+- Hex editor starts at the selected table address (0 if none).
+- Checksum summary is written into the side panel.
+- BIN load auto-identifies. Identify reports **all** families that share the image size.
+- Scripts tab lists real bench helpers from `list_script_helpers`.
+- CSV import (`log_import_csv`) so map-from-log works on a previous session.
+- Offline `compute_seed_key` for P01 LFSR and EDC16C41 4-byte (does not unlock a bus).
+- Connect tab: J2534 connect path, L1/L2/Bosch unlock buttons.
+- J2534 list walks `HKLM\SOFTWARE\PassThruSupport.04.04` on Windows (`reg query`). Linux stays honest.
+- Offline Bosch unlock and mock flash are fail-closed.
 
 ## Still needs your bench / dumps
 
-1. Exact EDC17 / MED17 seed tables from *your* dumps
+1. Exact EDC17 / MED17 seed tables from *your* dumps (starters only — not faked as complete)
 2. Embedded Python runtime (PyO3) — intentionally not faked
-3. Windows registry J2534 enumeration
+3. Hardware validation of 512 KB additive checksum vs PCM Hammer on *your* specific OS
 4. Full tokio async I/O on multi-minute transfers
-5. Hardware validation of 512 KB additive checksum vs PCM Hammer on *your* specific OS
+5. Live J2534 on a Windows box with a vendor DLL actually installed
 
 ## Safety
 
