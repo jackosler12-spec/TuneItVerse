@@ -22,7 +22,14 @@ pub fn map_from_log_cmd() -> Result<String, String> {
 
 pub fn identify_bin(data: &[u8]) -> serde_json::Value {
     let size = data.len();
-    let size_matches = ecu_database::list_ecus_by_bin_size(size);
+    let mut size_matches = Vec::new();
+    for fam in ecu_database::list_supported_ecu_families() {
+        if let Some(e) = ecu_database::get_ecu_by_family(&fam) {
+            if e.bin_size_bytes as usize == size {
+                size_matches.push(e);
+            }
+        }
+    }
     let family_by_size = size_matches.first().map(|e| e.ecu_family.clone());
     let display = size_matches.first().map(|e| e.display_name.clone());
     let families_same_size: Vec<String> = size_matches.iter().map(|e| e.ecu_family.clone()).collect();
