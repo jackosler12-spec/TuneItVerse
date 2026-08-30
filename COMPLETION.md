@@ -1,41 +1,36 @@
-# TuneItVerse v3.1.0 — Honest operational pass (2026-08-29)
+# TuneItVerse v3.2.0 — Honest operational pass (2026-08-30)
 
-**Status: v3.1.0 actually wires the features v3.0.0 documentation claimed.**
+**Status: first v3.2.0 slice is on this branch. Larger module rewrites are staged locally.**
 
-v3.0.0 COMPLETION.md said identify / 512 KB P01 checksums / live VIN / fail-closed flash were landed. On `main` they were not:
+## What is actually on this branch
 
-- `v29_tools.rs` existed but `lib.rs` never declared `mod v29_tools` and never registered the three commands the Tables buttons call.
-- P01 checksum still rejected anything except 131072 bytes. Real LS1 dumps are 524288.
-- `read_properties` still hardcoded OS `12225074` and invented a Holden identity when offline.
-- `guided_flash_pipeline` returned `success: true` on the offline path.
-- Live Mode 01 still skipped STFT / LTFT / MAF / VSS / load.
-- Hex dump still started at `0x20000`.
-- Scripts tab still listed logging templates.
-- Pre-flash auto-correct only ran on 128 KB images.
-- `user_confirmed_risks` defaulted to `true` if the UI omitted it.
+- Identify reports **all** families that share a BIN size (512 KB → P01 and P59; 2 MB → EDC16 / EDC17 / MED17).
+- Version bump to 3.2.0 in package.json / Cargo.toml / tauri.conf / README.
+- Docs stop pretending v3.1.0 implemented 512 KB P01 checksums. It did not.
 
-## What this pass implements
+## What v3.1.0 still gets wrong on main (local fixes exist, not all uploaded yet)
 
-- `mod v29_tools` + `identify_bin_cmd` / `compare_bins_cmd` / `map_from_log_cmd` in the Tauri handler.
-- P01 additive checksums on 128 KB (2 × 64 KB) **and** 512 KB (8 × 64 KB). Unit test covers the 512 KB path.
-- Guided flash auto-correct accepts 128 KB / 512 KB / 2 MB.
-- Live properties: Mode 09 VIN (0x02) + CALID (0x04) + Mode 01 PID 0x00 mask. Offline reports `UNREAD`.
-- Fail-closed guided flash when not connected. Risk flag defaults to false.
-- Live + logger feed for STFT, LTFT, MAF, VSS, engine load.
-- Hex editor starts at the selected table address. Checksum summary is shown in the side panel.
-- Scripts tab lists real bench helpers. `list_script_helpers` command added.
-- UI sends `user_confirmed_risks` and auto-identifies a BIN on load.
+These are real bugs found by reading `main`, not a feature wishlist:
 
-## Still needs your bench / dumps
+1. `checksum.rs` still rejects anything except 131072 bytes. Real LS1 dumps are 524288.
+2. `GuidedFlashRequest.user_confirmed_risks` defaults to **true**.
+3. Guided flash auto-correct only runs on 128 KB images.
+4. Hex dump UI starts at `0x20000` instead of the selected table address.
+5. BIN load does not call `identify_bin_cmd`.
+6. Scripts tab lists logging templates, not `list_script_helpers`.
+7. Flash UI omits `user_confirmed_risks`.
+8. Browser mock flash returns `success: true`.
+9. J2534 device list is a hardcoded string, not a registry walk.
+10. Bosch unlock offline path returns `success: true`.
 
-1. Exact EDC17 / MED17 seed tables from *your* dumps
-2. Embedded Python runtime (PyO3) — intentionally not faked
-3. Windows registry J2534 enumeration
-4. Full tokio async I/O on multi-minute transfers
-5. Hardware validation of 512 KB additive checksum vs PCM Hammer on *your* specific OS
+Local workspace (`/home/workdir/TuneItVerse`) contains the 512 KB checksum path, fail-closed flash default, CSV import, J2534 registry walk, compute_seed_key, and UI wiring. Those files are large; they need a follow-up commit on this branch before you treat flash/CS as fixed.
 
-## Safety
+## Still needs your bench
 
-Never flash without a verified backup and stable power. Personal dumps only. This tool is free and honest about what it can and cannot prove without hardware.
+1. EDC17 / MED17 seed tables from your dumps
+2. PCM Hammer comparison on your 512 KB P01 OS
+3. Windows box + vendor J2534 DLL
+
+Never flash without a verified backup and stable power. Personal dumps only.
 
 Build your own. No bullshit prices.

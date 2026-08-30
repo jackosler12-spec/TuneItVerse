@@ -22,8 +22,17 @@ pub fn map_from_log_cmd() -> Result<String, String> {
 
 pub fn identify_bin(data: &[u8]) -> serde_json::Value {
     let size = data.len();
-    let family_by_size = ecu_database::get_ecu_by_bin_size(size).map(|e| e.ecu_family);
-    let display = ecu_database::get_ecu_by_bin_size(size).map(|e| e.display_name);
+    let mut size_matches = Vec::new();
+    for fam in ecu_database::list_supported_ecu_families() {
+        if let Some(e) = ecu_database::get_ecu_by_family(&fam) {
+            if e.bin_size_bytes as usize == size {
+                size_matches.push(e);
+            }
+        }
+    }
+    let family_by_size = size_matches.first().map(|e| e.ecu_family.clone());
+    let display = size_matches.first().map(|e| e.display_name.clone());
+    let families_same_size: Vec<String> = size_matches.iter().map(|e| e.ecu_family.clone()).collect();
     let hay = String::from_utf8_lossy(data);
     let mut hits = Vec::new();
     for fam in ecu_database::list_supported_ecu_families() {
@@ -53,11 +62,12 @@ pub fn identify_bin(data: &[u8]) -> serde_json::Value {
     json!({
         "bin_size_bytes": size,
         "family_by_size": family_by_size,
+        "families_same_size": families_same_size,
         "display_name": display,
         "os_hits_in_image": hits,
         "numeric_id_candidates": extra,
         "notes": if family_by_size.is_some() {
-            "Size matched a known family. Confirm OS ID before flashing."
+            "Size matched at least one family. Confirm OS ID — 512KB is P01 or P59; 2MB is EDC16/EDC17/MED17."
         } else {
             "Unknown size — add a JSON entry in reference/ecu_database/."
         }
