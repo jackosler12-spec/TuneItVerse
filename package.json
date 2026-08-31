@@ -1,8 +1,8 @@
 {
   "name": "tuneitverse",
   "private": true,
-  "version": "3.2.0",
-  "description": "TuneItVerse - open ECU tuning platform (Tauri + Rust). v3.2.0: real 512KB P01 CS, fail-closed risk default, identify-on-load, CSV import, J2534 registry list.",
+  "version": "3.2.1",
+  "description": "TuneItVerse - open ECU tuning platform (Tauri + Rust). v3.2.1: 512KB P01 CS actually wired, fail-closed risk default, identify-on-load, CSV import, J2534 registry list.",
   "type": "module",
   "scripts": {
     "tauri": "tauri",

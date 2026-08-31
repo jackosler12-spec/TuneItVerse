@@ -22,11 +22,9 @@ python3 python/ecu_scripting.py identify path/to/dump.bin
 python3 python/ecu_scripting.py checksum path/to/dump.bin
 ```
 
-## Current status (v3.2.0 slice 1)
+## Current status (v3.2.1)
 
-See [COMPLETION.md](COMPLETION.md). Identify now lists every family that shares a BIN size. 512 KB P01 checksum correction and fail-closed risk default are implemented locally and still need the follow-up commit of `checksum.rs` / `flash.rs` / `src/main.js`.
-
-Working core on main: serial connect, DTC 03/07/0A, live Mode 01 PIDs + logger, XDF parse/patch, P01 128 KB + EDC16 checksums, guided flash only when connected, J2534 surface, 5-family ECU DB, BIN identify/compare/map-from-log.
+See [COMPLETION.md](COMPLETION.md). This pass lands the work v3.2.0 only documented: 512 KB P01 checksums, fail-closed flash risk default, identify-on-load, hex dump at table address, J2534 registry walk, honest offline unlock/flash mocks, CSV import.
 
 Build your own. No bullshit prices.
 
