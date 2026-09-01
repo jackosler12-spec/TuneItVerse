@@ -19,6 +19,7 @@ mod uds;
 mod vpw;
 mod xdf;
 mod v29_tools;
+mod v33_ops;
 
 use serialport::SerialPort;
 use std::sync::Mutex;
@@ -284,13 +285,12 @@ fn log_export_csv() -> Result<String, String> { logging::export_csv() }
 
 #[tauri::command]
 fn log_import_csv(csv: String) -> Result<String, String> {
-    Ok(serde_json::to_string(&logging::import_csv(&csv)?).unwrap_or_else(|_| "{}".into()))
+    v33_ops::import_csv_cmd(&csv)
 }
 
 #[tauri::command]
 fn compute_seed_key(family: String, seed_hex: String, level: Option<String>) -> Result<String, String> {
-    let report = security::compute_seed_key_report(&family, &seed_hex, level.as_deref())?;
-    Ok(report.to_string())
+    v33_ops::compute_seed_key_cmd(&family, &seed_hex, level.as_deref())
 }
 
 #[tauri::command]
