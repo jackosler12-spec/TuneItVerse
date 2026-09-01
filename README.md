@@ -20,11 +20,12 @@ Bench helper for personal dumps:
 ```bash
 python3 python/ecu_scripting.py identify path/to/dump.bin
 python3 python/ecu_scripting.py checksum path/to/dump.bin
+python3 python/ecu_scripting.py seedkey P01_0411 1234 1
 ```
 
-## Current status (v3.2.1)
+## Current status (v3.3.0)
 
-See [COMPLETION.md](COMPLETION.md). This pass lands the work v3.2.0 only documented: 512 KB P01 checksums, fail-closed flash risk default, identify-on-load, hex dump at table address, J2534 registry walk, honest offline unlock/flash mocks, CSV import.
+See [COMPLETION.md](COMPLETION.md). This pass wires the pieces v3.2.1 only documented: CSV import, offline seed/key, fail-closed flash default, J2534 registry list + connect path, and the frontend globals the overlay expected.
 
 Build your own. No bullshit prices.
 

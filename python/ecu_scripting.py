@@ -8,6 +8,7 @@ you want a quick CLI check of a personal dump.
 Usage:
   python3 python/ecu_scripting.py checksum path/to/dump.bin
   python3 python/ecu_scripting.py identify path/to/dump.bin
+  python3 python/ecu_scripting.py seedkey P01_0411 1234 1
 """
 
 from __future__ import annotations
@@ -83,11 +84,63 @@ def checksum_report(data: bytes) -> str:
     return "\n".join(lines)
 
 
+def p01_key(seed: int, level: int) -> int:
+    if seed == 0:
+        return 0
+    poly = 0x8005
+    lo_nibble = seed & 0x000F
+    base = 5 if level == 2 else 3
+    lfsr = seed & 0xFFFF
+    for _ in range(lo_nibble + base):
+        if lfsr & 0x8000:
+            lfsr = ((lfsr << 1) ^ poly) & 0xFFFF
+        else:
+            lfsr = (lfsr << 1) & 0xFFFF
+    if level == 2:
+        lfsr ^= 0x36A9
+    return lfsr
+
+
+def edc16c41_key(seed: int) -> int:
+    key = seed & 0xFFFFFFFF
+    key ^= 0xA5C3B7D9
+    key = ((key << 5) | (key >> 27)) & 0xFFFFFFFF
+    key = (key + 0x12345678) & 0xFFFFFFFF
+    key ^= 0x87654321
+    return int.from_bytes(key.to_bytes(4, "big")[::-1], "big")
+
+
+def seedkey(family: str, seed_hex: str, level: str) -> dict:
+    cleaned = "".join(c for c in seed_hex if c in "0123456789abcdefABCDEF")
+    if len(cleaned) < 2 or len(cleaned) % 2:
+        raise SystemExit("seed hex must be even-length")
+    seed_bytes = bytes.fromhex(cleaned)
+    fam = family.upper()
+    if "P01" in fam or "P59" in fam or fam.startswith("GM"):
+        seed = int.from_bytes(seed_bytes[:2], "big")
+        key = p01_key(seed, 2 if level in {"2", "flash", "level2"} else 1)
+        return {"family": family, "algo": "p01_lfsr16", "seed_hex": cleaned.upper(), "key_hex": f"{key:04X}"}
+    if len(seed_bytes) >= 4 and "EDC16" in fam:
+        seed = int.from_bytes(seed_bytes[:4], "big")
+        key = edc16c41_key(seed)
+        return {"family": family, "algo": "edc16c41", "seed_hex": cleaned.upper(), "key_hex": f"{key:08X}"}
+    return {"family": family, "algo": "unsupported-in-cli", "seed_hex": cleaned.upper(), "key_hex": None}
+
+
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description="TuneItVerse bench helper")
-    parser.add_argument("command", choices=["checksum", "identify"])
-    parser.add_argument("bin_path")
+    parser.add_argument("command", choices=["checksum", "identify", "seedkey"])
+    parser.add_argument("bin_path", nargs="?")
+    parser.add_argument("seed_hex", nargs="?")
+    parser.add_argument("level", nargs="?", default="1")
     args = parser.parse_args(argv)
+    if args.command == "seedkey":
+        family = args.bin_path or "P01_0411"
+        seed = args.seed_hex or ""
+        print(seedkey(family, seed, args.level))
+        return 0
+    if not args.bin_path:
+        raise SystemExit("bin_path required")
     path = pathlib.Path(args.bin_path)
     data = path.read_bytes()
     if args.command == "identify":
