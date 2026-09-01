@@ -2,12 +2,12 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>TuneItVerse - Professional ECU Tuning Platform v3.2.1</title>
+  <title>TuneItVerse - Professional ECU Tuning Platform v3.3.0</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 <nav class="top-nav">
-  <div class="nav-brand">TuneItVerse <span class="version">v3.2.1</span></div>
+  <div class="nav-brand">TuneItVerse <span class="version">v3.3.0</span></div>
   <div class="nav-links">
     <a href="#" class="nav-item active" data-view="dashboard">Dashboard</a>
     <a href="#" class="nav-item" data-view="connect">Connect</a>
@@ -26,7 +26,7 @@
   <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px;">
     <div class="pro-badge" style="background:#0a0; color:#000; padding:2px 8px; border-radius:3px; font-size:11px; font-weight:700;">PRO</div>
     <h1 style="margin:0; font-size:22px;">TuneItVerse</h1>
-    <span style="color:#666; font-size:12px;">v3.2.1 • 512KB P01 CS • fail-closed flash • identify-on-load • DIY</span>
+    <span style="color:#666; font-size:12px;">v3.3.0 • CSV import • seed/key bench • J2534 registry list • fail-closed flash</span>
   </div>
   <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px,1fr)); gap:12px;">
     <div class="panel" style="padding:12px;">
@@ -80,7 +80,29 @@
     </div>
     <div id="j2534-group" style="display:none; margin-top:8px;">
       <label>J2534 DLL / Device (optional)</label>
-      <input type="text" id="j2534-path" placeholder="Leave empty for default" style="width:100%; padding:6px;">
+      <input type="text" id="j2534-path" placeholder="Leave empty for default or pick from registry list" style="width:100%; padding:6px;">
+      <button id="btn-j2534-list" class="btn btn-sm" type="button" style="margin-top:6px;">List J2534 registry devices</button>
+      <div id="j2534-list" style="margin-top:6px; font-size:11px; color:#9c9;"></div>
+    </div>
+    <div class="panel" style="margin-top:16px; padding:10px;">
+      <strong>Offline seed → key</strong>
+      <p style="font-size:11px;color:#888;margin:6px 0;">Compute a key from a seed you already captured. Does not talk to the car.</p>
+      <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center;">
+        <input id="seed-hex" placeholder="seed hex e.g. 1234 or DEADBEEF" style="flex:1; min-width:160px; padding:6px;">
+        <select id="seed-family" style="padding:6px;">
+          <option value="P01_0411">P01_0411</option>
+          <option value="GM_P59">GM_P59</option>
+          <option value="EDC16C41">EDC16C41</option>
+          <option value="EDC17_COMMON">EDC17_COMMON</option>
+          <option value="MED17_COMMON">MED17_COMMON</option>
+        </select>
+        <select id="seed-level" style="padding:6px;">
+          <option value="1">Level 1 / Diagnostic</option>
+          <option value="2">Level 2 / Flash</option>
+        </select>
+        <button id="btn-compute-key" class="btn btn-sm" type="button">Compute key</button>
+      </div>
+      <pre id="seed-result" style="margin-top:8px; font-size:11px; min-height:40px;">—</pre>
     </div>
     <div style="margin-top:16px; display:flex; gap:8px;">
       <button id="btn-do-connect" class="btn btn-primary">Connect</button>
