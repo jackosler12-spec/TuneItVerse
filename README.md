@@ -20,11 +20,12 @@ Bench helper for personal dumps:
 ```bash
 python3 python/ecu_scripting.py identify path/to/dump.bin
 python3 python/ecu_scripting.py checksum path/to/dump.bin
+python3 python/ecu_scripting.py seedkey EDC16C41 12345678
 ```
 
-## Current status (v3.2.1)
+## Current status (v3.3.0)
 
-See [COMPLETION.md](COMPLETION.md). This pass lands the work v3.2.0 only documented: 512 KB P01 checksums, fail-closed flash risk default, identify-on-load, hex dump at table address, J2534 registry walk, honest offline unlock/flash mocks, CSV import.
+See [COMPLETION.md](COMPLETION.md). v3.3.0 wires the features v3.2.1 documented but did not register: CSV import, offline seed/key calculator, real Windows J2534 registry walk, fail-closed Bosch unlock offline, richer map-from-log.
 
 Build your own. No bullshit prices.
 

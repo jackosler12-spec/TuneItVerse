@@ -1,7 +1,7 @@
 [package]
 name = "TuneItVerse"
-version = "3.2.1"
-description = "ECU Tuning platform for JRTuners. v3.2.1: 512KB P01 CS wired, fail-closed risk default, CSV import, J2534 registry list."
+version = "3.3.0"
+description = "ECU Tuning platform for JRTuners. v3.3.0: CSV import wired, seed/key calculator, J2534 registry walk."
 authors = ["JRTuners"]
 edition = "2021"
 
