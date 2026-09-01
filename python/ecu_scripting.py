@@ -8,6 +8,7 @@ you want a quick CLI check of a personal dump.
 Usage:
   python3 python/ecu_scripting.py checksum path/to/dump.bin
   python3 python/ecu_scripting.py identify path/to/dump.bin
+  python3 python/ecu_scripting.py seedkey EDC16C41 12345678
 """
 
 from __future__ import annotations
@@ -83,11 +84,48 @@ def checksum_report(data: bytes) -> str:
     return "\n".join(lines)
 
 
+def rotl32(v: int, n: int) -> int:
+    n &= 31
+    return ((v << n) | (v >> (32 - n))) & 0xFFFFFFFF
+
+
+def edc16c41_key(seed: int) -> int:
+    key = seed ^ 0xA5C3B7D9
+    key = rotl32(key, 5)
+    key = (key + 0x12345678) & 0xFFFFFFFF
+    key ^= 0x87654321
+    return int.from_bytes(key.to_bytes(4, "big"), "little")  # swap_bytes
+
+
+def seedkey(family: str, seed_hex: str) -> str:
+    cleaned = "".join(c for c in seed_hex if c in "0123456789abcdefABCDEF")
+    if len(cleaned) % 2:
+        cleaned = "0" + cleaned
+    seed = bytes.fromhex(cleaned)
+    fam = family.upper()
+    if "EDC16" in fam and len(seed) >= 4:
+        s = int.from_bytes(seed[:4], "big")
+        k = edc16c41_key(s)
+        return f"family={family} seed={seed[:4].hex().upper()} key={k:08X} algo=edc16c41"
+    if seed:
+        return f"family={family} seed={seed.hex().upper()} notes=use in-app compute_seed_key for P01/P59/EDC17/MED17"
+    return "empty seed"
+
+
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description="TuneItVerse bench helper")
-    parser.add_argument("command", choices=["checksum", "identify"])
-    parser.add_argument("bin_path")
+    parser.add_argument("command", choices=["checksum", "identify", "seedkey"])
+    parser.add_argument("bin_path", nargs="?")
+    parser.add_argument("seed_hex", nargs="?")
     args = parser.parse_args(argv)
+    if args.command == "seedkey":
+        family = args.bin_path or "EDC16C41"
+        seed = args.seed_hex or "00000000"
+        print(seedkey(family, seed))
+        return 0
+    if not args.bin_path:
+        print("bin path required")
+        return 2
     path = pathlib.Path(args.bin_path)
     data = path.read_bytes()
     if args.command == "identify":

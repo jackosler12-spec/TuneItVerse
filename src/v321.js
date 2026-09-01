@@ -78,6 +78,9 @@
           const text = await file.text();
           const raw = await window.invokeCmd('log_import_csv', { csv: text });
           alert('CSV import: ' + (typeof raw === 'string' ? raw : JSON.stringify(raw)));
+          if (typeof window.refreshLogStatus === 'function') {
+            await window.refreshLogStatus();
+          }
         } catch (e) { alert('CSV import failed: ' + e); }
       };
       input.click();
