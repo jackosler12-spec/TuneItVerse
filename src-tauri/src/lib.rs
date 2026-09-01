@@ -1,5 +1,5 @@
 // TuneItVerse lib.rs — Tauri entry + command surface
-// v3.1.0 — actually register v29 tools, 512KB P01 CS, live VIN/CALID, fail-closed offline flash.
+// v3.3.0 — CSV import, seed/key calculator, fail-closed offline unlock/flash.
 // Build your own. No bullshit prices.
 
 #![allow(unused_imports, dead_code, non_snake_case)]
@@ -283,6 +283,17 @@ fn log_clear() -> Result<String, String> {
 fn log_export_csv() -> Result<String, String> { logging::export_csv() }
 
 #[tauri::command]
+fn log_import_csv(csv: String) -> Result<String, String> {
+    Ok(serde_json::to_string(&logging::import_csv(&csv)?).unwrap_or_else(|_| "{}".into()))
+}
+
+#[tauri::command]
+fn compute_seed_key(family: String, seed_hex: String, level: Option<String>) -> Result<String, String> {
+    let report = security::compute_seed_key_report(&family, &seed_hex, level.as_deref())?;
+    Ok(report.to_string())
+}
+
+#[tauri::command]
 fn read_dtcs_cmd() -> Result<String, String> {
     with_port(|port| dtc::read_dtcs(port).map(|r| serde_json::to_string(&r).unwrap_or_else(|_| "{}".into())))
         .or_else(|_| Ok(json!({"stored":[],"pending":[],"permanent":[],"total":0}).to_string()))
@@ -342,6 +353,7 @@ fn list_script_helpers() -> Result<String, String> {
     Ok(json!([
         {"id": "identify", "name": "Identify dump", "command": "python3 python/ecu_scripting.py identify path/to/dump.bin"},
         {"id": "checksum", "name": "Checksum report", "command": "python3 python/ecu_scripting.py checksum path/to/dump.bin"},
+        {"id": "seedkey", "name": "Seed/key calculator", "command": "python3 python/ecu_scripting.py seedkey EDC16C41 12345678"},
         {"id": "map-from-log", "name": "Map-from-log (in-app)", "command": "Use Tables → Map from Log after a logging session"}
     ]).to_string())
 }
@@ -383,7 +395,12 @@ fn bosch_uds_unlock(family: Option<String>, level: Option<String>) -> Result<Str
     let fam = family.unwrap_or_else(|| "EDC16C41".into());
     let lvl = security::BoschSecurityLevel::from_str(&level.unwrap_or_else(|| "programming".into()));
     with_port(|port| security::bosch_uds_unlock_full(port, &fam, lvl))
-        .or_else(|_| Ok(json!({"success":true,"level":"Programming","message":"Bosch UDS SecurityAccess framework ready (offline / mock)","family":fam}).to_string()))
+        .or_else(|_| Ok(json!({
+            "success": false,
+            "level": format!("{:?}", lvl),
+            "family": fam,
+            "message": "Bosch UDS unlock refused offline. Connect an adapter. Use compute_seed_key for bench calculation only."
+        }).to_string()))
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -396,7 +413,8 @@ pub fn run() {
             list_serial_ports, get_connection_health, connect_ecu, disconnect_ecu, auto_detect_protocol,
             list_supported_protocols, list_supported_ecus, get_ecu_info, read_properties, read_ecu_data,
             get_logging_templates, log_get_status, log_start, log_stop, log_set_channels, log_apply_template,
-            log_capture_sample, log_get_samples, log_clear, log_export_csv,
+            log_capture_sample, log_get_samples, log_clear, log_export_csv, log_import_csv,
+            compute_seed_key,
             read_dtcs_cmd, read_freeze_frame_cmd, clear_dtcs_cmd,
             validate_bin_checksums_summary_cmd, validate_checksums_cmd, correct_bin_checksums,
             xdf::parse_xdf_definitions, xdf::extract_table_from_bin, xdf::patch_table_into_bin,
