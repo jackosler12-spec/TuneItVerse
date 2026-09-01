@@ -56,6 +56,10 @@ async function mapFromLog() {
   }
 }
 
+window.identifyCurrentBin = identifyCurrentBin;
+window.compareAnotherBin = compareAnotherBin;
+window.mapFromLog = mapFromLog;
+
 window.addEventListener('DOMContentLoaded', () => {
   document.getElementById('btn-identify-bin')?.addEventListener('click', identifyCurrentBin);
   document.getElementById('btn-compare-bins')?.addEventListener('click', compareAnotherBin);
