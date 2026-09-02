@@ -23,9 +23,9 @@ python3 python/ecu_scripting.py checksum path/to/dump.bin
 python3 python/ecu_scripting.py seedkey P01_0411 1234 1
 ```
 
-## Current status (v3.3.0)
+## Current status (v3.4.0)
 
-See [COMPLETION.md](COMPLETION.md). This pass wires the pieces v3.2.1 only documented: CSV import, offline seed/key, fail-closed flash default, J2534 registry list + connect path, and the frontend globals the overlay expected.
+See [COMPLETION.md](COMPLETION.md). This pass closes the live-verify stub, refuses write success without readback (unless you opt in), adds a 16×16 occupancy heatmap for map-from-log, workspace JSON export, and ME7 / Delphi catalog starters.
 
 Build your own. No bullshit prices.
 
