@@ -1,5 +1,5 @@
 {
-  "version": "1.12",
+  "version": "1.13",
   "updated": "2026-09-02",
   "description": "Master index of TuneItVerse ECU database entries.",
   "families": [
@@ -8,8 +8,8 @@
     {"id": "GM_P59", "file": "gm_p59.json", "display_name": "GM P59 PCM (Truck/SUV)", "bin_size_bytes": 524288, "primary_protocol": "VPW", "status": "full metadata + checksum path"},
     {"id": "MED17_COMMON", "file": "med17_common.json", "display_name": "Bosch MED17 (VW/Audi gasoline turbo common)", "bin_size_bytes": 2097152, "primary_protocol": "CAN/UDS", "status": "full protocol + maps community + checksum ready"},
     {"id": "EDC17_COMMON", "file": "edc17_common.json", "display_name": "Bosch EDC17 (common diesel platforms)", "bin_size_bytes": 2097152, "primary_protocol": "CAN/UDS", "status": "full operational - UDS flash path, multipoint CS, refined start maps"},
-    {"id": "ME7_COMMON", "file": "me7_common.json", "display_name": "Bosch ME7 (VW/Audi 1.8T community)", "bin_size_bytes": 1048576, "primary_protocol": "KWP", "status": "starter catalog + map hints"},
-    {"id": "DELPHI_DCM", "file": "delphi_dcm.json", "display_name": "Delphi DCM (common-rail diesel)", "bin_size_bytes": 2097152, "primary_protocol": "CAN/UDS", "status": "starter catalog + diesel map hints"}
+    {"id": "ME7_COMMON", "file": "me7_common.json", "display_name": "Bosch ME7 (VW/Audi 1.8T community)", "bin_size_bytes": 1048576, "primary_protocol": "KWP", "status": "starter catalog + map hints — loader wired"},
+    {"id": "DELPHI_DCM", "file": "delphi_dcm.json", "display_name": "Delphi DCM (common-rail diesel)", "bin_size_bytes": 2097152, "primary_protocol": "CAN/UDS", "status": "starter catalog + diesel map hints — loader wired"}
   ],
   "notes": "Add new family JSON + entry here + update loader in ecu_database.rs. Personal dumps only."
 }

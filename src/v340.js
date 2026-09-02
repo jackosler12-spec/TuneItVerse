@@ -1,4 +1,4 @@
-// v3.4.0 overlay — workspace export, heatmap render, unverified-write flag
+// v3.5.0 overlay — workspace export, heatmap render, unverified-write flag
 (function () {
   function parseMaybe(raw) {
     if (raw == null) return null;
@@ -80,7 +80,7 @@
       } catch (e) { /* leave as-is */ }
     }
     if (typeof prev === 'function') return prev(cmd, args);
-    if (cmd === 'export_workspace_cmd') return JSON.stringify({ tool: 'TuneItVerse', version: '3.4.0', mock: true });
+    if (cmd === 'export_workspace_cmd') return JSON.stringify({ tool: 'TuneItVerse', version: '3.5.0', mock: true });
     return null;
   };
 })();
