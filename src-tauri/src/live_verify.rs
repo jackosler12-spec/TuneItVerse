@@ -23,19 +23,30 @@ fn crc32_ieee(data: &[u8]) -> u32 {
     !crc
 }
 
+fn window_offset(addr: u32, written_len: usize) -> usize {
+    if (addr as usize) < written_len { addr as usize } else { 0 }
+}
+
 pub fn probe_live_windows(port: &mut Box<dyn SerialPort + Send>, ecu_family: &str, written_len: usize, logs: &mut Vec<String>) -> Vec<LiveWindow> {
     let fam = ecu_family.to_ascii_uppercase();
     let mut out = Vec::new();
-    let cal_addr: u32 = if fam.contains("EDC") || fam.contains("MED") { 0x0008_0000 } else { 0x0002_0000 };
+    let cal_addr: u32 = if fam.contains("EDC") || fam.contains("MED") || fam.contains("DELPHI") || fam.contains("DCM") {
+        0x0008_0000
+    } else if fam.contains("ME7") {
+        0x0001_8000
+    } else {
+        0x0002_0000
+    };
     let starts = [(cal_addr, "cal_start"), (cal_addr.saturating_add(0x1000), "cal_plus_4k")];
+    let use_elm = true;
+
     if fam.contains("P01") || fam.contains("P59") || fam.contains("GM") {
         for (addr, label) in &starts {
             match request_response(port, &build_mode3c_read_block(*addr, 64)) {
                 Ok(resp) => match parse_mode3c_response(&resp) {
                     Ok(data) if !data.is_empty() => {
-                        let off = if (*addr as usize) < written_len { *addr as usize } else { 0 };
                         logs.push(format!("Mode 3C answered at 0x{:06X} ({} bytes)", addr, data.len()));
-                        out.push(LiveWindow { label: label.to_string(), offset: off, data, method: "VPW Mode 3C".into() });
+                        out.push(LiveWindow { label: label.to_string(), offset: window_offset(*addr, written_len), data, method: "VPW Mode 3C".into() });
                     }
                     Ok(_) => logs.push(format!("Mode 3C empty at 0x{:06X}", addr)),
                     Err(e) => logs.push(format!("Mode 3C parse at 0x{:06X}: {}", addr, e)),
@@ -44,29 +55,23 @@ pub fn probe_live_windows(port: &mut Box<dyn SerialPort + Send>, ecu_family: &st
             }
         }
     }
-    if fam.contains("EDC") || fam.contains("MED") || fam.contains("BOSCH") || out.is_empty() {
+
+    if fam.contains("EDC") || fam.contains("MED") || fam.contains("BOSCH") || fam.contains("ME7") || fam.contains("DELPHI") || fam.contains("DCM") || out.is_empty() {
         for (addr, label) in &starts {
-            if let Ok(frame) = crate::uds::build_read_memory(crate::uds::Alfi(0x24), *addr, 64) {
-                match request_response(port, &frame) {
-                    Ok(resp) => match crate::uds::parse_response(0x63, &resp) {
-                        Ok(data) if !data.is_empty() => {
-                            let off = if (*addr as usize) < written_len { *addr as usize } else { 0 };
-                            logs.push(format!("UDS 0x23 answered at 0x{:06X} ({} bytes)", addr, data.len()));
-                            out.push(LiveWindow { label: label.to_string(), offset: off, data, method: "UDS 0x23".into() });
-                        }
-                        Ok(_) => logs.push(format!("UDS 0x23 empty at 0x{:06X}", addr)),
-                        Err(e) => logs.push(format!("UDS 0x23 at 0x{:06X}: NRC 0x{:02X} {}", addr, e.nrc, e.description())),
-                    },
-                    Err(e) => logs.push(format!("UDS 0x23 no answer at 0x{:06X}: {}", addr, e)),
+            match crate::uds::read_memory_by_address(port, crate::uds::Alfi::ADDR4_SIZE2, *addr, 64, use_elm) {
+                Ok(data) if !data.is_empty() => {
+                    logs.push(format!("UDS 0x23 ISO-TP answered at 0x{:06X} ({} bytes)", addr, data.len()));
+                    out.push(LiveWindow { label: label.to_string(), offset: window_offset(*addr, written_len), data, method: "UDS 0x23 ISO-TP".into() });
                 }
+                Ok(_) => logs.push(format!("UDS 0x23 empty at 0x{:06X}", addr)),
+                Err(e) => logs.push(format!("UDS 0x23 at 0x{:06X}: {}", addr, e)),
             }
         }
         for (addr, label) in &starts {
             match crate::kwp::kwp_read_memory(port, *addr, 64) {
                 Ok(data) if data.len() > 4 => {
-                    let off = if (*addr as usize) < written_len { *addr as usize } else { 0 };
                     logs.push(format!("KWP 0x23 answered at 0x{:06X} ({} bytes)", addr, data.len()));
-                    out.push(LiveWindow { label: format!("{}_kwp", label), offset: off, data, method: "KWP 0x23".into() });
+                    out.push(LiveWindow { label: format!("{}_kwp", label), offset: window_offset(*addr, written_len), data, method: "KWP 0x23".into() });
                 }
                 Ok(_) => logs.push(format!("KWP 0x23 short at 0x{:06X}", addr)),
                 Err(e) => logs.push(format!("KWP 0x23 at 0x{:06X}: {}", addr, e)),
