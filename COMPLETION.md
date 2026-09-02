@@ -1,29 +1,27 @@
-# TuneItVerse v3.3.0 — wiring pass (2026-09-01)
+# TuneItVerse v3.4.0 — live verify + heatmap + catalog (2026-09-02)
 
-**Status: the features COMPLETION v3.2.1 advertised are now actually registered and fail-closed.**
+**Status: the guided-flash “verify” path now actually talks to the bus. Write success is fail-closed without live readback.**
 
-This pass does not invent new ECU families or claim live-bench coverage you have not verified. It closes the holes that made the last "complete" release lie to the UI.
+v3.3.0 registered CSV import and seed/key. It still marked a flash successful when live verify returned an error, never issued Mode 23 / Mode 3C, and the UI never sent `user_confirmed_risks: true`.
 
 ## What this pass actually changed
 
-1. `GuidedFlashRequest.user_confirmed_risks` now defaults to **false**. Omitting the field refuses the write.
-2. Flash UI only sends `user_confirmed_risks: true` after every risk checkbox is ticked.
-3. `log_import_csv` exists in `logging.rs`, is registered in `lib.rs`, and is wired to the Import CSV button.
-4. `compute_seed_key` exists and is registered. Connect tab has an offline seed → key bench (P01/P59 LFSR + Bosch family dispatch).
-5. `bosch_uds_unlock` offline / disconnected path returns `success: false`. Browser mock does the same.
-6. Connect → J2534 now calls `j2534_connect` / `j2534_connect_vpw` instead of silently opening a serial port.
-7. `j2534_list_devices` walks `HKLM\SOFTWARE\PassThruSupport.04.04` (+ Wow6432Node) on Windows via `reg query`. Non-Windows is honest about PassThru being a Windows API.
-8. `main.js` exposes `window.invokeCmd` / `window.currentBin` so the v3.2.1 overlay can actually wrap load/identify/hex.
-9. Scripts tab lists `list_script_helpers`, not logging templates.
-10. Extra log channels: MAF, VSS, load, O2 B1S1. Live capture pulls O2 PID 0x14 when the adapter answers.
-11. Python helper: `python3 python/ecu_scripting.py seedkey P01_0411 1234 1`.
+1. `verify_after_write` probes VPW Mode 3C, UDS 0x23, and KWP 0x23 windows and compares bytes to the written image.
+2. Guided flash `success` is **false** unless those windows match, or you tick **accept unverified write**.
+3. Backup is no longer a hard-coded `Failed` stub. It uses the same windows and labels `PartialDidOnly` vs `Failed` honestly. A failed backup aborts the write.
+4. UI now injects `user_confirmed_risks` from the four risk boxes (this field was default-false and never set).
+5. Map-from-log builds a 16×16 RPM×MAP occupancy heatmap (+ optional STFT averages) instead of a single average cell.
+6. Identify adds SHA-256 (full / head / tail) and printable strings. BIN compare reports contiguous diff ranges.
+7. `export_workspace_cmd` dumps identify + heatmap + family list as JSON.
+8. Catalog starters: `ME7_COMMON` (1MB) and `DELPHI_DCM` (2MB) with refined_map_addrs wired into table auto-load.
 
 ## Still needs your bench
 
-1. EDC17 / MED17 seed tables from your dumps — starters in `security.rs` are not claimed as verified.
+1. EDC17 / MED17 seed tables from **your** dumps — starters in `security.rs` are not claimed as verified.
 2. PCM Hammer comparison on your 512 KB P01 OS (8×64 KB additive layout).
 3. A Windows box + vendor J2534 DLL to confirm the registry walk against a real driver.
-4. Live Mode 23 / Mode 3C bulk backup on the car. Offline flash stays refused.
+4. A real kernel-resident Mode 3C full-image dump. Windowed probes are not a 512 KB / 2 MB backup.
+5. ME7 1MB checksum routine from a personal dump (size is catalogued; correction is not invented).
 
 Never flash without a verified backup and stable power. Personal dumps only.
 

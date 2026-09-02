@@ -1,0 +1,35 @@
+{
+  "ecu_family": "ME7_COMMON",
+  "display_name": "Bosch ME7 (VW/Audi 1.8T / early 2.0T community)",
+  "part_numbers_or_os_ids": ["ME7.5", "ME7.1", "8N0 907 551", "06A 906 032"],
+  "vehicles": ["VW Golf/Jetta 1.8T", "Audi A4 1.8T", "early Audi TT", "Skoda Octavia 1.8T"],
+  "hardware": "Bosch ME7.x (Siemens-style 29F400/29F800 flash common)",
+  "protocol": "KWP2000 on K-line (primary) / CAN on later variants",
+  "bin_size_bytes": 1048576,
+  "flash_memory_map": {
+    "full_flash": "512KB or 1MB dumps depending on mask",
+    "cal_region": "Confirm against your personal dump — community axis maps vary by SW"
+  },
+  "checksum": {
+    "type": "bosch_me7_block_additive_or_crc16",
+    "description": "ME7 families use block checksums (often 16-bit additive or CRC16 over cal blocks). 1MB dumps are catalogued; a family-specific corrector lands after a verified personal dump.",
+    "reference_files": [],
+    "routine": "Size-dispatched in checksum.rs; 1MB images currently report unsupported until a verified dump lands a routine."
+  },
+  "security_access": {
+    "type": "KWP 0x27 seed/key",
+    "reference": "security.rs Bosch family dispatch + 2byte-keys.txt for known public pairs",
+    "levels": ["Level 1 diagnostic", "Level 2 programming"]
+  },
+  "maps_and_xdf": {
+    "has_xdf": false,
+    "description": "Community ME7 maps: requested torque, ignition, KRKTE, boost, N75. Addresses are starting hints only.",
+    "refined_map_addrs": {
+      "ignition_timing": "0x1C000",
+      "fuel_ve": "0x1A000",
+      "boost_target": "0x22000",
+      "driver_wish": "0x18000"
+    }
+  },
+  "notes": "Starter family for 1MB ME7 dumps. Confirm OS on your own bench read. Personal dumps only."
+}

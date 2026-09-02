@@ -1,48 +1,15 @@
 {
-  "version": "1.11",
-  "updated": "2026-08-05",
-  "description": "Master index of TuneItVerse ECU database entries. Used by backend loader and frontend for discovery. v1.5.0 fully operational industry-leading with expanded diesel/gas coverage, family-aware table auto-load from refined_map_addrs (torque_limiter + SOI handlers completed), J2534 write/read surface fully registered + binding enhanced, robust loaders + get_ecu_info, enhanced recovery prompts, full UI polish, Bosch UDS security path completed.",
+  "version": "1.12",
+  "updated": "2026-09-02",
+  "description": "Master index of TuneItVerse ECU database entries.",
   "families": [
-    {
-      "id": "P01_0411",
-      "file": "p01_0411.json",
-      "display_name": "Holden LS1 / GM P01 0411 PCM",
-      "bin_size_bytes": 524288,
-      "primary_protocol": "VPW",
-      "status": "full"
-    },
-    {
-      "id": "EDC16C41",
-      "file": "edc16c41_nissan_patrol.json",
-      "display_name": "Bosch EDC16C41 Nissan Patrol GU V Wagon",
-      "bin_size_bytes": 2097152,
-      "primary_protocol": "CAN/KWP",
-      "status": "full-checksum + maps"
-    },
-    {
-      "id": "GM_P59",
-      "file": "gm_p59.json",
-      "display_name": "GM P59 PCM (Truck/SUV)",
-      "bin_size_bytes": 524288,
-      "primary_protocol": "VPW",
-      "status": "full metadata + checksum path"
-    },
-    {
-      "id": "MED17_COMMON",
-      "file": "med17_common.json",
-      "display_name": "Bosch MED17 (VW/Audi gasoline turbo common)",
-      "bin_size_bytes": 2097152,
-      "primary_protocol": "CAN/UDS",
-      "status": "full protocol + maps community + checksum ready"
-    },
-    {
-      "id": "EDC17_COMMON",
-      "file": "edc17_common.json",
-      "display_name": "Bosch EDC17 (common diesel platforms)",
-      "bin_size_bytes": 2097152,
-      "primary_protocol": "CAN/UDS",
-      "status": "full operational - UDS flash path, multipoint CS, refined start maps"
-    }
+    {"id": "P01_0411", "file": "p01_0411.json", "display_name": "Holden LS1 / GM P01 0411 PCM", "bin_size_bytes": 524288, "primary_protocol": "VPW", "status": "full"},
+    {"id": "EDC16C41", "file": "edc16c41_nissan_patrol.json", "display_name": "Bosch EDC16C41 Nissan Patrol GU V Wagon", "bin_size_bytes": 2097152, "primary_protocol": "CAN/KWP", "status": "full-checksum + maps"},
+    {"id": "GM_P59", "file": "gm_p59.json", "display_name": "GM P59 PCM (Truck/SUV)", "bin_size_bytes": 524288, "primary_protocol": "VPW", "status": "full metadata + checksum path"},
+    {"id": "MED17_COMMON", "file": "med17_common.json", "display_name": "Bosch MED17 (VW/Audi gasoline turbo common)", "bin_size_bytes": 2097152, "primary_protocol": "CAN/UDS", "status": "full protocol + maps community + checksum ready"},
+    {"id": "EDC17_COMMON", "file": "edc17_common.json", "display_name": "Bosch EDC17 (common diesel platforms)", "bin_size_bytes": 2097152, "primary_protocol": "CAN/UDS", "status": "full operational - UDS flash path, multipoint CS, refined start maps"},
+    {"id": "ME7_COMMON", "file": "me7_common.json", "display_name": "Bosch ME7 (VW/Audi 1.8T community)", "bin_size_bytes": 1048576, "primary_protocol": "KWP", "status": "starter catalog + map hints"},
+    {"id": "DELPHI_DCM", "file": "delphi_dcm.json", "display_name": "Delphi DCM (common-rail diesel)", "bin_size_bytes": 2097152, "primary_protocol": "CAN/UDS", "status": "starter catalog + diesel map hints"}
   ],
-  "notes": "Add new family JSON + entry here + update loader in ecu_database.rs. Backend supports auto-detect on connect (VIN/OS ID via PID or mode). Native table editor + XDF import available. Expand with your personal verified dumps. v1.5.0 achieves complete operational status for DIY industry-leading use with family-aware auto-load from refined_map_addrs (expanded + handlers complete) and full J2534 write/read surface + recovery enhancements + version sync + Bosch UDS security path completed."
+  "notes": "Add new family JSON + entry here + update loader in ecu_database.rs. Personal dumps only."
 }

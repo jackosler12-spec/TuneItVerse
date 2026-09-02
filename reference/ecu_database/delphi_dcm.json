@@ -1,0 +1,37 @@
+{
+  "ecu_family": "DELPHI_DCM",
+  "display_name": "Delphi DCM (common light-diesel / common-rail)",
+  "part_numbers_or_os_ids": ["DCM3.2", "DCM6.2", "DCM7.1"],
+  "vehicles": ["Various PSA / Ford / Hyundai light diesel applications — confirm your hardware"],
+  "hardware": "Delphi DCM common-rail diesel ECU",
+  "protocol": "CAN @ 500kbps + UDS",
+  "bin_size_bytes": 2097152,
+  "flash_memory_map": {
+    "full_flash": "2MB typical",
+    "cal_region": "Map block varies — use identify + personal dump"
+  },
+  "checksum": {
+    "type": "delphi_block_crc32_or_additive",
+    "description": "2MB images can use the existing multipoint CRC32 probe in checksum.rs as a first pass. Confirm against a stock dump before flashing.",
+    "reference_files": [],
+    "routine": "EDC16-style 2MB multipoint path as first-pass probe"
+  },
+  "security_access": {
+    "type": "UDS 0x27",
+    "reference": "security.rs Bosch-family dispatch is a starting point only — replace with dump-derived tables",
+    "levels": ["Diagnostic", "Programming"]
+  },
+  "maps_and_xdf": {
+    "has_xdf": false,
+    "description": "Diesel maps: driver wish, IQ, rail, boost, smoke, EGR.",
+    "refined_map_addrs": {
+      "driver_wish": "0x80000",
+      "injection_quantity": "0x82000",
+      "rail_pressure": "0x86000",
+      "boost_setpoint": "0xC0000",
+      "smoke_limiter": "0xC8000",
+      "egr_map": "0xD0000"
+    }
+  },
+  "notes": "Starter family so 2MB Delphi dumps show up in the catalog. Seed/key tables must come from your own ECU. Personal dumps only."
+}

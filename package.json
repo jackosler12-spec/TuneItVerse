@@ -1,8 +1,8 @@
 {
   "name": "tuneitverse",
   "private": true,
-  "version": "3.3.0",
-  "description": "TuneItVerse - open ECU tuning platform (Tauri + Rust). v3.3.0: CSV import, seed/key command, fail-closed flash default, J2534 registry list + connect path.",
+  "version": "3.4.0",
+  "description": "TuneItVerse - open ECU tuning platform (Tauri + Rust). v3.4.0: live Mode 23/3C verify, occupancy heatmap, workspace export, ME7/Delphi catalog.",
   "type": "module",
   "scripts": {
     "tauri": "tauri",
