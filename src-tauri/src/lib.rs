@@ -1,4 +1,4 @@
-// TuneItVerse lib.rs — Tauri entry + command surface (v3.4.0)
+// TuneItVerse lib.rs — Tauri entry + command surface (v3.5.1)
 #![allow(unused_imports, dead_code, non_snake_case)]
 
 mod can;
@@ -185,6 +185,13 @@ fn log_capture_sample() -> Result<String, String> {
         if let Some(d)=pull_mode01(port,0x0B){ if let Some(v)=decode_map(&d){ map.insert("map".into(), v as f64);} }
         if let Some(d)=pull_mode01(port,0x05){ if let Some(v)=decode_ect(&d){ map.insert("ect".into(), v as f64);} }
         if let Some(d)=pull_mode01(port,0x11){ if let Some(v)=decode_throttle_pos(&d){ map.insert("tps".into(), v as f64);} }
+        if let Some(d)=pull_mode01(port,0x0F){ if let Some(v)=decode_iat(&d){ map.insert("iat".into(), v as f64);} }
+        if let Some(d)=pull_mode01(port,0x0E){ if let Some(v)=decode_timing_advance(&d){ map.insert("spark".into(), v as f64);} }
+        if let Some(d)=pull_mode01(port,0x06){ if let Some(v)=decode_stft_bank1(&d){ map.insert("stft".into(), v as f64);} }
+        if let Some(d)=pull_mode01(port,0x07){ if let Some(v)=decode_ltft_bank1(&d){ map.insert("ltft".into(), v as f64);} }
+        if let Some(d)=pull_mode01(port,0x10){ if let Some(v)=decode_maf_obd(&d){ map.insert("maf".into(), v as f64);} }
+        if let Some(d)=pull_mode01(port,0x0D){ if let Some(v)=decode_vss(&d){ map.insert("vss".into(), v as f64);} }
+        if let Some(d)=pull_mode01(port,0x04){ if let Some(v)=decode_engine_load(&d){ map.insert("load".into(), v as f64);} }
         if let Some(v)=crate::flash::read_battery_voltage(port){ map.insert("batt".into(), v as f64); }
         Ok(map)
     }).ok();
@@ -227,7 +234,7 @@ fn compute_seed_key(seed_hex: String, family: Option<String>, level: Option<Stri
 }
 #[tauri::command] fn clear_dtcs_cmd() -> Result<String, String> {
     with_port(|port| dtc::clear_dtcs(port, 0).map(|r| serde_json::to_string(&r).unwrap_or_else(|_| "{\"success\":true}".into())))
-        .or_else(|_| Ok(json!({"success":true,"message":"Cleared (offline)"}).to_string()))
+        .or_else(|_| Ok(json!({"success":false,"message":"DTC clear refused offline. Connect an adapter."}).to_string()))
 }
 #[tauri::command] fn validate_bin_checksums_summary_cmd(data: Vec<u8>) -> Result<String, String> { checksum::validate_bin_checksums_summary(&data) }
 #[tauri::command] fn validate_checksums_cmd(data: Vec<u8>) -> Result<String, String> { Ok(serde_json::to_string_pretty(&checksum::validate_checksums(&data)?).unwrap_or_else(|_| "{}".into())) }
@@ -250,16 +257,34 @@ fn list_script_helpers() -> Result<String, String> {
 }
 #[tauri::command]
 fn compare_bin_to_ecu(file_bytes: Vec<u8>) -> Result<String, String> {
-    with_port(|_port| { Ok(format!("Local window CRC of {} bytes. Use verify_after_write for Mode 23/3C.", file_bytes.len())) })
-        .or_else(|_| Ok("Not connected".into()))
+    let fam = {
+        let guard = STATE.lock().map_err(|e| e.to_string())?;
+        let os = guard.last_os_id.clone().unwrap_or_default();
+        if let Some(e) = crate::ecu_database::get_ecu_by_os_id(&os) { e.ecu_family }
+        else if os.is_empty() { "P01_0411".into() } else { os }
+    };
+    with_port(|port| {
+        let mut logs = Vec::new();
+        let windows = crate::live_verify::probe_live_windows(port, &fam, file_bytes.len(), &mut logs);
+        match crate::live_verify::compare_windows(&file_bytes, &windows, &mut logs) {
+            Ok((crc, matched)) => Ok(json!({"family":fam,"windows":windows.len(),"matched":matched,"crc":format!("0x{:08X}", crc),"logs":logs}).to_string()),
+            Err(e) => Ok(json!({"family":fam,"windows":windows.len(),"matched":false,"error":e,"logs":logs}).to_string()),
+        }
+    }).or_else(|e| Ok(json!({"success":false,"error":format!("Not connected: {}", e)}).to_string()))
 }
 #[tauri::command]
 fn verify_after_write(expected_bytes: Option<Vec<u8>>) -> Result<String, String> {
+    let fam = {
+        let guard = STATE.lock().map_err(|e| e.to_string())?;
+        let os = guard.last_os_id.clone().unwrap_or_default();
+        if let Some(e) = crate::ecu_database::get_ecu_by_os_id(&os) { e.ecu_family }
+        else if os.is_empty() { "P01_0411".into() } else { os }
+    };
     with_port(|port| {
         let data = expected_bytes.unwrap_or_default();
         if data.is_empty() { return Ok("No expected image provided".into()); }
-        match flash::verify_after_write(port, "P01_0411", &data, &mut vec![]) {
-            Ok((crc, matched)) => Ok(format!("Live CRC 0x{:08X} matched={}", crc, matched)),
+        match flash::verify_after_write(port, &fam, &data, &mut vec![]) {
+            Ok((crc, matched)) => Ok(format!("Live CRC 0x{:08X} matched={} family={}", crc, matched, fam)),
             Err(e) => Ok(format!("Verify note: {}", e)),
         }
     }).or_else(|_| Ok("Not connected".into()))
