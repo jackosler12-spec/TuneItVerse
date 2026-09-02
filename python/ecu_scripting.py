@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import pathlib
 import sys
+import hashlib
 import zlib
 
 
@@ -50,9 +51,16 @@ def identify(data: bytes) -> dict:
     family = {
         P01_128: "P01_0411 (128KB slice)",
         P01_512: "P01_0411",
-        EDC16: "EDC16/EDC17/MED17 2MB",
+        1048576: "ME7_COMMON",
+        EDC16: "EDC16/EDC17/MED17/DELPHI 2MB",
     }.get(size, "unknown")
-    return {"bytes": size, "family_by_size": family}
+    return {
+        "bytes": size,
+        "family_by_size": family,
+        "sha256": hashlib.sha256(data).hexdigest(),
+        "sha256_head_4k": hashlib.sha256(data[:4096]).hexdigest() if data else None,
+        "sha256_tail_4k": hashlib.sha256(data[-4096:]).hexdigest() if data else None,
+    }
 
 
 def checksum_report(data: bytes) -> str:
@@ -65,6 +73,8 @@ def checksum_report(data: bytes) -> str:
             for name, start, end, _cs in P01_REGIONS:
                 s = sum16_be(chunk, start, end)
                 lines.append(f"  blk{b} {name}: sum16=0x{s:04X} {'OK' if s == 0 else 'BAD'}")
+    elif len(data) == 1048576:
+        lines.append("ME7 1MB catalogued. No verified corrector in this CLI — do not invent CS bytes.")
     elif len(data) == EDC16:
         regions = [
             (0x00000, 0x1FFFF),
@@ -80,7 +90,7 @@ def checksum_report(data: bytes) -> str:
             lines.append(f"  0x{start:06X}-0x{end:06X} crc32=0x{crc:08X}")
         lines.append("Note: live correction is in src-tauri/src/checksum.rs")
     else:
-        lines.append("Unsupported size. P01 128/512KB or EDC16 2MB.")
+        lines.append("Unsupported size for correction. P01 128/512KB, ME7 1MB (report only), or EDC16 2MB.")
     return "\n".join(lines)
 
 

@@ -6,7 +6,7 @@ TuneItVerse is a desktop ECU tuning and diagnostics application: a Tauri (Rust) 
 
 ## Stack
 - Rust 2021 (Tauri backend) + vanilla JS/HTML/CSS
-- serialport, serde, quick-xml, libloading (J2534)
+- serialport, serde, quick-xml, libloading (J2534), sha2
 - Legacy C# / XML / XDF / BIN reference assets in `reference/`
 
 ## Run
@@ -23,9 +23,9 @@ python3 python/ecu_scripting.py checksum path/to/dump.bin
 python3 python/ecu_scripting.py seedkey P01_0411 1234 1
 ```
 
-## Current status (v3.4.0)
+## Current status (v3.5.0)
 
-See [COMPLETION.md](COMPLETION.md). This pass closes the live-verify stub, refuses write success without readback (unless you opt in), adds a 16×16 occupancy heatmap for map-from-log, workspace JSON export, and ME7 / Delphi catalog starters.
+See [COMPLETION.md](COMPLETION.md). Live Mode 23/3C verify is fail-closed. This pass actually loads the ME7 / Delphi catalog into the Rust DB, computes identify hashes, wires the v3.4 overlay (heatmap / workspace / risk flags), and refuses to invent a 1MB ME7 checksum corrector.
 
 Build your own. No bullshit prices.
 
