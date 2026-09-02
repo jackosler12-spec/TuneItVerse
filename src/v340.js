@@ -1,4 +1,4 @@
-// v3.5.0 overlay — workspace export, heatmap render, unverified-write flag
+// v3.6.0 overlay — workspace export, heatmap render, unverified-write flag
 (function () {
   function parseMaybe(raw) {
     if (raw == null) return null;
@@ -35,16 +35,23 @@
     let max = 1;
     for (let r = 0; r < grid.length; r++) for (let c = 0; c < grid[r].length; c++) max = Math.max(max, grid[r][c]);
     let html = '<div style="font-size:11px;margin-bottom:6px;">' + (info.advice || '') + '</div>';
+    const stft = info.stft_avg_16x16 || null;
     html += '<div style="display:grid;grid-template-columns:repeat(16,12px);gap:1px;">';
     for (let r = 15; r >= 0; r--) {
       for (let c = 0; c < 16; c++) {
         const v = grid[r][c];
         const t = v / max;
-        const bg = 'rgba(0,200,80,' + (0.08 + t * 0.92) + ')';
-        html += '<div title="r' + r + ' c' + c + ' hits=' + v + '" style="width:12px;height:12px;background:' + bg + ';"></div>';
+        let bg = 'rgba(0,200,80,' + (0.08 + t * 0.92) + ')';
+        let extra = '';
+        if (stft && stft[r] && stft[r][c] != null) {
+          extra = ' stft=' + stft[r][c];
+          const s = Number(stft[r][c]);
+          if (!isNaN(s) && Math.abs(s) >= 4) bg = 'rgba(220,160,0,' + (0.25 + t * 0.75) + ')';
+        }
+        html += '<div title="r' + r + ' c' + c + ' hits=' + v + extra + '" style="width:12px;height:12px;background:' + bg + ';"></div>';
       }
     }
-    html += '</div><div style="font-size:10px;color:#888;margin-top:4px;">rows RPM↑  cols MAP→</div>';
+    html += '</div><div style="font-size:10px;color:#888;margin-top:4px;">rows RPM↑  cols MAP→ • amber = |STFT| ≥ 4</div>';
     adv.innerHTML = html;
   }
 
@@ -80,7 +87,7 @@
       } catch (e) { /* leave as-is */ }
     }
     if (typeof prev === 'function') return prev(cmd, args);
-    if (cmd === 'export_workspace_cmd') return JSON.stringify({ tool: 'TuneItVerse', version: '3.5.0', mock: true });
+    if (cmd === 'export_workspace_cmd') return JSON.stringify({ tool: 'TuneItVerse', version: '3.6.0', mock: true });
     return null;
   };
 })();

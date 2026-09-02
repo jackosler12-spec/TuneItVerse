@@ -1,4 +1,4 @@
-// flash.rs — Guided flash pipeline v3.4.0
+// flash.rs — Guided flash pipeline v3.6.0
 use serde::{Serialize, Deserialize};
 use crate::checksum::ChecksumReport;
 use serialport::SerialPort;
@@ -39,6 +39,19 @@ pub struct GuidedFlashResult {
     pub recovery_prompt: Option<RecoveryPrompt>, pub logs: Vec<String>, pub error: Option<String>,
 }
 pub const DEFAULT_MIN_VOLTAGE_V: f32 = 12.5;
+
+pub fn is_uds_family(fam: &str) -> bool {
+    let f = fam.to_ascii_uppercase();
+    f.contains("EDC") || f.contains("MED") || f.contains("BOSCH") || f.contains("ME7") || f.contains("DELPHI") || f.contains("DCM")
+}
+
+pub fn cal_start_addr(fam: &str) -> u32 {
+    let f = fam.to_ascii_uppercase();
+    if f.contains("ME7") { 0x0001_8000 }
+    else if f.contains("EDC") || f.contains("MED") || f.contains("DELPHI") || f.contains("DCM") { 0x0008_0000 }
+    else { 0x0002_0000 }
+}
+
 #[derive(Debug, Clone)]
 pub struct AdaptiveTiming { pub base_ms: u64, pub max_ms: u64, pub consecutive_empty: u32 }
 impl Default for AdaptiveTiming { fn default() -> Self { Self { base_ms: 5, max_ms: 80, consecutive_empty: 0 } } }
@@ -82,6 +95,33 @@ pub fn verify_after_write(port: &mut Box<dyn SerialPort + Send>, ecu_family: &st
     let windows = crate::live_verify::probe_live_windows(port, ecu_family, written.len(), logs);
     crate::live_verify::compare_windows(written, &windows, logs)
 }
+
+fn write_vpw_mode36(port: &mut Box<dyn SerialPort + Send>, cal_addr: u32, image: &[u8], min_v: f32, logs: &mut Vec<String>, mut on_progress: impl FnMut(FlashProgress)) -> Result<(), String> {
+    send_frame(port, &build_mode34_request(cal_addr, image.len() as u32))?;
+    let mut timing = AdaptiveTiming::for_vpw(); timing.sleep();
+    let chunk_size = 128; let total = image.len();
+    for (i, chunk) in image.chunks(chunk_size).enumerate() {
+        if i > 0 && i % 10 == 0 { enforce_voltage_gate(port, min_v, logs)?; }
+        send_frame(port, &build_mode36_chunk(chunk))?;
+        let done = ((i + 1) * chunk_size).min(total);
+        on_progress(FlashProgress { bytes_done: done as u32, bytes_total: total as u32, percent: ((done * 100) / total.max(1)) as u8 });
+        timing.sleep();
+    }
+    let _ = send_frame(port, &build_mode37_request());
+    Ok(())
+}
+
+fn write_uds_download(port: &mut Box<dyn SerialPort + Send>, cal_addr: u32, image: &[u8], logs: &mut Vec<String>, mut on_progress: impl FnMut(FlashProgress)) -> Result<(), String> {
+    logs.push(format!("UDS 0x34/36/37 download at 0x{:06X} ({} bytes)", cal_addr, image.len()));
+    let _ = crate::uds::prepare_programming_environment(port, true, true);
+    let res = crate::uds::download_image(port, crate::uds::Alfi::ADDR4_SIZE2, cal_addr, image, true, |done, tot| {
+        let t = tot.max(1);
+        on_progress(FlashProgress { bytes_done: done, bytes_total: t, percent: ((done as u64 * 100) / t as u64) as u8 });
+    });
+    let _ = crate::uds::restore_default_environment(port, true);
+    res
+}
+
 pub fn orchestrate_guided_flash<F>(port: &mut Box<dyn SerialPort + Send>, request: GuidedFlashRequest, mut on_progress: F) -> Result<GuidedFlashResult, String>
 where F: FnMut(FlashProgress),
 {
@@ -107,19 +147,21 @@ where F: FnMut(FlashProgress),
     }
     let fam = request.ecu_family.to_ascii_uppercase();
     if fam.contains("P01") || fam.contains("GM") || fam.contains("P59") { let _ = unlock_level2(port); }
-    let cal_addr: u32 = if fam.contains("EDC16") { 0x0008_0000 } else { 0x0002_0000 };
-    if let Err(e) = send_frame(port, &build_mode34_request(cal_addr, image.len() as u32)) { result.error = Some(e); return Ok(result); }
-    let mut timing = AdaptiveTiming::for_vpw(); timing.sleep();
-    let chunk_size = 128; let total = image.len();
-    for (i, chunk) in image.chunks(chunk_size).enumerate() {
-        if i > 0 && i % 10 == 0 { if let Err(e) = enforce_voltage_gate(port, min_v, &mut result.logs) { result.error = Some(e); return Ok(result); } }
-        if let Err(e) = send_frame(port, &build_mode36_chunk(chunk)) { result.error = Some(e); return Ok(result); }
-        let done = ((i + 1) * chunk_size).min(total);
-        on_progress(FlashProgress { bytes_done: done as u32, bytes_total: total as u32, percent: ((done * 100) / total.max(1)) as u8 });
-        timing.sleep();
+    if is_uds_family(&fam) {
+        match crate::security::bosch_uds_unlock_full(port, &request.ecu_family, crate::security::BoschSecurityLevel::from_str("programming")) {
+            Ok(msg) => result.logs.push(format!("Bosch UDS unlock: {}", msg)),
+            Err(e) => result.logs.push(format!("Bosch UDS unlock note: {}", e)),
+        }
     }
-    let _ = send_frame(port, &build_mode37_request());
-    result.flash_write_result = Some(FlashWriteResult { bytes_written: image.len() as u32, blocks_written: ((image.len() + chunk_size - 1) / chunk_size) as u32, crc32_written: crc32_ieee(&image) });
+    let cal_addr = cal_start_addr(&fam);
+    let write_res = if is_uds_family(&fam) {
+        write_uds_download(port, cal_addr, &image, &mut result.logs, |p| on_progress(p))
+    } else {
+        write_vpw_mode36(port, cal_addr, &image, min_v, &mut result.logs, |p| on_progress(p))
+    };
+    if let Err(e) = write_res { result.error = Some(e); return Ok(result); }
+    result.flash_write_result = Some(FlashWriteResult { bytes_written: image.len() as u32, blocks_written: ((image.len() + 127) / 128) as u32, crc32_written: crc32_ieee(&image) });
+    result.steps_completed.push(if is_uds_family(&fam) { "UDS 34/36/37 write".into() } else { "VPW Mode 34/36/37 write".into() });
     match verify_after_write(port, &request.ecu_family, &image, &mut result.logs) {
         Ok((crc, matched)) => { result.verification_crc = Some(crc); result.verified_live = matched; result.success = matched; }
         Err(e) => {
@@ -137,5 +179,14 @@ mod tests {
         let req: GuidedFlashRequest = serde_json::from_str(r#"{"ecu_family":"P01_0411"}"#).unwrap();
         assert!(!req.user_confirmed_risks);
         assert!(!req.accept_unverified_write);
+    }
+    #[test] fn uds_family_detect() {
+        assert!(is_uds_family("EDC16C41"));
+        assert!(is_uds_family("ME7_COMMON"));
+        assert!(is_uds_family("DELPHI_DCM"));
+        assert!(!is_uds_family("P01_0411"));
+        assert_eq!(cal_start_addr("ME7_COMMON"), 0x0001_8000);
+        assert_eq!(cal_start_addr("EDC16C41"), 0x0008_0000);
+        assert_eq!(cal_start_addr("P01_0411"), 0x0002_0000);
     }
 }
