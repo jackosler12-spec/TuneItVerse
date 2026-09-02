@@ -1,8 +1,8 @@
 {
   "name": "tuneitverse",
   "private": true,
-  "version": "3.5.0",
-  "description": "TuneItVerse - open ECU tuning platform (Tauri + Rust). v3.5.0: ME7/Delphi loader wired, identify SHA-256, live compare, UI overlay loaded.",
+  "version": "3.6.0",
+  "description": "TuneItVerse - open ECU tuning platform (Tauri + Rust). v3.6.0: UDS 34/36/37 flash path, read_properties deadlock fix, fail-closed unlocks.",
   "type": "module",
   "scripts": {
     "tauri": "tauri",

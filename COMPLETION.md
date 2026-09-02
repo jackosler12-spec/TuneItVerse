@@ -1,15 +1,15 @@
-# TuneItVerse v3.5.1 — live ISO-TP verify + log PIDs (2026-09-02)
+# TuneItVerse v3.6.0 — UDS flash path + deadlock fix (2026-09-02)
 
-**Status: v3.5.0 wired the catalog and UI overlay. This pass fixes the live UDS path and the commands that still lied.**
+**Status: v3.5.1 shipped live ISO-TP verify and extra log PIDs. This pass closes the two remaining code bugs that made the app hang or write Bosch/ME7 images over VPW.**
 
 ## What this pass actually changed
 
-1. `live_verify` no longer sends a raw ALFI payload over VPW `request_response`. Bosch/ME7/Delphi windows use `uds::read_memory_by_address` (ISO-TP SID 0x23).
-2. `compare_bin_to_ecu` probes those same windows instead of printing a CRC stub.
-3. `verify_after_write` uses the connected OS → family, not a hard-coded P01 string.
-4. `log_capture_sample` pulls STFT / LTFT / MAF / VSS / load / IAT / spark so map-from-log heatmaps can average STFT.
-5. Offline DTC clear is fail-closed (`success: false`).
-6. `currentBin` is a `var` so workspace export can see the loaded image.
+1. `read_properties` no longer re-locks `STATE` while `with_port` already holds it (deadlock on VIN/CALID read).
+2. Guided flash uses UDS 0x34/36/37 `download_image` for EDC / MED / ME7 / Delphi / DCM. P01/P59 stay on VPW Mode 34/36/37.
+3. Cal start address is family-aware (ME7 0x18000, Bosch/Delphi 0x80000, P01 0x20000).
+4. Unlock L1/L2 offline paths return `success: false` instead of a raw Tauri error.
+5. Heatmap cells tint when STFT average is available from the log.
+6. Versions synced to 3.6.0.
 
 ## Still needs your bench
 

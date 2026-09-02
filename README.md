@@ -23,9 +23,9 @@ python3 python/ecu_scripting.py checksum path/to/dump.bin
 python3 python/ecu_scripting.py seedkey P01_0411 1234 1
 ```
 
-## Current status (v3.5.0)
+## Current status (v3.6.0)
 
-See [COMPLETION.md](COMPLETION.md). Live Mode 23/3C verify is fail-closed. This pass actually loads the ME7 / Delphi catalog into the Rust DB, computes identify hashes, wires the v3.4 overlay (heatmap / workspace / risk flags), and refuses to invent a 1MB ME7 checksum corrector.
+See [COMPLETION.md](COMPLETION.md). v3.6.0 writes Bosch/ME7/Delphi over UDS 34/36/37, keeps P01 on VPW, and no longer deadlocks on read_properties.
 
 Build your own. No bullshit prices.
 
