@@ -1,7 +1,7 @@
 [package]
 name = "TuneItVerse"
-version = "3.4.0"
-description = "ECU Tuning platform for JRTuners. v3.4.0: live Mode 23/3C verify, heatmap, workspace export, ME7/Delphi catalog."
+version = "3.4.1"
+description = "ECU Tuning platform for JRTuners. v3.4.1: UDS ISO-TP verify, ME7/Delphi loader, heatmap UI, workspace export."
 authors = ["JRTuners"]
 edition = "2021"
 
