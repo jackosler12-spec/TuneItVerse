@@ -23,9 +23,9 @@ python3 python/ecu_scripting.py checksum path/to/dump.bin
 python3 python/ecu_scripting.py seedkey P01_0411 1234 1
 ```
 
-## Current status (v3.4.0)
+## Current status (v3.4.1)
 
-See [COMPLETION.md](COMPLETION.md). This pass closes the live-verify stub, refuses write success without readback (unless you opt in), adds a 16×16 occupancy heatmap for map-from-log, workspace JSON export, and ME7 / Delphi catalog starters.
+See [COMPLETION.md](COMPLETION.md). This pass closes the v3.4.0 wiring holes: ME7/Delphi actually load, UDS 0x23 uses ISO-TP, heatmap + workspace UI is on the page, identify reports SHA-256 / OS hits.
 
 Build your own. No bullshit prices.
 
