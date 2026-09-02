@@ -1,4 +1,4 @@
-// TuneItVerse lib.rs — Tauri entry + command surface (v3.5.1)
+// TuneItVerse lib.rs — Tauri entry + command surface (v3.6.0)
 #![allow(unused_imports, dead_code, non_snake_case)]
 
 mod can;
@@ -125,7 +125,7 @@ fn pull_mode01(port: &mut Box<dyn SerialPort + Send>, pid: u8) -> Option<Vec<u8>
 
 #[tauri::command]
 fn read_properties() -> Result<String, String> {
-    with_port(|port| {
+    let result = with_port(|port| {
         use crate::vpw::{build_mode09_request, parse_mode09_response, ascii_from_obd_payload, request_response};
         let mut vin = "UNREAD".to_string();
         let mut calid = "UNREAD".to_string();
@@ -143,10 +143,25 @@ fn read_properties() -> Result<String, String> {
         }
         let os_id = if calid != "UNREAD" { calid.clone() } else { "UNREAD".to_string() };
         let ecu = crate::ecu_database::get_ecu_by_os_id(&os_id);
-        let mut guard = STATE.lock().map_err(|e| e.to_string())?;
-        if os_id != "UNREAD" { guard.last_os_id = Some(os_id.clone()); }
-        Ok(json!({"os_id":os_id,"vin":vin,"calid":calid,"hardware":ecu.as_ref().map(|e| e.hardware.clone()).unwrap_or_else(|| "UNREAD".into()),"ecu_type":ecu.as_ref().map(|e| e.ecu_family.clone()).unwrap_or_else(|| "UNREAD".into()),"protocol":guard.protocol,"status":"live"}).to_string())
-    }).or_else(|_| Ok(json!({"os_id":"UNREAD","vin":"UNREAD","calid":"UNREAD","hardware":"UNREAD","ecu_type":"UNREAD","protocol":"offline","status":"Offline"}).to_string()))
+        Ok(json!({"os_id":os_id,"vin":vin,"calid":calid,"hardware":ecu.as_ref().map(|e| e.hardware.clone()).unwrap_or_else(|| "UNREAD".into()),"ecu_type":ecu.as_ref().map(|e| e.ecu_family.clone()).unwrap_or_else(|| "UNREAD".into()),"status":"live"}).to_string())
+    });
+    match result {
+        Ok(s) => {
+            if let Ok(v) = serde_json::from_str::<serde_json::Value>(&s) {
+                if let Some(os) = v.get("os_id").and_then(|x| x.as_str()) {
+                    if os != "UNREAD" {
+                        if let Ok(mut g) = STATE.lock() { g.last_os_id = Some(os.to_string()); }
+                    }
+                }
+            }
+            let proto = STATE.lock().ok().map(|g| g.protocol.clone()).unwrap_or_default();
+            if let Ok(mut v) = serde_json::from_str::<serde_json::Value>(&s) {
+                v["protocol"] = json!(proto);
+                Ok(v.to_string())
+            } else { Ok(s) }
+        }
+        Err(_) => Ok(json!({"os_id":"UNREAD","vin":"UNREAD","calid":"UNREAD","hardware":"UNREAD","ecu_type":"UNREAD","protocol":"offline","status":"Offline"}).to_string()),
+    }
 }
 
 #[tauri::command]
@@ -289,8 +304,14 @@ fn verify_after_write(expected_bytes: Option<Vec<u8>>) -> Result<String, String>
         }
     }).or_else(|_| Ok("Not connected".into()))
 }
-#[tauri::command] fn unlock_level1() -> Result<String, String> { with_port(|port| Ok(serde_json::to_string(&security::unlock_level1(port)?).unwrap_or_else(|_| "{}".into()))) }
-#[tauri::command] fn unlock_level2() -> Result<String, String> { with_port(|port| Ok(serde_json::to_string(&security::unlock_level2(port)?).unwrap_or_else(|_| "{}".into()))) }
+#[tauri::command] fn unlock_level1() -> Result<String, String> {
+    with_port(|port| Ok(serde_json::to_string(&security::unlock_level1(port)?).unwrap_or_else(|_| "{}".into())))
+        .or_else(|e| Ok(json!({"success":false,"message":"Unlock L1 refused offline. Connect an adapter.","error":e}).to_string()))
+}
+#[tauri::command] fn unlock_level2() -> Result<String, String> {
+    with_port(|port| Ok(serde_json::to_string(&security::unlock_level2(port)?).unwrap_or_else(|_| "{}".into())))
+        .or_else(|e| Ok(json!({"success":false,"message":"Unlock L2 refused offline. Connect an adapter.","error":e}).to_string()))
+}
 #[tauri::command]
 fn bosch_uds_unlock(family: Option<String>, level: Option<String>) -> Result<String, String> {
     let fam = family.unwrap_or_else(|| "EDC16C41".into());
