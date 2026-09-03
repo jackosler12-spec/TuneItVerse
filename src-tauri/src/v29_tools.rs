@@ -14,7 +14,7 @@ pub fn map_from_log_cmd() -> Result<String, String> { analyze_log().map(|v| v.to
 pub fn export_workspace_cmd(data: Option<Vec<u8>>) -> Result<String, String> {
     let ident = data.as_deref().map(identify_bin);
     let log = analyze_log().unwrap_or_else(|e| json!({"error": e}));
-    Ok(json!({"tool":"TuneItVerse","version":"3.5.0","families":ecu_database::list_supported_ecu_families(),"identify":ident,"map_from_log":log}).to_string())
+    Ok(json!({"tool":"TuneItVerse","version":"3.6.0","families":ecu_database::list_supported_ecu_families(),"identify":ident,"map_from_log":log}).to_string())
 }
 
 fn sha256_hex(data: &[u8]) -> String {
@@ -42,6 +42,30 @@ fn printable_strings(data: &[u8], min_len: usize, limit: usize) -> Vec<String> {
     out
 }
 
+fn os_id_tokens(raw: &str) -> Vec<String> {
+    raw.split(|c: char| !c.is_ascii_alphanumeric())
+        .filter(|t| t.len() >= 5 && t.len() <= 16 && t.chars().any(|c| c.is_ascii_digit()))
+        .map(|t| t.to_ascii_uppercase())
+        .collect()
+}
+
+fn match_os_ids(strings: &[String]) -> Vec<serde_json::Value> {
+    let hay: Vec<String> = strings.iter().map(|s| s.to_ascii_uppercase()).collect();
+    let mut hits = Vec::new();
+    for fam in ecu_database::list_supported_ecu_families() {
+        if let Some(e) = ecu_database::get_ecu_by_family(&fam) {
+            for raw in &e.part_numbers_or_os_ids {
+                for tok in os_id_tokens(raw) {
+                    if hay.iter().any(|s| s.contains(&tok)) {
+                        hits.push(json!({"family": e.ecu_family, "matched": tok, "display_name": e.display_name}));
+                    }
+                }
+            }
+        }
+    }
+    hits
+}
+
 pub fn identify_bin(data: &[u8]) -> serde_json::Value {
     let size = data.len();
     let mut size_matches = Vec::new();
@@ -50,23 +74,48 @@ pub fn identify_bin(data: &[u8]) -> serde_json::Value {
             if e.bin_size_bytes as usize == size { size_matches.push(e); }
         }
     }
+    let strings = printable_strings(data, 5, 64);
+    let os_hits = match_os_ids(&strings);
+    let family_by_os = os_hits.first().and_then(|h| h.get("family").and_then(|v| v.as_str()).map(|s| s.to_string()));
     let family_by_size = size_matches.first().map(|e| e.ecu_family.clone());
-    let display = size_matches.first().map(|e| e.display_name.clone());
+    let family = family_by_os.clone().or(family_by_size.clone());
+    let display = family.as_ref().and_then(|f| ecu_database::get_ecu_by_family(f).map(|e| e.display_name));
     let families_same_size: Vec<String> = size_matches.iter().map(|e| e.ecu_family.clone()).collect();
     let head_n = size.min(4096);
     let tail_n = size.min(4096);
     let tail = if size > 0 { &data[size - tail_n..] } else { data };
     json!({
         "bin_size_bytes": size,
+        "family": family,
+        "family_by_os": family_by_os,
         "family_by_size": family_by_size,
         "families_same_size": families_same_size,
+        "os_id_hits": os_hits,
         "display_name": display,
         "sha256": sha256_hex(data),
         "sha256_head_4k": sha256_hex(&data[..head_n]),
         "sha256_tail_4k": sha256_hex(tail),
-        "printable_strings": printable_strings(data, 6, 24),
-        "notes": if family_by_size.is_some() { "Size matched at least one family. Confirm OS ID against strings." } else { "Unknown size — add JSON in reference/ecu_database/." }
+        "printable_strings": strings.into_iter().take(24).collect::<Vec<_>>(),
+        "notes": if family_by_os.is_some() {
+            "OS/part string matched the ECU catalog. Confirm the dump is yours before write."
+        } else if family_by_size.is_some() {
+            "Size matched at least one family. Confirm OS ID against strings."
+        } else {
+            "Unknown size — add JSON in reference/ecu_database/."
+        }
     })
+}
+
+#[tauri::command]
+pub fn patch_bin_bytes_cmd(data: Vec<u8>, offset: u32, bytes: Vec<u8>) -> Result<Vec<u8>, String> {
+    if bytes.is_empty() { return Err("no bytes to poke".into()); }
+    let start = offset as usize;
+    if start.checked_add(bytes.len()).map(|end| end > data.len()).unwrap_or(true) {
+        return Err(format!("poke 0x{:X}+{} outside image ({} bytes)", offset, bytes.len(), data.len()));
+    }
+    let mut out = data;
+    out[start..start+bytes.len()].copy_from_slice(&bytes);
+    Ok(out)
 }
 
 pub fn compare_bins(a: &[u8], b: &[u8]) -> serde_json::Value {
@@ -156,6 +205,19 @@ mod tests {
     use super::*;
     #[test] fn identify_unknown_size() { let v = identify_bin(&[0u8;64]); assert_eq!(v["bin_size_bytes"], 64); assert!(v["sha256"].as_str().unwrap().len() == 64); }
     #[test] fn identify_p01_size() { let v = identify_bin(&vec![0u8;524288]); assert_eq!(v["family_by_size"], "P01_0411"); }
+    #[test] fn identify_os_string() {
+        let mut img = vec![0u8; 128];
+        img[10..18].copy_from_slice(b"12225074");
+        let v = identify_bin(&img);
+        assert_eq!(v["family_by_os"], "P01_0411");
+        assert_eq!(v["family"], "P01_0411");
+    }
+    #[test] fn poke_bytes() {
+        let img = vec![0u8; 8];
+        let out = patch_bin_bytes_cmd(img, 2, vec![0xAA, 0xBB]).unwrap();
+        assert_eq!(out[2], 0xAA);
+        assert_eq!(out[3], 0xBB);
+    }
     #[test] fn identify_me7_size() { let v = identify_bin(&vec![0u8;1048576]); assert_eq!(v["family_by_size"], "ME7_COMMON"); }
     #[test] fn compare_same() { let a=vec![1u8,2,3,4]; assert_eq!(compare_bins(&a,&a)["identical"], true); }
     #[test] fn compare_range() {

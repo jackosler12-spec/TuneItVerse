@@ -1,4 +1,4 @@
-// TuneItVerse lib.rs — Tauri entry + command surface (v3.5.1)
+// TuneItVerse lib.rs — Tauri entry + command surface (v3.6.0)
 #![allow(unused_imports, dead_code, non_snake_case)]
 
 mod can;
@@ -8,6 +8,7 @@ mod dtc;
 mod ecu_database;
 mod flash;
 mod j2534;
+mod j2534_list;
 mod kwp;
 mod live_verify;
 mod logging;
@@ -166,7 +167,11 @@ fn read_ecu_data() -> Result<String, String> {
         if let Some(d)=pull_mode01(port,0x10){ if let Some(v)=decode_maf_obd(&d){maf=v;} }
         if let Some(d)=pull_mode01(port,0x0D){ if let Some(v)=decode_vss(&d){vss=v;} }
         if let Some(d)=pull_mode01(port,0x04){ if let Some(v)=decode_engine_load(&d){load=v;} }
-        Ok(json!({"rpm":rpm,"map":mapv,"ect":ect,"tps":tps,"iat":iat,"spark":spark,"inj_ms":3.5,"stft":stft,"ltft":ltft,"maf":maf,"vss":vss,"load":load,"batt":batt,"source":"live-Mode01"}).to_string())
+        let mut o2=0.0f32; let mut baro=0.0f32; let mut fuel_status=0.0f32;
+        if let Some(d)=pull_mode01(port,0x14){ if let Some(v)=decode_o2_b1s1_obd(&d){o2=v;} }
+        if let Some(d)=pull_mode01(port,0x33){ if let Some(&b)=d.first(){baro=b as f32;} }
+        if let Some(d)=pull_mode01(port,0x03){ if let Some(v)=decode_fuel_system_status(&d){fuel_status=v;} }
+        Ok(json!({"rpm":rpm,"map":mapv,"ect":ect,"tps":tps,"iat":iat,"spark":spark,"inj_ms":3.5,"stft":stft,"ltft":ltft,"maf":maf,"vss":vss,"load":load,"batt":batt,"o2b1s1":o2,"baro":baro,"fuel_status":fuel_status,"source":"live-Mode01"}).to_string())
     }).or_else(|_| Ok(json!({"rpm":1250,"map":48,"ect":82,"tps":12,"iat":30,"spark":22,"inj_ms":3.5,"stft":0.0,"ltft":0.0,"maf":0.0,"vss":0.0,"load":0.0,"batt":13.8,"source":"offline-demo"}).to_string()))
 }
 
@@ -193,6 +198,11 @@ fn log_capture_sample() -> Result<String, String> {
         if let Some(d)=pull_mode01(port,0x0D){ if let Some(v)=decode_vss(&d){ map.insert("vss".into(), v as f64);} }
         if let Some(d)=pull_mode01(port,0x04){ if let Some(v)=decode_engine_load(&d){ map.insert("load".into(), v as f64);} }
         if let Some(v)=crate::flash::read_battery_voltage(port){ map.insert("batt".into(), v as f64); }
+        if let Some(d)=pull_mode01(port,0x14){ if let Some(v)=decode_o2_b1s1_obd(&d){ map.insert("o2b1s1".into(), v as f64);} }
+        if let Some(d)=pull_mode01(port,0x15){ if let Some(v)=decode_o2_b1s2_obd(&d){ map.insert("o2b1s2".into(), v as f64);} }
+        if let Some(d)=pull_mode01(port,0x33){ if let Some(&b)=d.first(){ map.insert("baro".into(), b as f64);} }
+        if let Some(d)=pull_mode01(port,0x03){ if let Some(v)=decode_fuel_system_status(&d){ map.insert("fuel_status".into(), v as f64);} }
+        if let Some(d)=pull_mode01(port,0x2F){ if let Some(v)=decode_fuel_level(&d){ map.insert("fuel_level".into(), v as f64);} }
         Ok(map)
     }).ok();
     Ok(serde_json::to_string(&logging::capture_sample(live_overrides)?).unwrap_or_else(|_| "{}".into()))
@@ -315,8 +325,8 @@ pub fn run() {
             xdf::parse_xdf_definitions, xdf::extract_table_from_bin, xdf::patch_table_into_bin,
             auto_load_tables_for_bin, get_tuning_advice, guided_flash_pipeline, compare_bin_to_ecu, verify_after_write,
             unlock_level1, unlock_level2, bosch_uds_unlock, list_script_helpers,
-            v29_tools::identify_bin_cmd, v29_tools::compare_bins_cmd, v29_tools::map_from_log_cmd, v29_tools::export_workspace_cmd,
-            j2534::j2534_list_devices, j2534::j2534_connect, j2534::j2534_connect_vpw,
+            v29_tools::identify_bin_cmd, v29_tools::compare_bins_cmd, v29_tools::map_from_log_cmd, v29_tools::export_workspace_cmd, v29_tools::patch_bin_bytes_cmd,
+            j2534_list::j2534_list_devices, j2534::j2534_connect, j2534::j2534_connect_vpw,
             j2534::j2534_write, j2534::j2534_read, j2534::j2534_set_data_rate,
             j2534::j2534_set_vpw_high_speed, j2534::j2534_set_vpw_normal_speed,
             j2534::j2534_read_vbatt, j2534::j2534_set_iso15765_timing, j2534::j2534_clear_buffers,
