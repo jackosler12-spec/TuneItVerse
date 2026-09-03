@@ -1,7 +1,7 @@
 [package]
 name = "TuneItVerse"
-version = "3.5.0"
-description = "ECU Tuning platform for JRTuners. v3.5.0: ME7/Delphi loader wired, identify SHA-256, live compare, J2534 registry walk."
+version = "3.6.0"
+description = "ECU Tuning platform for JRTuners. v3.6.0: OS-ID fingerprint, real J2534 registry list, hex poke, extra live PIDs."
 authors = ["JRTuners"]
 edition = "2021"
 
