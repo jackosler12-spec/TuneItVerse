@@ -58,10 +58,12 @@ const MED17_JSON: &str = include_str!("../../reference/ecu_database/med17_common
 const EDC17_JSON: &str = include_str!("../../reference/ecu_database/edc17_common.json");
 const ME7_JSON: &str = include_str!("../../reference/ecu_database/me7_common.json");
 const DELPHI_JSON: &str = include_str!("../../reference/ecu_database/delphi_dcm.json");
+const SID803_JSON: &str = include_str!("../../reference/ecu_database/siemens_sid803.json");
+const HONDA_JSON: &str = include_str!("../../reference/ecu_database/honda_keihin.json");
 
 pub fn load_ecu_database() -> Vec<EcuDbEntry> {
     let mut db = Vec::new();
-    for raw in [P01_JSON, EDC16_JSON, P59_JSON, MED17_JSON, EDC17_JSON, ME7_JSON, DELPHI_JSON] {
+    for raw in [P01_JSON, EDC16_JSON, P59_JSON, MED17_JSON, EDC17_JSON, ME7_JSON, DELPHI_JSON, SID803_JSON, HONDA_JSON] {
         if let Ok(entry) = serde_json::from_str::<EcuDbEntry>(raw) {
             db.push(entry);
         }
@@ -232,6 +234,8 @@ mod tests {
         let fams = list_supported_ecu_families();
         assert!(fams.iter().any(|f| f == "ME7_COMMON"));
         assert!(fams.iter().any(|f| f == "DELPHI_DCM"));
+        assert!(fams.iter().any(|f| f == "SIEMENS_SID803"));
+        assert!(fams.iter().any(|f| f == "HONDA_KEIHIN"));
         assert!(get_ecu_by_bin_size(1048576).is_some());
     }
 }

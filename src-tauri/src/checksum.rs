@@ -1,7 +1,6 @@
 // checksum.rs — Multi-ECU support: P01 additive + EDC16C41 multipoint CRC32 + additive fallback
 //
-// v3.2.1: 128KB and 512KB P01 images share the per-64KB additive layout.
-// Real LS1 dumps are 524288 bytes. EDC16 2MB CRC32 path unchanged.
+// v3.7.1: unknown sizes return a report-only ChecksumReport. Correction stays fail-closed.
 
 use serde::{Serialize, Deserialize};
 
@@ -267,7 +266,17 @@ fn correct_edc16_crc32(data: &[u8]) -> Result<CorrectedCal, String> {
 pub fn validate_checksums(data: &[u8]) -> Result<ChecksumReport, String> {
     if is_p01_size(data.len()) { validate_p01_checksums(data) }
     else if data.len() == EDC16_FLASH_SIZE { validate_edc16_crc32(data) }
-    else { Err(format!("Unsupported BIN size for checksum validation: {} bytes. Supported: P01 128KB / 512KB or EDC16 2MB", data.len())) }
+    else {
+        Ok(ChecksumReport {
+            regions: vec![],
+            valid_count: 0,
+            fixed_count: 0,
+            failed_count: 0,
+            all_valid: false,
+            ecu_family: "UNKNOWN".into(),
+            method_used: format!("report-only: no verified corrector for {} bytes", data.len()),
+        })
+    }
 }
 
 pub fn correct_checksums(data: &[u8]) -> Result<CorrectedCal, String> {
@@ -296,7 +305,7 @@ pub fn validate_bin_checksums_summary(data: &[u8]) -> Result<String, String> {
     let mut summary = format!("Checksum validation for {} ({} bytes) using {}\n", report.ecu_family, data.len(), report.method_used);
     summary += &format!("Regions checked: {}\n", report.regions.len());
     summary += &format!("Valid: {} | Fixed needed: {} | Failed: {}\n", report.valid_count, report.fixed_count, report.failed_count);
-    summary += if report.all_valid { "OK All checksums VALID\n" } else { "WARN Some checksums INVALID - use correct_checksums() to fix\n" };
+    summary += if report.all_valid { "OK All checksums VALID\n" } else { "WARN Some checksums INVALID - use correct_checksums() only when a verified routine exists\n" };
     for r in &report.regions {
         let status = if r.is_valid { "OK" } else { "BAD" };
         summary += &format!("  {} @0x{:06X}: orig=0x{:08X} corr=0x{:08X} [{}] (was valid: {})\n", status, r.cs_offset, r.original_cs, r.corrected_cs, r.method, r.was_valid);
@@ -309,7 +318,12 @@ mod tests {
     use super::*;
     fn zero_image_p01() -> Vec<u8> { vec![0u8; CAL_IMAGE_SIZE] }
     #[test]
-    fn validate_rejects_bad_size() { assert!(validate_checksums(&vec![0u8; 100]).is_err()); }
+    fn validate_unknown_size_is_report_only() {
+        let r = validate_checksums(&vec![0u8; 100]).expect("unknown size must report, not error");
+        assert_eq!(r.ecu_family, "UNKNOWN");
+        assert!(r.method_used.contains("report-only"));
+        assert!(correct_checksums(&vec![0u8; 100]).is_err());
+    }
     #[test]
     fn p01_512kb_is_supported() {
         let img = vec![0u8; P01_FULL_IMAGE_SIZE];

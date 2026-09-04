@@ -23,6 +23,7 @@ import zlib
 P01_128 = 131072
 P01_512 = 524288
 EDC16 = 2097152
+SID803 = 1572864
 BLOCK = 0x10000
 
 P01_REGIONS = [
@@ -50,9 +51,10 @@ def identify(data: bytes) -> dict:
     size = len(data)
     family = {
         P01_128: "P01_0411 (128KB slice)",
-        P01_512: "P01_0411",
+        P01_512: "P01_0411 or HONDA_KEIHIN — confirm OS string",
         1048576: "ME7_COMMON",
         EDC16: "EDC16/EDC17/MED17/DELPHI 2MB",
+        SID803: "SIEMENS_SID803 (1.5MB)",
     }.get(size, "unknown")
     return {
         "bytes": size,
@@ -73,8 +75,12 @@ def checksum_report(data: bytes) -> str:
             for name, start, end, _cs in P01_REGIONS:
                 s = sum16_be(chunk, start, end)
                 lines.append(f"  blk{b} {name}: sum16=0x{s:04X} {'OK' if s == 0 else 'BAD'}")
+        if len(data) == P01_512:
+            lines.append("Note: 512KB also matches Honda Keihin. Confirm 37820-* vs 12225074 before using P01 correction.")
     elif len(data) == 1048576:
         lines.append("ME7 1MB catalogued. No verified corrector in this CLI — do not invent CS bytes.")
+    elif len(data) == SID803:
+        lines.append("SID803 1.5MB catalogued. Report-only — no invented corrector.")
     elif len(data) == EDC16:
         regions = [
             (0x00000, 0x1FFFF),
@@ -90,7 +96,7 @@ def checksum_report(data: bytes) -> str:
             lines.append(f"  0x{start:06X}-0x{end:06X} crc32=0x{crc:08X}")
         lines.append("Note: live correction is in src-tauri/src/checksum.rs")
     else:
-        lines.append("Unsupported size for correction. P01 128/512KB, ME7 1MB (report only), or EDC16 2MB.")
+        lines.append("Unsupported size for correction. Report-only.")
     return "\n".join(lines)
 
 

@@ -1,0 +1,33 @@
+{
+  "ecu_family": "HONDA_KEIHIN",
+  "display_name": "Honda Keihin / K-series community (K20/K24)",
+  "part_numbers_or_os_ids": ["37820-PRB", "37820-PRC", "37820-RRC", "37820-RRB", "K20A", "K24A"],
+  "vehicles": ["Honda Civic Si / Integra / Accord K-series — confirm OS on your dump"],
+  "hardware": "Keihin Honda K-series PCM",
+  "protocol": "ISO 9141 / KWP on K-line (primary); later CAN",
+  "bin_size_bytes": 524288,
+  "flash_memory_map": {
+    "full_flash": "512KB common for K-series dumps",
+    "cal_region": "Confirm against your personal dump — size collides with P01"
+  },
+  "checksum": {
+    "type": "honda_block_sum16",
+    "description": "512KB collides with GM P01. Identify by OS string (37820-*) before using any corrector. Honda corrector is report-only until measured on a personal dump.",
+    "reference_files": [],
+    "routine": "identify-first; P01 additive must not be applied blindly to Honda images"
+  },
+  "security_access": {
+    "type": "KWP 0x27",
+    "reference": "2byte-keys.txt public pairs where known; otherwise dump-derived",
+    "levels": ["Level 1 diagnostic", "Level 2 programming"]
+  },
+  "maps_and_xdf": {
+    "has_xdf": false,
+    "description": "Community K-series: fuel, ignition, VTEC, cam. Addresses are starting hints only.",
+    "refined_map_addrs": {
+      "fuel_ve": "0x6000",
+      "ignition_timing": "0x8000"
+    }
+  },
+  "notes": "Size collides with P01 512KB. Trust OS-string identify, not size. Personal dumps only."
+}

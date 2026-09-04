@@ -1,0 +1,36 @@
+{
+  "ecu_family": "SIEMENS_SID803",
+  "display_name": "Siemens / Continental SID803 (PSA / Ford TDCi community)",
+  "part_numbers_or_os_ids": ["SID803", "SID803A", "5WS40000", "5WS40110"],
+  "vehicles": ["PSA 2.0 HDi", "Ford Transit / Mondeo TDCi (confirm hardware on your dump)"],
+  "hardware": "Siemens SID803 / SID803A common-rail diesel",
+  "protocol": "CAN @ 500kbps + UDS / KWP",
+  "bin_size_bytes": 1572864,
+  "flash_memory_map": {
+    "full_flash": "1.5MB typical; some dumps are 2MB padded",
+    "cal_region": "Confirm against your personal dump"
+  },
+  "checksum": {
+    "type": "siemens_block_crc_or_additive",
+    "description": "1.5MB SID dumps are catalogued. Validation is report-only until a verified personal dump lands a corrector.",
+    "reference_files": [],
+    "routine": "report-only — no invented corrector"
+  },
+  "security_access": {
+    "type": "UDS 0x27",
+    "reference": "security.rs family dispatch is a starting point only",
+    "levels": ["Diagnostic", "Programming"]
+  },
+  "maps_and_xdf": {
+    "has_xdf": false,
+    "description": "Diesel maps: driver wish, IQ, rail, boost, smoke. Addresses are starting hints only.",
+    "refined_map_addrs": {
+      "driver_wish": "0x60000",
+      "injection_quantity": "0x64000",
+      "rail_pressure": "0x68000",
+      "boost_setpoint": "0x70000",
+      "smoke_limiter": "0x74000"
+    }
+  },
+  "notes": "Starter family so SID803 dumps show up by size/OS token. Personal dumps only. Do not flash without a verified backup."
+}
