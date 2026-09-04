@@ -46,6 +46,7 @@ async function mapFromLog() {
   try {
     const raw = await invokeCmd('map_from_log_cmd');
     const info = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    window.lastMapFromLog = info;
     if (st) st.textContent = info.advice || 'Map-from-log ready';
     const adv = document.getElementById('side-advice');
     if (adv) adv.textContent = info.advice || JSON.stringify(info);
