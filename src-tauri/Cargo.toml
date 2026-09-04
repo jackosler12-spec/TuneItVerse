@@ -1,7 +1,7 @@
 [package]
 name = "TuneItVerse"
-version = "3.7.0"
-description = "ECU Tuning platform for JRTuners. v3.7.0: XDFFORMAT/A2L parsers, table math, STFT preview, report-only CS."
+version = "3.7.1"
+description = "ECU Tuning platform for JRTuners. v3.7.1: case-insensitive table math, TunerPro XDF, report-only checksums, SID803/Honda catalog."
 authors = ["JRTuners"]
 edition = "2021"
 
