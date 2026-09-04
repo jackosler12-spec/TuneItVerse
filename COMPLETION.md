@@ -1,15 +1,16 @@
-# TuneItVerse v3.6.0 — OS-ID fingerprint + J2534 registry + hex poke (2026-09-03)
+# TuneItVerse v3.7.0 — XDF/A2L + table math + honest checksum report (2026-09-04)
 
-**Status: v3.5.1 closed the live ISO-TP verify lie. This pass closes identify-by-size-only and the fake J2534 device list.**
+**Status: v3.6.0 identified by OS string and listed J2534 devices. This pass closes three software gaps that broke daily tuning work.**
 
 ## What this pass actually changed
 
-1. `identify_bin` scans printable strings and matches catalog OS / part tokens (e.g. `12225074`) instead of trusting BIN size alone. Size collisions stay listed.
-2. `j2534_list_devices` walks `HKLM\\SOFTWARE\\PassThruSupport.04.04` (and WOW6432Node / 04.00) on Windows via `reg query`. Non-Windows stays honest.
-3. `patch_bin_bytes_cmd` pokes bytes into a loaded image. UI hex poke uses it.
-4. Checksum **validation** on unknown sizes is report-only. **Correction** stays fail-closed. Still no invented ME7 corrector.
-5. Live log / Mode 01 path pulls O2 B1S1/B1S2, OBD baro (PID 0x33 = kPa), fuel status, fuel level.
-6. Versions synced to 3.6.0.
+1. Table conversion math is case-insensitive. Catalog defs use `x*0.1`; extract/patch used to treat that as a no-op.
+2. `parse_xdf_definitions` reads TunerPro **XDFFORMAT** text XML (`XDFTABLE` / `XDFAXIS` / `EMBEDDEDDATA`), not only TableData / TableSeek.
+3. A2L scanner (`parse_a2l_definitions`) pulls CHARACTERISTIC name + address hints from a personal ASAP2 file.
+4. Table tools: scale, offset, 3x3 smooth, STFT occupancy preview. Preview does **not** write flash. Patch + checksum still required.
+5. Unknown BIN sizes get a **report-only** checksum. Correction stays fail-closed. No invented ME7 corrector.
+6. Live Mode 01 dashboard now includes O2 B1S2 and fuel level (already in the logger).
+7. Versions synced to 3.7.0.
 
 ## Still needs your bench
 
@@ -18,6 +19,7 @@
 3. A vendor J2534 DLL on Windows so the registry walk returns a real FunctionLibrary path.
 4. A kernel-resident Mode 3C full-image dump. Windowed probes are not a full backup.
 5. ME7 block checksum routine measured on a personal dump before a corrector ships.
+6. Axis labels from a real XDF/A2L — the parsers store addresses, not a verified axis map for every OS.
 
 Never flash without a verified backup and stable power. Personal dumps only.
 

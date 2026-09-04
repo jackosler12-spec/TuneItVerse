@@ -1,8 +1,8 @@
 {
   "name": "tuneitverse",
   "private": true,
-  "version": "3.6.0",
-  "description": "TuneItVerse - open ECU tuning platform (Tauri + Rust). v3.6.0: OS-ID fingerprint, J2534 registry walk, hex poke, extra live PIDs.",
+  "version": "3.7.0",
+  "description": "TuneItVerse - open ECU tuning platform (Tauri + Rust). v3.7.0: XDFFORMAT/A2L parsers, table math, STFT preview, report-only CS.",
   "type": "module",
   "scripts": {
     "tauri": "tauri",

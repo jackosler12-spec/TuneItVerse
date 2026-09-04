@@ -2,12 +2,12 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>TuneItVerse - Professional ECU Tuning Platform v3.6.0</title>
+  <title>TuneItVerse - Professional ECU Tuning Platform v3.7.0</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 <nav class="top-nav">
-  <div class="nav-brand">TuneItVerse <span class="version">v3.6.0</span></div>
+  <div class="nav-brand">TuneItVerse <span class="version">v3.7.0</span></div>
   <div class="nav-links">
     <a href="#" class="nav-item active" data-view="dashboard">Dashboard</a>
     <a href="#" class="nav-item" data-view="connect">Connect</a>
@@ -26,7 +26,7 @@
   <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px;">
     <div class="pro-badge" style="background:#0a0; color:#000; padding:2px 8px; border-radius:3px; font-size:11px; font-weight:700;">PRO</div>
     <h1 style="margin:0; font-size:22px;">TuneItVerse</h1>
-    <span style="color:#666; font-size:12px;">v3.6.0 • OS-ID fingerprint • J2534 registry list • hex poke • live O2/baro</span>
+    <span style="color:#666; font-size:12px;">v3.7.0 • TunerPro XDF • A2L • table math • STFT preview • report-only CS</span>
   </div>
   <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px,1fr)); gap:12px;">
     <div class="panel" style="padding:12px;">
@@ -43,7 +43,7 @@
     </div>
     <div class="panel" style="padding:12px; font-size:12px;">
       <strong>Features</strong><br>
-      Full data logging • XDF editor • Guided flash • DTC • BIN identify • BIN vs BIN diff • Map-from-log.
+      Full data logging • XDF/A2L editor • Guided flash • DTC • BIN identify • table math • Map-from-log.
     </div>
     <div class="panel" style="padding:12px; font-size:12px;">
       <strong>BIN Identity</strong><br>
@@ -155,6 +155,7 @@
   <div class="toolbar" style="padding:8px 12px; display:flex; gap:8px; flex-wrap:wrap;">
     <button id="btn-load-bin" class="btn btn-primary">Load .BIN</button>
     <button id="btn-load-xdf" class="btn">Load XDF / XML</button>
+    <button id="btn-load-a2l" class="btn">Load A2L</button>
     <button id="btn-demo-tables" class="btn">Demo Tables</button>
     <span id="tables-status">No BIN/XDF loaded.</span>
     <button id="btn-identify-bin" class="btn">Identify BIN</button>
@@ -165,6 +166,12 @@
     <label style="font-size:11px;">off<input id="hex-poke-off" placeholder="4000" style="width:70px;margin-left:4px;"></label>
     <label style="font-size:11px;">hex<input id="hex-poke-val" placeholder="AA BB" style="width:90px;margin-left:4px;"></label>
     <button id="btn-hex-poke" class="btn">Poke bytes</button>
+    <label style="font-size:11px;">* <input id="tbl-scale" placeholder="1.05" style="width:48px;margin-left:4px;"></label>
+    <button id="btn-tbl-scale" class="btn">Scale table</button>
+    <label style="font-size:11px;">+ <input id="tbl-offset" placeholder="1.0" style="width:48px;margin-left:4px;"></label>
+    <button id="btn-tbl-offset" class="btn">Offset</button>
+    <button id="btn-tbl-smooth" class="btn">Smooth</button>
+    <button id="btn-tbl-stft" class="btn">STFT preview</button>
   </div>
   <div class="tables-layout">
     <div class="tables-list-panel"><div class="table-filters"><button class="chip-filter active" data-filter="all">All</button></div><div id="tables-list" class="tables-list"></div></div>
@@ -209,5 +216,6 @@
 <script src="v340.js"></script>
 <script src="v350.js"></script>
 <script src="v360.js"></script>
+<script src="v370.js"></script>
 </body>
 </html>

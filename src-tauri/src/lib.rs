@@ -1,6 +1,7 @@
-// TuneItVerse lib.rs — Tauri entry + command surface (v3.6.0)
+// TuneItVerse lib.rs — Tauri entry + command surface (v3.7.0)
 #![allow(unused_imports, dead_code, non_snake_case)]
 
+mod a2l;
 mod can;
 mod checksum;
 mod consult;
@@ -14,6 +15,7 @@ mod live_verify;
 mod logging;
 mod pid_decode;
 mod security;
+mod table_tools;
 mod uds;
 mod vpw;
 mod xdf;
@@ -167,11 +169,13 @@ fn read_ecu_data() -> Result<String, String> {
         if let Some(d)=pull_mode01(port,0x10){ if let Some(v)=decode_maf_obd(&d){maf=v;} }
         if let Some(d)=pull_mode01(port,0x0D){ if let Some(v)=decode_vss(&d){vss=v;} }
         if let Some(d)=pull_mode01(port,0x04){ if let Some(v)=decode_engine_load(&d){load=v;} }
-        let mut o2=0.0f32; let mut baro=0.0f32; let mut fuel_status=0.0f32;
+        let mut o2=0.0f32; let mut o2b2=0.0f32; let mut baro=0.0f32; let mut fuel_status=0.0f32; let mut fuel_level=0.0f32;
         if let Some(d)=pull_mode01(port,0x14){ if let Some(v)=decode_o2_b1s1_obd(&d){o2=v;} }
+        if let Some(d)=pull_mode01(port,0x15){ if let Some(v)=decode_o2_b1s2_obd(&d){o2b2=v;} }
         if let Some(d)=pull_mode01(port,0x33){ if let Some(&b)=d.first(){baro=b as f32;} }
         if let Some(d)=pull_mode01(port,0x03){ if let Some(v)=decode_fuel_system_status(&d){fuel_status=v;} }
-        Ok(json!({"rpm":rpm,"map":mapv,"ect":ect,"tps":tps,"iat":iat,"spark":spark,"inj_ms":3.5,"stft":stft,"ltft":ltft,"maf":maf,"vss":vss,"load":load,"batt":batt,"o2b1s1":o2,"baro":baro,"fuel_status":fuel_status,"source":"live-Mode01"}).to_string())
+        if let Some(d)=pull_mode01(port,0x2F){ if let Some(v)=decode_fuel_level(&d){fuel_level=v;} }
+        Ok(json!({"rpm":rpm,"map":mapv,"ect":ect,"tps":tps,"iat":iat,"spark":spark,"inj_ms":3.5,"stft":stft,"ltft":ltft,"maf":maf,"vss":vss,"load":load,"batt":batt,"o2b1s1":o2,"o2b1s2":o2b2,"baro":baro,"fuel_status":fuel_status,"fuel_level":fuel_level,"source":"live-Mode01"}).to_string())
     }).or_else(|_| Ok(json!({"rpm":1250,"map":48,"ect":82,"tps":12,"iat":30,"spark":22,"inj_ms":3.5,"stft":0.0,"ltft":0.0,"maf":0.0,"vss":0.0,"load":0.0,"batt":13.8,"source":"offline-demo"}).to_string()))
 }
 
@@ -251,7 +255,11 @@ fn compute_seed_key(seed_hex: String, family: Option<String>, level: Option<Stri
 #[tauri::command] fn correct_bin_checksums(data: Vec<u8>) -> Result<Vec<u8>, String> { Ok(checksum::correct_checksums(&data)?.data) }
 #[tauri::command] fn auto_load_tables_for_bin(bin_bytes: Vec<u8>) -> Result<String, String> { Ok(serde_json::to_string(&ecu_database::get_tables_for_bin_size(bin_bytes.len())).unwrap_or_else(|_| "[]".into())) }
 #[tauri::command] fn get_tuning_advice(table_id: String, sample_value: f64, ecu_family: String) -> Result<String, String> {
-    Ok(format!("Advice for {} on {}: sample {:.1}. Cross-check with logs.", table_id, ecu_family, sample_value))
+    let log = crate::v29_tools::map_from_log_cmd().ok();
+    Ok(format!(
+        "Advice for {} on {}: sample {:.1}. Use Map-from-log + STFT preview, then patch the BIN and correct checksums. Never flash without a verified backup.{}",
+        table_id, ecu_family, sample_value, log.map(|s| format!(" Log hint: {}", s)).unwrap_or_default()
+    ))
 }
 #[tauri::command]
 fn guided_flash_pipeline(request_json: String) -> Result<String, String> {
@@ -323,6 +331,8 @@ pub fn run() {
             compute_seed_key, read_dtcs_cmd, read_freeze_frame_cmd, clear_dtcs_cmd,
             validate_bin_checksums_summary_cmd, validate_checksums_cmd, correct_bin_checksums,
             xdf::parse_xdf_definitions, xdf::extract_table_from_bin, xdf::patch_table_into_bin,
+            a2l::parse_a2l_definitions, a2l::parse_a2l_summary,
+            table_tools::table_math_cmd, table_tools::apply_stft_preview_cmd,
             auto_load_tables_for_bin, get_tuning_advice, guided_flash_pipeline, compare_bin_to_ecu, verify_after_write,
             unlock_level1, unlock_level2, bosch_uds_unlock, list_script_helpers,
             v29_tools::identify_bin_cmd, v29_tools::compare_bins_cmd, v29_tools::map_from_log_cmd, v29_tools::export_workspace_cmd, v29_tools::patch_bin_bytes_cmd,
