@@ -23,9 +23,9 @@ python3 python/ecu_scripting.py checksum path/to/dump.bin
 python3 python/ecu_scripting.py seedkey P01_0411 1234 1
 ```
 
-## Current status (v3.7.1)
+## Current status (v3.8.0)
 
-See [COMPLETION.md](COMPLETION.md). Table math is case-insensitive. TunerPro XDFFORMAT text parses. Unknown BIN sizes report-only (no invented corrector). Catalog includes SID803 + Honda Keihin starters. A2L + STFT preview stay offline-safe.
+See [COMPLETION.md](COMPLETION.md). Live PIDs are honest (no invented RPM). 512KB Honda/P01 collision is explicit and blocks the P01 corrector when a Honda OS string is present. Workspace import + checksum window scan are wired.
 
 Build your own. No bullshit prices.
 
