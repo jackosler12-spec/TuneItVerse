@@ -1,4 +1,4 @@
-// v3.7.0 overlay — A2L load, table math, STFT preview apply
+// v3.7.0 overlay — A2L load, table math, STFT preview apply + v3.8.0 loader
 (function () {
   function parseMaybe(raw) {
     if (raw == null) return null;
@@ -105,6 +105,14 @@
     input.click();
   }
 
+  function ensureV380() {
+    if (document.querySelector('script[data-tiv="v380"]')) return;
+    const s = document.createElement('script');
+    s.src = 'v380.js';
+    s.dataset.tiv = 'v380';
+    document.head.appendChild(s);
+  }
+
   window.addEventListener('DOMContentLoaded', function () {
     document.getElementById('btn-tbl-scale') && document.getElementById('btn-tbl-scale').addEventListener('click', function () { runMath('scale'); });
     document.getElementById('btn-tbl-offset') && document.getElementById('btn-tbl-offset').addEventListener('click', function () { runMath('add'); });
@@ -112,6 +120,7 @@
     document.getElementById('btn-tbl-stft') && document.getElementById('btn-tbl-stft').addEventListener('click', applyStft);
     document.getElementById('btn-load-a2l') && document.getElementById('btn-load-a2l').addEventListener('click', loadA2l);
     syncGlobals();
+    ensureV380();
   });
 
   const prevInvoke = window.invokeCmd;
@@ -125,4 +134,6 @@
     }
     return out;
   };
+
+  ensureV380();
 })();
