@@ -1,8 +1,8 @@
 {
   "name": "tuneitverse",
   "private": true,
-  "version": "3.7.1",
-  "description": "TuneItVerse - open ECU tuning platform (Tauri + Rust). v3.7.1: XDFFORMAT/A2L parsers, table math, STFT preview, report-only CS.",
+  "version": "3.8.0",
+  "description": "TuneItVerse - open ECU tuning platform (Tauri + Rust). v3.8.0: honest live PIDs, Honda/P01 CS guard, workspace import, CS window scan.",
   "type": "module",
   "scripts": {
     "tauri": "tauri",
