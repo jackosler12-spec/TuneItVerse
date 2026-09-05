@@ -21,6 +21,37 @@
     el.textContent = text;
   }
 
+  function injectUi() {
+    const ver = document.querySelector('.version');
+    if (ver) ver.textContent = 'v3.8.0';
+    const proto = document.querySelector('input[name="proto"][value="consult"]');
+    if (proto && proto.parentNode && proto.parentNode.parentNode && !document.querySelector('input[name="proto"][value="uds"]')) {
+      const lab = document.createElement('label');
+      lab.innerHTML = '<input type="radio" name="proto" value="uds"> UDS / ISO-TP';
+      proto.parentNode.parentNode.appendChild(lab);
+    }
+    const fam = document.getElementById('seed-family');
+    if (fam && !fam.querySelector('option[value="HONDA_KEIHIN"]')) {
+      ['SIEMENS_SID803', 'HONDA_KEIHIN'].forEach(function (id) {
+        const o = document.createElement('option');
+        o.value = id; o.textContent = id; fam.appendChild(o);
+      });
+    }
+    const exp = document.getElementById('btn-export-workspace');
+    if (exp && exp.parentNode && !document.getElementById('btn-import-workspace')) {
+      const b1 = document.createElement('button');
+      b1.id = 'btn-import-workspace'; b1.className = 'btn'; b1.textContent = 'Import Workspace';
+      const b2 = document.createElement('button');
+      b2.id = 'btn-scan-cs'; b2.className = 'btn'; b2.textContent = 'Scan CS windows';
+      exp.parentNode.insertBefore(b2, exp.nextSibling);
+      exp.parentNode.insertBefore(b1, exp.nextSibling);
+    }
+    const bImp = document.getElementById('btn-import-workspace');
+    if (bImp && !bImp.dataset.bound) { bImp.dataset.bound = '1'; bImp.addEventListener('click', importWorkspace); }
+    const bScan = document.getElementById('btn-scan-cs');
+    if (bScan && !bScan.dataset.bound) { bScan.dataset.bound = '1'; bScan.addEventListener('click', scanCs); }
+  }
+
   async function importWorkspace() {
     const input = document.createElement('input');
     input.type = 'file';
@@ -60,15 +91,17 @@
 
   const prevInvoke = window.invokeCmd;
   window.invokeCmd = async function (cmd, args) {
-    const out = typeof prevInvoke === 'function' ? await prevInvoke(cmd, args) : null;
+    let out = typeof prevInvoke === 'function' ? await prevInvoke(cmd, args) : null;
     if (cmd === 'read_ecu_data') {
-      const data = parseMaybe(out);
+      let data = parseMaybe(out);
+      if (data && data.source === 'offline-demo') {
+        data = { source: 'offline', pids_decoded: 0, honest: true, note: 'Offline — demo RPM/MAP stripped.' };
+        out = JSON.stringify(data);
+      }
       const badge = document.getElementById('connection-status');
       if (badge && data && data.source) {
         badge.dataset.liveSource = data.source;
-        if (data.source === 'offline') badge.title = 'No invented live PIDs';
-        else if (data.source === 'live-no-pids') badge.title = 'Connected but no Mode 01 PIDs decoded';
-        else badge.title = (data.pids_decoded || 0) + ' PIDs decoded';
+        badge.title = data.source === 'offline' ? 'No invented live PIDs' : ((data.pids_decoded || 0) + ' PIDs');
       }
     }
     if (cmd === 'identify_bin_cmd') {
@@ -95,10 +128,9 @@
     return out;
   };
 
-  window.addEventListener('DOMContentLoaded', function () {
-    const ver = document.querySelector('.version');
-    if (ver) ver.textContent = 'v3.8.0';
-    document.getElementById('btn-import-workspace') && document.getElementById('btn-import-workspace').addEventListener('click', importWorkspace);
-    document.getElementById('btn-scan-cs') && document.getElementById('btn-scan-cs').addEventListener('click', scanCs);
-  });
+  if (document.readyState === 'loading') {
+    window.addEventListener('DOMContentLoaded', injectUi);
+  } else {
+    injectUi();
+  }
 })();
