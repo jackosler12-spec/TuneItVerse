@@ -1,8 +1,8 @@
 {
   "name": "tuneitverse",
   "private": true,
-  "version": "3.8.0",
-  "description": "TuneItVerse - open ECU tuning platform (Tauri + Rust). v3.8.0: honest live PIDs, Honda/P01 CS guard, workspace import, CS window scan.",
+  "version": "3.9.0",
+  "description": "TuneItVerse - open ECU tuning platform (Tauri + Rust). v3.9.0: wired cs_guard + workspace import, honest live PIDs in backend, Honda/P01 collision on identify/correct.",
   "type": "module",
   "scripts": {
     "tauri": "tauri",

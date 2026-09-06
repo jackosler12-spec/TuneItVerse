@@ -1,7 +1,7 @@
 [package]
 name = "TuneItVerse"
-version = "3.8.0"
-description = "ECU Tuning platform for JRTuners. v3.8.0: honest live PIDs, Honda/P01 collision guard, workspace import."
+version = "3.9.0"
+description = "ECU Tuning platform for JRTuners. v3.9.0: wired missing v3.8 modules, honest Mode-01 PIDs, Honda corrector block."
 authors = ["JRTuners"]
 edition = "2021"
 
