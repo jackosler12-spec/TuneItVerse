@@ -23,9 +23,9 @@ python3 python/ecu_scripting.py checksum path/to/dump.bin
 python3 python/ecu_scripting.py seedkey P01_0411 1234 1
 ```
 
-## Current status (v3.8.0)
+## Current status (v3.9.0)
 
-See [COMPLETION.md](COMPLETION.md). Live PIDs are honest (no invented RPM). 512KB Honda/P01 collision is explicit and blocks the P01 corrector when a Honda OS string is present. Workspace import + checksum window scan are wired.
+See [COMPLETION.md](COMPLETION.md). v3.9.0 actually registers `cs_guard` and workspace import in the Tauri handler, includes `v380.js`, and stops `read_ecu_data` inventing 1250 RPM. Honda OS on a 512KB image blocks the P01 corrector.
 
 Build your own. No bullshit prices.
 

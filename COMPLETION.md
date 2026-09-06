@@ -1,15 +1,25 @@
-# TuneItVerse v3.8.0 — honest live data + Honda/P01 collision guard (2026-09-05)
+# TuneItVerse v3.9.0 — wire the features v3.8 claimed (2026-09-06)
 
-**Status: previous passes claimed UDS radio / Honda seed options / "fully operational" while live PIDs still invented demo RPM when a request failed. This pass fixes the lies we can fix in software.**
+**Status: v3.8.0 added `cs_guard.rs` and `v380.js` but never compiled them in. `read_ecu_data` still seeded demo RPM. This pass fixes the wiring.**
+
+## What was actually broken on main
+
+1. `mod cs_guard` and `mod checksum_sizes` were missing from `lib.rs`. The Honda guard module could not compile into the binary.
+2. `scan_checksum_candidates_cmd` and `import_workspace_cmd` were not in `generate_handler`.
+3. `src/index.html` never loaded `v380.js`.
+4. `read_ecu_data` defaulted RPM/MAP/ECT to demo numbers and labelled offline as `offline-demo`.
+5. `identify_bin` picked the first same-size family (P01) on every 512KB image, including Honda dumps.
+6. `correct_checksums` would still run P01 additive on a Honda-sized image.
 
 ## What this pass actually changed
 
-1. `read_ecu_data` only returns PIDs that decoded. Offline is `{source:"offline", pids_decoded:0}` — no fake 1250 RPM labelled as live.
-2. 512KB identify: if more than one catalog family shares the size, `family` stays unset until an OS string hits. `size_collision` is explicit.
-3. Honda OS (`37820*`, KEIHIN, K20A/K24A) on a P01-sized image: checksum **validate** is report-only `HONDA_KEIHIN`, **correct** errors. P01 additive will not silently rewrite a Honda dump.
-4. `scan_checksum_candidates` reports 64KB windows whose additive sum16 is already 0. Report-only. No invented corrector.
-5. `import_workspace_cmd` accepts exported workspace JSON (metadata only).
-6. Connect UI actually has a UDS radio. Seed-key family list includes SID803 and Honda. Versions 3.8.0.
+1. Register `checksum_sizes` + `cs_guard`. Expose `scan_checksum_candidates_cmd` and `import_workspace_cmd`.
+2. Load `v380.js` from `index.html`.
+3. `read_ecu_data` only returns PIDs that decoded. Offline is `{source:"offline", pids_decoded:0}`.
+4. Identify: size collision leaves `family` unset unless an OS string hits. Honda OS (`37820*`, KEIHIN, K20A/K24A) selects `HONDA_KEIHIN` and sets `correction_safe=false`.
+5. Checksum validate on Honda-blocked images is report-only `HONDA_KEIHIN`. Correct errors instead of rewriting the dump.
+6. Connect path sends a short ELM AT warmup (SP2/SP5/SP6 by protocol). Disconnect clears `last_os_id`.
+7. Versions 3.9.0.
 
 ## Still needs your bench
 

@@ -1,10 +1,12 @@
-// TuneItVerse lib.rs — Tauri entry + command surface (v3.7.0)
+// TuneItVerse lib.rs — Tauri entry + command surface (v3.9.0)
 #![allow(unused_imports, dead_code, non_snake_case)]
 
 mod a2l;
 mod can;
 mod checksum;
+mod checksum_sizes;
 mod consult;
+mod cs_guard;
 mod dtc;
 mod ecu_database;
 mod flash;
@@ -76,13 +78,29 @@ fn get_connection_health() -> Result<String, String> {
     let guard = STATE.lock().map_err(|e| e.to_string())?;
     if guard.port.is_some() { Ok(format!("Connected ({})", guard.protocol)) } else { Ok("Disconnected".into()) }
 }
+fn elm_warmup(port: &mut Box<dyn SerialPort + Send>, protocol: &str) {
+    let proto = protocol.to_ascii_lowercase();
+    let seq: &[&[u8]] = if proto.contains("uds") || proto.contains("can") {
+        &[b"ATZ\r", b"ATE0\r", b"ATL0\r", b"ATS0\r", b"ATH1\r", b"ATSP6\r"]
+    } else if proto.contains("kwp") {
+        &[b"ATZ\r", b"ATE0\r", b"ATL0\r", b"ATS0\r", b"ATH1\r", b"ATSP5\r"]
+    } else if proto.contains("vpw") {
+        &[b"ATZ\r", b"ATE0\r", b"ATL0\r", b"ATS0\r", b"ATH1\r", b"ATSP2\r"]
+    } else {
+        &[b"ATZ\r", b"ATE0\r", b"ATL0\r", b"ATS0\r", b"ATH1\r"]
+    };
+    for cmd in seq {
+        let _ = port.write_all(cmd);
+        std::thread::sleep(Duration::from_millis(80));
+        let _ = port.clear(serialport::ClearBuffer::Input);
+    }
+}
+
 #[tauri::command]
 fn connect_ecu(port_name: String, baud: u32, protocol: String) -> Result<String, String> {
     let mut port = serialport::new(&port_name, baud).timeout(Duration::from_millis(500)).open()
         .map_err(|e| format!("Failed to open {}: {}", port_name, e))?;
-    let _ = port.write_all(b"ATZ\r");
-    std::thread::sleep(Duration::from_millis(200));
-    let _ = port.clear(serialport::ClearBuffer::All);
+    elm_warmup(&mut port, &protocol);
     let mut guard = STATE.lock().map_err(|e| e.to_string())?;
     guard.port = Some(port);
     guard.protocol = protocol.clone();
@@ -91,7 +109,7 @@ fn connect_ecu(port_name: String, baud: u32, protocol: String) -> Result<String,
 #[tauri::command]
 fn disconnect_ecu() -> Result<String, String> {
     let mut guard = STATE.lock().map_err(|e| e.to_string())?;
-    guard.port = None; guard.protocol = String::new();
+    guard.port = None; guard.protocol = String::new(); guard.last_os_id = None;
     Ok("Disconnected".into())
 }
 #[tauri::command]
@@ -156,27 +174,36 @@ fn read_properties() -> Result<String, String> {
 fn read_ecu_data() -> Result<String, String> {
     with_port(|port| {
         use crate::pid_decode::*;
-        let mut rpm=1250.0f32; let mut mapv=48.0; let mut ect=82.0; let mut tps=12.0; let mut iat=30.0; let mut spark=22.0; let mut batt=13.8; let mut stft=0.0; let mut ltft=0.0; let mut maf=0.0; let mut vss=0.0; let mut load=0.0;
-        if let Some(d)=pull_mode01(port,0x0C){ if let Some(v)=decode_engine_rpm(&d){rpm=v;} }
-        if let Some(d)=pull_mode01(port,0x0B){ if let Some(v)=decode_map(&d){mapv=v;} }
-        if let Some(d)=pull_mode01(port,0x05){ if let Some(v)=decode_ect(&d){ect=v;} }
-        if let Some(d)=pull_mode01(port,0x11){ if let Some(v)=decode_throttle_pos(&d){tps=v;} }
-        if let Some(d)=pull_mode01(port,0x0F){ if let Some(v)=decode_iat(&d){iat=v;} }
-        if let Some(d)=pull_mode01(port,0x0E){ if let Some(v)=decode_timing_advance(&d){spark=v;} }
-        if let Some(v)=crate::flash::read_battery_voltage(port){ batt=v; }
-        if let Some(d)=pull_mode01(port,0x06){ if let Some(v)=decode_stft_bank1(&d){stft=v;} }
-        if let Some(d)=pull_mode01(port,0x07){ if let Some(v)=decode_ltft_bank1(&d){ltft=v;} }
-        if let Some(d)=pull_mode01(port,0x10){ if let Some(v)=decode_maf_obd(&d){maf=v;} }
-        if let Some(d)=pull_mode01(port,0x0D){ if let Some(v)=decode_vss(&d){vss=v;} }
-        if let Some(d)=pull_mode01(port,0x04){ if let Some(v)=decode_engine_load(&d){load=v;} }
-        let mut o2=0.0f32; let mut o2b2=0.0f32; let mut baro=0.0f32; let mut fuel_status=0.0f32; let mut fuel_level=0.0f32;
-        if let Some(d)=pull_mode01(port,0x14){ if let Some(v)=decode_o2_b1s1_obd(&d){o2=v;} }
-        if let Some(d)=pull_mode01(port,0x15){ if let Some(v)=decode_o2_b1s2_obd(&d){o2b2=v;} }
-        if let Some(d)=pull_mode01(port,0x33){ if let Some(&b)=d.first(){baro=b as f32;} }
-        if let Some(d)=pull_mode01(port,0x03){ if let Some(v)=decode_fuel_system_status(&d){fuel_status=v;} }
-        if let Some(d)=pull_mode01(port,0x2F){ if let Some(v)=decode_fuel_level(&d){fuel_level=v;} }
-        Ok(json!({"rpm":rpm,"map":mapv,"ect":ect,"tps":tps,"iat":iat,"spark":spark,"inj_ms":3.5,"stft":stft,"ltft":ltft,"maf":maf,"vss":vss,"load":load,"batt":batt,"o2b1s1":o2,"o2b1s2":o2b2,"baro":baro,"fuel_status":fuel_status,"fuel_level":fuel_level,"source":"live-Mode01"}).to_string())
-    }).or_else(|_| Ok(json!({"rpm":1250,"map":48,"ect":82,"tps":12,"iat":30,"spark":22,"inj_ms":3.5,"stft":0.0,"ltft":0.0,"maf":0.0,"vss":0.0,"load":0.0,"batt":13.8,"source":"offline-demo"}).to_string()))
+        let mut obj = serde_json::Map::new();
+        let mut decoded = 0u32;
+        let mut put = |k: &str, v: Option<f32>| {
+            if let Some(val) = v {
+                obj.insert(k.to_string(), json!(val));
+                decoded += 1;
+            }
+        };
+        put("rpm", pull_mode01(port,0x0C).and_then(|d| decode_engine_rpm(&d)));
+        put("map", pull_mode01(port,0x0B).and_then(|d| decode_map(&d)));
+        put("ect", pull_mode01(port,0x05).and_then(|d| decode_ect(&d)));
+        put("tps", pull_mode01(port,0x11).and_then(|d| decode_throttle_pos(&d)));
+        put("iat", pull_mode01(port,0x0F).and_then(|d| decode_iat(&d)));
+        put("spark", pull_mode01(port,0x0E).and_then(|d| decode_timing_advance(&d)));
+        put("batt", crate::flash::read_battery_voltage(port));
+        put("stft", pull_mode01(port,0x06).and_then(|d| decode_stft_bank1(&d)));
+        put("ltft", pull_mode01(port,0x07).and_then(|d| decode_ltft_bank1(&d)));
+        put("maf", pull_mode01(port,0x10).and_then(|d| decode_maf_obd(&d)));
+        put("vss", pull_mode01(port,0x0D).and_then(|d| decode_vss(&d)));
+        put("load", pull_mode01(port,0x04).and_then(|d| decode_engine_load(&d)));
+        put("o2b1s1", pull_mode01(port,0x14).and_then(|d| decode_o2_b1s1_obd(&d)));
+        put("o2b1s2", pull_mode01(port,0x15).and_then(|d| decode_o2_b1s2_obd(&d)));
+        put("baro", pull_mode01(port,0x33).and_then(|d| d.first().map(|&b| b as f32)));
+        put("fuel_status", pull_mode01(port,0x03).and_then(|d| decode_fuel_system_status(&d)));
+        put("fuel_level", pull_mode01(port,0x2F).and_then(|d| decode_fuel_level(&d)));
+        obj.insert("pids_decoded".into(), json!(decoded));
+        obj.insert("source".into(), json!(if decoded > 0 { "live-Mode01" } else { "live-empty" }));
+        obj.insert("honest".into(), json!(true));
+        Ok(serde_json::Value::Object(obj).to_string())
+    }).or_else(|_| Ok(json!({"source":"offline","pids_decoded":0,"honest":true,"note":"Offline — no invented live PIDs."}).to_string()))
 }
 
 #[tauri::command] fn get_logging_templates() -> Result<String, String> { Ok(serde_json::to_string(&logging::list_templates()).unwrap_or_else(|_| "[]".into())) }
@@ -335,7 +362,8 @@ pub fn run() {
             table_tools::table_math_cmd, table_tools::apply_stft_preview_cmd,
             auto_load_tables_for_bin, get_tuning_advice, guided_flash_pipeline, compare_bin_to_ecu, verify_after_write,
             unlock_level1, unlock_level2, bosch_uds_unlock, list_script_helpers,
-            v29_tools::identify_bin_cmd, v29_tools::compare_bins_cmd, v29_tools::map_from_log_cmd, v29_tools::export_workspace_cmd, v29_tools::patch_bin_bytes_cmd,
+            v29_tools::identify_bin_cmd, v29_tools::compare_bins_cmd, v29_tools::map_from_log_cmd, v29_tools::export_workspace_cmd, v29_tools::import_workspace_cmd, v29_tools::patch_bin_bytes_cmd,
+            cs_guard::scan_checksum_candidates_cmd,
             j2534_list::j2534_list_devices, j2534::j2534_connect, j2534::j2534_connect_vpw,
             j2534::j2534_write, j2534::j2534_read, j2534::j2534_set_data_rate,
             j2534::j2534_set_vpw_high_speed, j2534::j2534_set_vpw_normal_speed,
