@@ -1,4 +1,4 @@
-// v3.8.0 overlay — honest live source badge, workspace import, CS window scan
+// v3.9.0 overlay — honest live source badge, workspace import, CS window scan
 (function () {
   function parseMaybe(raw) {
     if (raw == null) return null;
@@ -23,7 +23,7 @@
 
   function injectUi() {
     const ver = document.querySelector('.version');
-    if (ver) ver.textContent = 'v3.8.0';
+    if (ver) ver.textContent = 'v3.9.0';
     const proto = document.querySelector('input[name="proto"][value="consult"]');
     if (proto && proto.parentNode && proto.parentNode.parentNode && !document.querySelector('input[name="proto"][value="uds"]')) {
       const lab = document.createElement('label');
