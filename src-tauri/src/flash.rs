@@ -1,4 +1,4 @@
-// flash.rs — Guided flash pipeline v3.4.0
+// flash.rs — Guided flash pipeline v3.9.1
 use serde::{Serialize, Deserialize};
 use crate::checksum::ChecksumReport;
 use serialport::SerialPort;
@@ -94,8 +94,15 @@ where F: FnMut(FlashProgress),
         Err(e) => { result.error = Some(e); return Ok(result); }
     }
     let mut image = request.tuned_bin.clone();
+    if crate::cs_guard::honda_blocks_p01_corrector(&image) {
+        result.error = Some("Honda OS string on this image. Refusing P01 additive and write.".into());
+        return Ok(result);
+    }
     if request.auto_correct_checksum {
-        if let Ok(corrected) = crate::checksum::correct_checksums(&image) { result.checksum_report = Some(corrected.report.clone()); image = corrected.data; }
+        match crate::checksum::correct_checksums(&image) {
+            Ok(corrected) => { result.checksum_report = Some(corrected.report.clone()); image = corrected.data; }
+            Err(e) => { result.logs.push(format!("Checksum correct skipped: {}", e)); }
+        }
     }
     if request.perform_backup {
         let w = crate::live_verify::attempt_live_backup(port, &request.ecu_family, image.len(), &mut result.logs);
@@ -106,20 +113,59 @@ where F: FnMut(FlashProgress),
         result.steps_completed.push("Backup captured".into());
     }
     let fam = request.ecu_family.to_ascii_uppercase();
-    if fam.contains("P01") || fam.contains("GM") || fam.contains("P59") { let _ = unlock_level2(port); }
-    let cal_addr: u32 = if fam.contains("EDC16") { 0x0008_0000 } else { 0x0002_0000 };
-    if let Err(e) = send_frame(port, &build_mode34_request(cal_addr, image.len() as u32)) { result.error = Some(e); return Ok(result); }
-    let mut timing = AdaptiveTiming::for_vpw(); timing.sleep();
-    let chunk_size = 128; let total = image.len();
-    for (i, chunk) in image.chunks(chunk_size).enumerate() {
-        if i > 0 && i % 10 == 0 { if let Err(e) = enforce_voltage_gate(port, min_v, &mut result.logs) { result.error = Some(e); return Ok(result); } }
-        if let Err(e) = send_frame(port, &build_mode36_chunk(chunk)) { result.error = Some(e); return Ok(result); }
-        let done = ((i + 1) * chunk_size).min(total);
-        on_progress(FlashProgress { bytes_done: done as u32, bytes_total: total as u32, percent: ((done * 100) / total.max(1)) as u8 });
-        timing.sleep();
+    if fam.contains("HONDA") || fam.contains("KEIHIN") {
+        result.error = Some("Honda write path is not enabled. No verified kernel or corrector.".into());
+        return Ok(result);
     }
-    let _ = send_frame(port, &build_mode37_request());
-    result.flash_write_result = Some(FlashWriteResult { bytes_written: image.len() as u32, blocks_written: ((image.len() + chunk_size - 1) / chunk_size) as u32, crc32_written: crc32_ieee(&image) });
+    let bosch_uds = fam.contains("EDC") || fam.contains("MED") || fam.contains("BOSCH")
+        || fam.contains("DELPHI") || fam.contains("DCM") || fam.contains("SID");
+    if bosch_uds {
+        let lvl = crate::security::BoschSecurityLevel::from_str("programming");
+        match crate::security::bosch_uds_unlock_full(port, &request.ecu_family, lvl) {
+            Ok(msg) => result.logs.push(format!("Bosch UDS unlock: {}", msg)),
+            Err(e) => { result.error = Some(format!("Bosch UDS unlock failed: {}", e)); return Ok(result); }
+        }
+        let cal_addr: u32 = if fam.contains("ME7") { 0x0001_8000 } else { 0x0008_0000 };
+        result.logs.push(format!("UDS 0x34/36/37 download at 0x{:06X} ({} bytes)", cal_addr, image.len()));
+        let write = crate::uds::download_image(
+            port,
+            crate::uds::Alfi::ADDR4_SIZE4,
+            cal_addr,
+            &image,
+            true,
+            |done, total| {
+                on_progress(FlashProgress {
+                    bytes_done: done,
+                    bytes_total: total,
+                    percent: ((done as u64 * 100) / total.max(1) as u64) as u8,
+                });
+            },
+        );
+        if let Err(e) = write {
+            result.error = Some(e);
+            return Ok(result);
+        }
+        result.flash_write_result = Some(FlashWriteResult {
+            bytes_written: image.len() as u32,
+            blocks_written: ((image.len() + 0x401) / 0x400) as u32,
+            crc32_written: crc32_ieee(&image),
+        });
+    } else {
+        if fam.contains("P01") || fam.contains("GM") || fam.contains("P59") { let _ = unlock_level2(port); }
+        let cal_addr: u32 = 0x0002_0000;
+        if let Err(e) = send_frame(port, &build_mode34_request(cal_addr, image.len() as u32)) { result.error = Some(e); return Ok(result); }
+        let mut timing = AdaptiveTiming::for_vpw(); timing.sleep();
+        let chunk_size = 128; let total = image.len();
+        for (i, chunk) in image.chunks(chunk_size).enumerate() {
+            if i > 0 && i % 10 == 0 { if let Err(e) = enforce_voltage_gate(port, min_v, &mut result.logs) { result.error = Some(e); return Ok(result); } }
+            if let Err(e) = send_frame(port, &build_mode36_chunk(chunk)) { result.error = Some(e); return Ok(result); }
+            let done = ((i + 1) * chunk_size).min(total);
+            on_progress(FlashProgress { bytes_done: done as u32, bytes_total: total as u32, percent: ((done * 100) / total.max(1)) as u8 });
+            timing.sleep();
+        }
+        let _ = send_frame(port, &build_mode37_request());
+        result.flash_write_result = Some(FlashWriteResult { bytes_written: image.len() as u32, blocks_written: ((image.len() + chunk_size - 1) / chunk_size) as u32, crc32_written: crc32_ieee(&image) });
+    }
     match verify_after_write(port, &request.ecu_family, &image, &mut result.logs) {
         Ok((crc, matched)) => { result.verification_crc = Some(crc); result.verified_live = matched; result.success = matched; }
         Err(e) => {
