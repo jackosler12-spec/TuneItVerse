@@ -23,9 +23,9 @@ python3 python/ecu_scripting.py checksum path/to/dump.bin
 python3 python/ecu_scripting.py seedkey P01_0411 1234 1
 ```
 
-## Current status (v3.9.1)
+## Current status (v3.10.0)
 
-See [COMPLETION.md](COMPLETION.md). v3.9.1 implements the workspace import command, leaves 512KB family unset without an OS string, blocks Honda P01 correction, routes Bosch flash over UDS, and stops the logger inventing RPM.
+See [COMPLETION.md](COMPLETION.md). v3.10.0 removes invented live PIDs, refuses unverified Bosch starters on unlock/flash, identifies family before write (no P01 default), and ships a single frontend with the sidebar/KPI visual system. Browser file-open has no mock ECU data.
 
 Build your own. No bullshit prices.
 

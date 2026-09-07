@@ -78,10 +78,6 @@ fn default_channels() -> Vec<LogChannel> {
         LogChannel { id: "ltft".into(), name: "LTFT Bank1".into(), unit: "%".into(), pid: 0x0007, enabled: false },
         LogChannel { id: "batt".into(), name: "Battery".into(), unit: "V".into(), pid: 0x1141, enabled: true },
         LogChannel { id: "inj_ms".into(), name: "Injector PW".into(), unit: "ms".into(), pid: 0x125A, enabled: false },
-        LogChannel { id: "boost".into(), name: "Boost (est)".into(), unit: "kPa".into(), pid: 0x000B, enabled: false },
-        LogChannel { id: "rail".into(), name: "Rail Pressure".into(), unit: "bar".into(), pid: 0x0000, enabled: false },
-        LogChannel { id: "iq".into(), name: "Injection Quantity".into(), unit: "mm3".into(), pid: 0x0000, enabled: false },
-        LogChannel { id: "vgt".into(), name: "VGT Duty".into(), unit: "%".into(), pid: 0x0000, enabled: false },
         LogChannel { id: "egr".into(), name: "EGR Duty".into(), unit: "%".into(), pid: 0x1171, enabled: false },
         LogChannel { id: "maf".into(), name: "MAF".into(), unit: "g/s".into(), pid: 0x0010, enabled: false },
         LogChannel { id: "vss".into(), name: "Vehicle Speed".into(), unit: "km/h".into(), pid: 0x000D, enabled: false },
@@ -93,42 +89,11 @@ fn default_channels() -> Vec<LogChannel> {
 fn templates() -> Vec<LogTemplate> {
     vec![
         LogTemplate { id: "base".into(), name: "Base Street".into(), description: "RPM MAP ECT TPS".into(), pids: vec!["rpm".into(), "map".into(), "ect".into(), "tps".into(), "batt".into()], rate_hz: 10.0 },
-        LogTemplate { id: "boost".into(), name: "Boost / Turbo".into(), description: "Boost focused".into(), pids: vec!["rpm".into(), "map".into(), "boost".into(), "tps".into()], rate_hz: 20.0 },
-        LogTemplate { id: "diesel".into(), name: "Diesel".into(), description: "EDC style".into(), pids: vec!["rpm".into(), "boost".into(), "rail".into(), "iq".into(), "vgt".into(), "egr".into()], rate_hz: 10.0 },
+        LogTemplate { id: "boost".into(), name: "Boost / Turbo".into(), description: "MAP-focused street set (Mode 01 only)".into(), pids: vec!["rpm".into(), "map".into(), "tps".into(), "load".into()], rate_hz: 20.0 },
+        LogTemplate { id: "diesel".into(), name: "Diesel OBD".into(), description: "Mode 01 PIDs only — no invented rail/IQ/VGT".into(), pids: vec!["rpm".into(), "map".into(), "tps".into(), "ect".into(), "maf".into(), "load".into()], rate_hz: 10.0 },
         LogTemplate { id: "ls1".into(), name: "LS1 / P01".into(), description: "LS1 set".into(), pids: vec!["rpm".into(), "map".into(), "tps".into(), "spark".into(), "stft".into(), "ltft".into()], rate_hz: 20.0 },
         LogTemplate { id: "full".into(), name: "Full".into(), description: "All channels".into(), pids: default_channels().into_iter().map(|c| c.id).collect(), rate_hz: 5.0 },
     ]
-}
-
-fn simulate_values(channels: &[LogChannel], t: f64) -> HashMap<String, f64> {
-    let mut m = HashMap::new();
-    let rpm_base = 1800.0 + 400.0 * (t * 0.7).sin();
-    for ch in channels.iter().filter(|c| c.enabled) {
-        let v = match ch.id.as_str() {
-            "rpm" => rpm_base,
-            "map" => 45.0 + 25.0 * (t * 0.5).sin().abs(),
-            "ect" => 88.0,
-            "tps" => 18.0 + 30.0 * (t * 0.4).sin().abs(),
-            "iat" => 32.0,
-            "spark" => 18.0,
-            "stft" => 0.0,
-            "ltft" => 0.0,
-            "batt" => 13.9,
-            "inj_ms" => 3.2,
-            "boost" => 20.0,
-            "rail" => 450.0,
-            "iq" => 25.0,
-            "vgt" => 40.0,
-            "egr" => 15.0,
-            "maf" => 12.0,
-            "vss" => 40.0,
-            "load" => 30.0,
-            "o2b1s1" => 0.45,
-            _ => 0.0,
-        };
-        m.insert(ch.id.clone(), (v * 100.0).round() / 100.0);
-    }
-    m
 }
 
 pub fn ensure_initialized() {
@@ -193,12 +158,14 @@ pub fn capture_sample(live_overrides: Option<HashMap<String, f64>>) -> Result<Lo
     ensure_initialized();
     let mut g = LOG.lock().map_err(|e| e.to_string())?;
     if !g.running { return Err("Logging not running".into()); }
-    let t = g.started_at.map(|s| s.elapsed().as_secs_f64()).unwrap_or(0.0);
-    let mut values = simulate_values(&g.channels, t);
+    let mut values = HashMap::new();
     if let Some(over) = live_overrides {
-        for (k, v) in over { values.insert(k, v); }
+        for (k, v) in over {
+            if g.channels.iter().any(|c| c.enabled && c.id == k) {
+                values.insert(k, v);
+            }
+        }
     }
-    values.retain(|k, _| g.channels.iter().any(|c| c.enabled && &c.id == k));
     let sample = LogSample { timestamp_ms: now_ms(), values };
     g.samples.push(sample.clone());
     if g.samples.len() > g.max_samples {
@@ -294,12 +261,56 @@ fn status_from(g: &LogSession) -> LogStatus {
 #[cfg(test)]
 mod tests {
     use super::*;
+    static TEST_LOCK: Mutex<()> = Mutex::new(());
+    fn reset_for_tests() -> std::sync::MutexGuard<'static, ()> {
+        let lock = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let mut g = LOG.lock().unwrap();
+        *g = LogSession {
+            running: false,
+            rate_hz: 10.0,
+            channels: vec![],
+            samples: vec![],
+            session_name: String::new(),
+            started_at: None,
+            started_at_ms: None,
+            max_samples: 50_000,
+        };
+        lock
+    }
     #[test]
     fn templates_exist() { assert!(list_templates().len() >= 4); }
     #[test]
+    fn diesel_template_has_no_invented_pids() {
+        let d = templates().into_iter().find(|t| t.id == "diesel").unwrap();
+        for banned in ["rail", "iq", "vgt", "boost"] {
+            assert!(!d.pids.iter().any(|p| p == banned), "diesel template still lists {}", banned);
+        }
+    }
+    #[test]
     fn import_csv_roundtrip() {
-        let _ = stop_session();
+        let _lock = reset_for_tests();
         let st = import_csv("timestamp_ms,rpm,map\n1,2000,60\n2,2100,62\n").unwrap();
         assert_eq!(st.sample_count, 2);
+    }
+    #[test]
+    fn capture_without_live_stores_empty_values() {
+        let _lock = reset_for_tests();
+        start_session(Some(10.0), Some("honest".into())).unwrap();
+        let s = capture_sample(None).unwrap();
+        assert!(s.values.is_empty(), "must not invent RPM/MAP: {:?}", s.values);
+        let _ = stop_session();
+    }
+    #[test]
+    fn capture_keeps_only_live_enabled_keys() {
+        let _lock = reset_for_tests();
+        start_session(Some(10.0), Some("live".into())).unwrap();
+        let mut live = HashMap::new();
+        live.insert("rpm".into(), 1850.0);
+        live.insert("unknown_pid".into(), 99.0);
+        let s = capture_sample(Some(live)).unwrap();
+        assert_eq!(s.values.get("rpm"), Some(&1850.0));
+        assert!(!s.values.contains_key("ect"));
+        assert!(!s.values.contains_key("unknown_pid"));
+        let _ = stop_session();
     }
 }

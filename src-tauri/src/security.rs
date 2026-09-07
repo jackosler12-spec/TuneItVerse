@@ -380,70 +380,83 @@ pub fn edc16c41_key_from_seed_bytes_unchecked(seed: &[u8]) -> [u8; 4] {
 // Family dispatcher
 // ─────────────────────────────────────────────────────────────────────────────
 
+#[derive(Debug, Clone, Serialize)]
+pub struct BoschKeyResult {
+    pub key: Vec<u8>,
+    pub verified: bool,
+    pub algo: String,
+    pub note: String,
+}
+
 /// Key derivation dispatcher for Bosch EDC / MED families.
 ///
-/// Priority:
-/// 1. Exact `EDC16C41` (or any family containing it) with ≥4-byte seed → real RE algo
-/// 2. Generic `EDC16` with ≥4-byte seed → same real algo (C41 is the common case)
-/// 3. 2-byte EDC16 / EDC17 / MED17 community starters
-/// 4. Generic fallback
-#[inline]
-pub fn bosch_key_from_seed(seed: &[u8], family_hint: &str) -> Vec<u8> {
+/// Only EDC16C41 4-byte is a measured algorithm. EDC17 / MED17 / generic
+/// rotate-xor paths are labelled unverified and must not be sent on-wire.
+pub fn bosch_key_result(seed: &[u8], family_hint: &str) -> BoschKeyResult {
     if seed.is_empty() {
-        return vec![0x00, 0x00];
+        return BoschKeyResult {
+            key: vec![],
+            verified: false,
+            algo: "empty".into(),
+            note: "Empty seed — no key.".into(),
+        };
     }
 
     let fam = family_hint.to_ascii_uppercase();
     let is_edc16c41 = fam.contains("EDC16C41");
-    let is_edc16    = is_edc16c41 || fam.contains("EDC16");
+    let is_edc16 = is_edc16c41 || fam.contains("EDC16");
 
-    // Preferred path: real 4-byte EDC16C41 algorithm
     if is_edc16 && seed.len() >= 4 {
         if let Some(key) = edc16c41_key_from_seed_bytes(seed) {
-            return key.to_vec();
+            return BoschKeyResult {
+                key: key.to_vec(),
+                verified: true,
+                algo: "edc16c41_4byte".into(),
+                note: "Measured EDC16C41 4-byte algorithm.".into(),
+            };
         }
     }
 
-    // 2-byte (or short) seed paths
+    let unverified = |key: Vec<u8>, algo: &str, note: &str| BoschKeyResult {
+        key,
+        verified: false,
+        algo: algo.into(),
+        note: note.into(),
+    };
+
     if seed.len() >= 2 {
         let s0 = seed[0];
         let s1 = seed[1];
-
         if is_edc16 {
-            // Legacy 2-byte community pattern (non-C41 / short-seed only)
             let k0 = s0.wrapping_add(0x5A).rotate_left(3) ^ 0xA5;
             let k1 = s1.wrapping_add(0x3C).rotate_right(2) ^ 0x5A;
-            return vec![k0, k1];
+            return unverified(vec![k0, k1], "edc16_2byte_starter", "Unverified 2-byte starter. Not a measured key. Unlock/flash refused.");
         }
         if fam.contains("EDC17") {
             let k0 = s0.wrapping_mul(0x11).wrapping_add(0x7B) ^ s1;
             let k1 = s1.rotate_left(4).wrapping_add(s0) ^ 0xC3;
-            return vec![k0, k1];
+            return unverified(vec![k0, k1], "edc17_starter", "EDC17 starter algebra is not a measured key. Provide a personal dump table before unlock.");
         }
         if fam.contains("MED17") {
             let k0 = s0 ^ 0xC3;
             let k1 = s1.wrapping_add(s0).wrapping_mul(0x11);
-            return vec![k0, k1];
+            return unverified(vec![k0, k1], "med17_starter", "MED17 starter algebra is not a measured key. Unlock/flash refused.");
         }
-
-        // Generic 2-byte fallback
-        return vec![s0 ^ 0xFF, s1.wrapping_add(1) ^ 0xAA];
+        return unverified(
+            vec![s0 ^ 0xFF, s1.wrapping_add(1) ^ 0xAA],
+            "generic_starter",
+            "No measured algorithm for this family. Unlock/flash refused.",
+        );
     }
 
-    // Remaining ≥4-byte seeds that are not EDC16
-    if seed.len() >= 4 {
-        let mut out = [0u8; 4];
-        for (i, b) in seed.iter().take(4).enumerate() {
-            out[i] = b.wrapping_add(0x12).rotate_left((i as u32) + 1) ^ 0x55;
-        }
-        if fam.contains("MED17") {
-            out[0] ^= 0xA5;
-            out[2] = out[2].wrapping_add(0x33);
-        }
-        return out.to_vec();
-    }
+    unverified(seed.to_vec(), "passthrough", "Seed too short and family unverified.")
+}
 
-    seed.to_vec()
+/// Verified-key bytes only. Unverified families return an empty vec.
+#[inline]
+pub fn bosch_key_from_seed(seed: &[u8], family_hint: &str) -> Vec<u8> {
+    let r = bosch_key_result(seed, family_hint);
+    if r.verified { r.key } else { vec![] }
 }
 
 /// High-level Bosch UDS unlock helper (payload only — call via can::uds_request or j2534).
@@ -492,8 +505,14 @@ pub fn bosch_uds_unlock_full(
         ));
     }
 
-    // 2. Compute key (real EDC16C41 algorithm when family matches)
-    let key = bosch_key_from_seed(&seed_bytes, family);
+    let derived = bosch_key_result(&seed_bytes, family);
+    if !derived.verified {
+        return Err(format!(
+            "Refusing Bosch UDS unlock for {}: {} (algo={})",
+            family, derived.note, derived.algo
+        ));
+    }
+    let key = derived.key;
 
     // 3. Send key
     let key_payload = bosch_uds_send_key(level, &key);
@@ -674,6 +693,23 @@ mod tests {
         let key = bosch_key_from_seed(&seed, "Bosch EDC16C41 Nissan");
         assert_eq!(key.len(), 4);
         assert_eq!(key, edc16c41_key_from_seed_bytes(&seed).unwrap().to_vec());
+    }
+
+    #[test]
+    fn edc17_starter_is_unverified_and_not_sent() {
+        let seed = [0x12, 0x34];
+        let r = bosch_key_result(&seed, "EDC17_COMMON");
+        assert!(!r.verified);
+        assert!(r.note.contains("not a measured key"));
+        assert!(bosch_key_from_seed(&seed, "EDC17_COMMON").is_empty());
+    }
+
+    #[test]
+    fn med17_starter_is_unverified() {
+        let seed = [0xAA, 0xBB, 0xCC, 0xDD];
+        let r = bosch_key_result(&seed, "MED17_COMMON");
+        assert!(!r.verified);
+        assert!(bosch_key_from_seed(&seed, "MED17").is_empty());
     }
 
     fn validate_checksum_test(frame: &[u8]) -> bool {

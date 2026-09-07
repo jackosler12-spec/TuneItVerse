@@ -553,22 +553,6 @@ pub fn try_set_vpw_normal_speed() -> bool {
 }
 
 #[tauri::command]
-pub fn j2534_list_devices() -> Result<Vec<String>, String> {
-    #[cfg(target_os = "windows")]
-    {
-        Ok(vec![
-            "Tactrix OpenPort 2.0 (install driver + DLL)".to_string(),
-            "DrewTech / CarDAQ (J2534 compliant)".to_string(),
-            "Generic J2534 (place your vendor .dll and specify path)".to_string(),
-        ])
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
-        Ok(vec!["J2534 not available on this platform - use Serial/ELM or native CAN".to_string()])
-    }
-}
-
-#[tauri::command]
 pub fn j2534_connect(dll_path: Option<String>) -> Result<String, String> {
     let mut guard = SHARED.lock().map_err(|e| e.to_string())?;
     let mut dev = J2534Device::new();

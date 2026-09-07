@@ -1,4 +1,4 @@
-// TuneItVerse lib.rs — Tauri entry + command surface (v3.9.0)
+// TuneItVerse lib.rs — Tauri entry + command surface (v3.10.0)
 #![allow(unused_imports, dead_code, non_snake_case)]
 
 mod a2l;
@@ -33,9 +33,10 @@ struct AppState {
     port: Option<Box<dyn SerialPort + Send>>,
     protocol: String,
     last_os_id: Option<String>,
+    last_family: Option<String>,
 }
 
-static STATE: Mutex<AppState> = Mutex::new(AppState { port: None, protocol: String::new(), last_os_id: None });
+static STATE: Mutex<AppState> = Mutex::new(AppState { port: None, protocol: String::new(), last_os_id: None, last_family: None });
 
 fn with_port<F, R>(f: F) -> Result<R, String>
 where F: FnOnce(&mut Box<dyn SerialPort + Send>) -> Result<R, String>,
@@ -78,7 +79,7 @@ fn get_connection_health() -> Result<String, String> {
     let guard = STATE.lock().map_err(|e| e.to_string())?;
     if guard.port.is_some() { Ok(format!("Connected ({})", guard.protocol)) } else { Ok("Disconnected".into()) }
 }
-fn elm_warmup(port: &mut Box<dyn SerialPort + Send>, protocol: &str) {
+fn elm_warmup(port: &mut dyn SerialPort, protocol: &str) {
     let proto = protocol.to_ascii_lowercase();
     let seq: &[&[u8]] = if proto.contains("uds") || proto.contains("can") {
         &[b"ATZ\r", b"ATE0\r", b"ATL0\r", b"ATS0\r", b"ATH1\r", b"ATSP6\r"]
@@ -100,7 +101,7 @@ fn elm_warmup(port: &mut Box<dyn SerialPort + Send>, protocol: &str) {
 fn connect_ecu(port_name: String, baud: u32, protocol: String) -> Result<String, String> {
     let mut port = serialport::new(&port_name, baud).timeout(Duration::from_millis(500)).open()
         .map_err(|e| format!("Failed to open {}: {}", port_name, e))?;
-    elm_warmup(&mut port, &protocol);
+    elm_warmup(port.as_mut(), &protocol);
     let mut guard = STATE.lock().map_err(|e| e.to_string())?;
     guard.port = Some(port);
     guard.protocol = protocol.clone();
@@ -109,20 +110,57 @@ fn connect_ecu(port_name: String, baud: u32, protocol: String) -> Result<String,
 #[tauri::command]
 fn disconnect_ecu() -> Result<String, String> {
     let mut guard = STATE.lock().map_err(|e| e.to_string())?;
-    guard.port = None; guard.protocol = String::new(); guard.last_os_id = None;
+    guard.port = None; guard.protocol = String::new(); guard.last_os_id = None; guard.last_family = None;
     Ok("Disconnected".into())
 }
+
+fn read_ascii_window(port: &mut dyn SerialPort, wait_ms: u64) -> String {
+    std::thread::sleep(Duration::from_millis(wait_ms));
+    let mut buf = [0u8; 128];
+    match port.read(&mut buf) {
+        Ok(n) if n > 0 => String::from_utf8_lossy(&buf[..n]).to_ascii_uppercase(),
+        _ => String::new(),
+    }
+}
+
 #[tauri::command]
 fn auto_detect_protocol(port_name: String) -> Result<String, String> {
-    let mut port = serialport::new(&port_name, 115200).timeout(Duration::from_millis(300)).open().map_err(|e| e.to_string())?;
+    let mut port = serialport::new(&port_name, 115200).timeout(Duration::from_millis(400)).open()
+        .map_err(|e| format!("Failed to open {}: {}", port_name, e))?;
+    let _ = port.write_all(b"ATZ\r");
+    let ident = read_ascii_window(port.as_mut(), 200);
+    let elm_like = ident.contains("ELM") || ident.contains("OBD") || ident.contains("STN") || ident.contains("OK");
+    if elm_like {
+        for cmd in [b"ATE0\r".as_slice(), b"ATL0\r", b"ATS0\r", b"ATH1\r", b"ATSP0\r"] {
+            let _ = port.write_all(cmd);
+            let _ = read_ascii_window(port.as_mut(), 80);
+        }
+        let _ = port.write_all(b"0100\r");
+        let pid = read_ascii_window(port.as_mut(), 300);
+        if pid.contains("41 00") || pid.contains("4100") || pid.contains("UNABLE") {
+            let proto = if pid.contains("41") { "elm-auto (Mode 01 seen)" } else { "elm (adapter answered, no PID yet)" };
+            let mut guard = STATE.lock().map_err(|e| e.to_string())?;
+            guard.port = Some(port);
+            guard.protocol = proto.into();
+            return Ok(format!("Detected: {}", proto));
+        }
+        drop(port);
+        return Err("ELM-like adapter answered ATZ but Mode 01 PID 00 did not. Check ignition and protocol.".into());
+    }
+    drop(port);
+    let mut port = serialport::new(&port_name, 10400).timeout(Duration::from_millis(400)).open()
+        .map_err(|e| format!("Failed to reopen {} at 10400: {}", port_name, e))?;
     let _ = port.write_all(&[0x68, 0x6A, 0xF1, 0x01, 0x00, 0xC4]);
-    std::thread::sleep(Duration::from_millis(100));
+    std::thread::sleep(Duration::from_millis(120));
     let mut buf = [0u8; 64];
     let n = port.read(&mut buf).unwrap_or(0);
-    let detected = if n > 0 { "VPW/J1850 (or ELM)" } else { "auto (no response – check adapter)" };
-    let mut guard = STATE.lock().map_err(|e| e.to_string())?;
-    guard.port = Some(port); guard.protocol = detected.into();
-    Ok(format!("Detected: {}", detected))
+    if n >= 5 && (buf[0] == 0x48 || buf[0] == 0x41) {
+        let mut guard = STATE.lock().map_err(|e| e.to_string())?;
+        guard.port = Some(port);
+        guard.protocol = "vpw".into();
+        return Ok("Detected: VPW/J1850 (Mode 01 header)".into());
+    }
+    Err("No adapter response. Check port, baud, and that the interface is powered.".into())
 }
 #[tauri::command]
 fn list_supported_protocols() -> Result<Vec<String>, String> {
@@ -146,7 +184,8 @@ fn pull_mode01(port: &mut Box<dyn SerialPort + Send>, pid: u8) -> Option<Vec<u8>
 
 #[tauri::command]
 fn read_properties() -> Result<String, String> {
-    with_port(|port| {
+    let protocol = STATE.lock().map(|g| g.protocol.clone()).unwrap_or_default();
+    let inner = with_port(|port| {
         use crate::vpw::{build_mode09_request, parse_mode09_response, ascii_from_obd_payload, request_response};
         let mut vin = "UNREAD".to_string();
         let mut calid = "UNREAD".to_string();
@@ -164,10 +203,26 @@ fn read_properties() -> Result<String, String> {
         }
         let os_id = if calid != "UNREAD" { calid.clone() } else { "UNREAD".to_string() };
         let ecu = crate::ecu_database::get_ecu_by_os_id(&os_id);
-        let mut guard = STATE.lock().map_err(|e| e.to_string())?;
-        if os_id != "UNREAD" { guard.last_os_id = Some(os_id.clone()); }
-        Ok(json!({"os_id":os_id,"vin":vin,"calid":calid,"hardware":ecu.as_ref().map(|e| e.hardware.clone()).unwrap_or_else(|| "UNREAD".into()),"ecu_type":ecu.as_ref().map(|e| e.ecu_family.clone()).unwrap_or_else(|| "UNREAD".into()),"protocol":guard.protocol,"status":"live"}).to_string())
-    }).or_else(|_| Ok(json!({"os_id":"UNREAD","vin":"UNREAD","calid":"UNREAD","hardware":"UNREAD","ecu_type":"UNREAD","protocol":"offline","status":"Offline"}).to_string()))
+        Ok((os_id, vin, calid, ecu))
+    });
+    match inner {
+        Ok((os_id, vin, calid, ecu)) => {
+            if let Ok(mut guard) = STATE.lock() {
+                if os_id != "UNREAD" { guard.last_os_id = Some(os_id.clone()); }
+                if let Some(e) = ecu.as_ref() { guard.last_family = Some(e.ecu_family.clone()); }
+            }
+            Ok(json!({
+                "os_id": os_id,
+                "vin": vin,
+                "calid": calid,
+                "hardware": ecu.as_ref().map(|e| e.hardware.clone()).unwrap_or_else(|| "UNREAD".into()),
+                "ecu_type": ecu.as_ref().map(|e| e.ecu_family.clone()).unwrap_or_else(|| "UNREAD".into()),
+                "protocol": protocol,
+                "status": "live"
+            }).to_string())
+        }
+        Err(_) => Ok(json!({"os_id":"UNREAD","vin":"UNREAD","calid":"UNREAD","hardware":"UNREAD","ecu_type":"UNREAD","protocol":"offline","status":"Offline"}).to_string())
+    }
 }
 
 #[tauri::command]
@@ -258,12 +313,14 @@ fn compute_seed_key(seed_hex: String, family: Option<String>, level: Option<Stri
     let fam = family.unwrap_or_else(|| "P01_0411".into());
     let fam_up = fam.to_ascii_uppercase();
     let lvl = level.unwrap_or_else(|| "1".into());
-    let (algo, key) = if fam_up.contains("P01") || fam_up.contains("P59") || fam_up.contains("GM") {
+    if fam_up.contains("P01") || fam_up.contains("P59") || fam_up.contains("GM") {
         if seed.len() < 2 { return Err("P01/P59 seed must be at least 2 bytes".into()); }
         let (kh, kl) = if lvl == "2" { security::p01_key_l2(seed[0], seed[1]) } else { security::p01_key_l1(seed[0], seed[1]) };
-        ("p01_lfsr16", vec![kh, kl])
-    } else { ("bosch_family_dispatch", security::bosch_key_from_seed(&seed, &fam)) };
-    Ok(json!({"family":fam,"level":lvl,"algo":algo,"seed_hex":cleaned.to_ascii_uppercase(),"key_hex":key.iter().map(|b| format!("{:02X}", b)).collect::<String>(),"key_len":key.len()}).to_string())
+        let key = vec![kh, kl];
+        return Ok(json!({"family":fam,"level":lvl,"algo":"p01_lfsr16","verified":true,"note":"GM P01/P59 LFSR.","seed_hex":cleaned.to_ascii_uppercase(),"key_hex":key.iter().map(|b| format!("{:02X}", b)).collect::<String>(),"key_len":key.len()}).to_string());
+    }
+    let r = security::bosch_key_result(&seed, &fam);
+    Ok(json!({"family":fam,"level":lvl,"algo":r.algo,"verified":r.verified,"note":r.note,"seed_hex":cleaned.to_ascii_uppercase(),"key_hex":r.key.iter().map(|b| format!("{:02X}", b)).collect::<String>(),"key_len":r.key.len()}).to_string())
 }
 
 #[tauri::command] fn read_dtcs_cmd() -> Result<String, String> {
@@ -300,14 +357,30 @@ fn guided_flash_pipeline(request_json: String) -> Result<String, String> {
 fn list_script_helpers() -> Result<String, String> {
     Ok(json!([{"id":"identify","name":"Identify dump","command":"python3 python/ecu_scripting.py identify path/to/dump.bin"},{"id":"checksum","name":"Checksum report","command":"python3 python/ecu_scripting.py checksum path/to/dump.bin"},{"id":"seedkey","name":"Seed/key bench","command":"python3 python/ecu_scripting.py seedkey P01_0411 1234 1"}]).to_string())
 }
+fn family_from_bin_or_state(file_bytes: &[u8]) -> Result<String, String> {
+    match crate::v29_tools::resolved_family(file_bytes) {
+        Ok(f) => {
+            if let Ok(mut guard) = STATE.lock() {
+                guard.last_family = Some(f.clone());
+            }
+            Ok(f)
+        }
+        Err(ident_err) => {
+            let guard = STATE.lock().map_err(|e| e.to_string())?;
+            if let Some(f) = guard.last_family.clone() { return Ok(f); }
+            if let Some(os) = guard.last_os_id.clone() {
+                if let Some(e) = crate::ecu_database::get_ecu_by_os_id(&os) {
+                    return Ok(e.ecu_family);
+                }
+            }
+            Err(format!("Family unresolved: {}", ident_err))
+        }
+    }
+}
+
 #[tauri::command]
 fn compare_bin_to_ecu(file_bytes: Vec<u8>) -> Result<String, String> {
-    let fam = {
-        let guard = STATE.lock().map_err(|e| e.to_string())?;
-        let os = guard.last_os_id.clone().unwrap_or_default();
-        if let Some(e) = crate::ecu_database::get_ecu_by_os_id(&os) { e.ecu_family }
-        else if os.is_empty() { "P01_0411".into() } else { os }
-    };
+    let fam = family_from_bin_or_state(&file_bytes)?;
     with_port(|port| {
         let mut logs = Vec::new();
         let windows = crate::live_verify::probe_live_windows(port, &fam, file_bytes.len(), &mut logs);
@@ -319,15 +392,10 @@ fn compare_bin_to_ecu(file_bytes: Vec<u8>) -> Result<String, String> {
 }
 #[tauri::command]
 fn verify_after_write(expected_bytes: Option<Vec<u8>>) -> Result<String, String> {
-    let fam = {
-        let guard = STATE.lock().map_err(|e| e.to_string())?;
-        let os = guard.last_os_id.clone().unwrap_or_default();
-        if let Some(e) = crate::ecu_database::get_ecu_by_os_id(&os) { e.ecu_family }
-        else if os.is_empty() { "P01_0411".into() } else { os }
-    };
+    let data = expected_bytes.unwrap_or_default();
+    if data.is_empty() { return Err("No expected image provided".into()); }
+    let fam = family_from_bin_or_state(&data)?;
     with_port(|port| {
-        let data = expected_bytes.unwrap_or_default();
-        if data.is_empty() { return Ok("No expected image provided".into()); }
         match flash::verify_after_write(port, &fam, &data, &mut vec![]) {
             Ok((crc, matched)) => Ok(format!("Live CRC 0x{:08X} matched={} family={}", crc, matched, fam)),
             Err(e) => Ok(format!("Verify note: {}", e)),

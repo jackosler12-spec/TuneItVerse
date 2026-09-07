@@ -1,222 +1,318 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8">
-  <title>TuneItVerse - Professional ECU Tuning Platform v3.9.0</title>
+  <title>TuneItVerse v3.10.0</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-<nav class="top-nav">
-  <div class="nav-brand">TuneItVerse <span class="version">v3.9.0</span></div>
-  <div class="nav-links">
-    <a href="#" class="nav-item active" data-view="dashboard">Dashboard</a>
-    <a href="#" class="nav-item" data-view="connect">Connect</a>
-    <a href="#" class="nav-item" data-view="live">Data Logging</a>
-    <a href="#" class="nav-item" data-view="diagnostics">Diagnostics / DTC</a>
-    <a href="#" class="nav-item" data-view="tables">Tables / Maps</a>
-    <a href="#" class="nav-item" data-view="flash">Flash</a>
-    <a href="#" class="nav-item" data-view="scripts">Python Scripts</a>
-  </div>
-  <div class="nav-status">
-    <span id="connection-status">Disconnected</span>
-    <button id="btn-connect-top" class="btn btn-primary">Connect ECU</button>
-  </div>
-</nav>
-<div id="view-dashboard" class="content">
-  <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px;">
-    <div class="pro-badge" style="background:#0a0; color:#000; padding:2px 8px; border-radius:3px; font-size:11px; font-weight:700;">PRO</div>
-    <h1 style="margin:0; font-size:22px;">TuneItVerse</h1>
-    <span style="color:#666; font-size:12px;">v3.9.0 • TunerPro XDF • A2L • table math • STFT preview • report-only CS</span>
-  </div>
-  <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px,1fr)); gap:12px;">
-    <div class="panel" style="padding:12px;">
-      <strong>Quick Start</strong><br>
-      <button id="dash-tables-btn" class="btn" style="margin-top:8px;">Open Tables / Maps</button>
-      <button id="dash-flash-btn" class="btn" style="margin-top:6px;">Guided Flash</button>
-      <button id="dash-dtc-btn" class="btn" style="margin-top:6px;">Diagnostics / DTC</button>
-      <button id="dash-connect-btn" class="btn" style="margin-top:6px;">Connect ECU</button>
-      <button id="dash-log-btn" class="btn" style="margin-top:6px;">Data Logging</button>
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-logo">
+      <div class="sidebar-logo-mark">TV</div>
+      <div class="sidebar-logo-text">TuneItVerse <span class="version">v3.10.0</span></div>
     </div>
-    <div class="panel" style="padding:12px; font-size:12px;">
-      <strong>Connection Status</strong><br>
-      <span id="dash-conn-hint">Disconnected. Use Connect tab.</span>
+    <nav class="sidebar-nav">
+      <a href="#" class="nav-item active" data-view="dashboard"><span>Dashboard</span></a>
+      <a href="#" class="nav-item" data-view="connect"><span>Connect</span></a>
+      <a href="#" class="nav-item" data-view="live"><span>Data Logging</span></a>
+      <a href="#" class="nav-item" data-view="diagnostics"><span>Diagnostics</span></a>
+      <a href="#" class="nav-item" data-view="tables"><span>Tables / Maps</span></a>
+      <a href="#" class="nav-item" data-view="flash"><span>Flash</span></a>
+      <a href="#" class="nav-item" data-view="scripts"><span>Scripts</span></a>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="connection-status">
+        <span class="conn-dot" id="conn-dot"></span>
+        <span id="connection-status">Disconnected</span>
+      </div>
+      <button id="btn-connect-top" class="btn-connect" type="button">Connect ECU</button>
     </div>
-    <div class="panel" style="padding:12px; font-size:12px;">
-      <strong>Features</strong><br>
-      Full data logging • XDF/A2L editor • Guided flash • DTC • BIN identify • table math • Map-from-log.
-    </div>
-    <div class="panel" style="padding:12px; font-size:12px;">
-      <strong>BIN Identity</strong><br>
-      <div id="dash-identify" style="margin-top:8px; font-family:monospace; font-size:11px; white-space:pre-wrap; color:#9c9;">Load a BIN on Tables to identify family / OS strings.</div>
-    </div>
-  </div>
-</div>
-<div id="view-connect" class="content content--hidden">
-  <h2>ECU Connection</h2>
-  <div class="panel" style="max-width:600px;">
-    <div class="form-group"><label>Serial Port</label>
-      <div style="display:flex; gap:8px;"><select id="port-select" style="flex:1; padding:6px;"></select><button id="btn-refresh-ports" class="btn btn-sm">Refresh</button></div>
-    </div>
-    <div class="form-group"><label>Baud Rate</label>
-      <select id="baud-select" style="width:100%; padding:6px;">
-        <option value="10400">10400 (VPW)</option><option value="9600">9600 (Consult)</option>
-        <option value="115200" selected>115200 (ELM/CAN)</option><option value="500000">500000 (CAN FD)</option>
-      </select>
-    </div>
-    <div class="form-group"><label>Protocol / Interface</label>
-      <div style="display:flex; gap:16px; margin-top:4px;">
-        <label><input type="radio" name="proto" value="auto" checked> Auto</label>
-        <label><input type="radio" name="proto" value="vpw"> VPW/J1850</label>
-        <label><input type="radio" name="proto" value="can"> CAN 500k</label>
-        <label><input type="radio" name="proto" value="kwp"> KWP</label>
-        <label><input type="radio" name="proto" value="consult"> Consult</label>
+  </aside>
+
+  <div class="main-wrapper">
+    <header class="topbar">
+      <div class="topbar-left">
+        <h1 class="page-title" id="page-title">Dashboard</h1>
+        <span class="page-sub" id="page-sub">Honest live data. No invented PIDs.</span>
+      </div>
+      <div class="topbar-right">
+        <div class="vehicle-chip" id="vehicle-chip">OS: UNREAD</div>
+        <span class="pro-badge">OPEN</span>
+      </div>
+    </header>
+
+    <div id="view-dashboard" class="content">
+      <div class="view-body">
+        <div class="dash-grid-bg"></div>
+        <div class="workflow-cards">
+          <div class="panel workflow-card" data-go="connect">
+            <div class="workflow-icon">01</div>
+            <div><strong>Connect</strong><span class="page-sub">Serial / ELM / J2534. Fail-closed if nothing answers.</span></div>
+          </div>
+          <div class="panel workflow-card" data-go="live">
+            <div class="workflow-icon">02</div>
+            <div><strong>Log</strong><span class="page-sub">Mode 01 samples only. Empty cells mean no live data.</span></div>
+          </div>
+          <div class="panel workflow-card" data-go="tables">
+            <div class="workflow-icon">03</div>
+            <div><strong>Tables</strong><span class="page-sub">Load your BIN + XDF/A2L. Identify before you patch.</span></div>
+          </div>
+          <div class="panel workflow-card" data-go="flash">
+            <div class="workflow-icon">04</div>
+            <div><strong>Flash</strong><span class="page-sub">Identify, voltage, backup, then write. Honda is blocked.</span></div>
+          </div>
+        </div>
+        <div class="kpi-row" id="dash-kpis">
+          <div class="kpi-card"><div class="kpi-label">RPM</div><div class="kpi-value" id="kpi-rpm">—</div><div class="kpi-unit">live Mode 01</div></div>
+          <div class="kpi-card"><div class="kpi-label">MAP</div><div class="kpi-value" id="kpi-map">—</div><div class="kpi-unit">kPa</div></div>
+          <div class="kpi-card"><div class="kpi-label">ECT</div><div class="kpi-value" id="kpi-ect">—</div><div class="kpi-unit">°C</div></div>
+          <div class="kpi-card"><div class="kpi-label">Battery</div><div class="kpi-value" id="kpi-batt">—</div><div class="kpi-unit">V</div></div>
+        </div>
+        <div class="dash-panels">
+          <div class="panel">
+            <div class="panel-header"><span class="panel-title">Connection</span></div>
+            <p id="dash-conn-hint" class="muted">Disconnected. Use Connect.</p>
+          </div>
+          <div class="panel">
+            <div class="panel-header"><span class="panel-title">BIN identity</span></div>
+            <pre id="dash-identify" class="mono-block">Load a BIN on Tables to identify family / OS strings.</pre>
+          </div>
+        </div>
       </div>
     </div>
-    <div class="form-group"><label>Hardware</label>
-      <div style="display:flex; gap:16px;">
-        <label><input type="radio" name="hw" value="elm" checked> ELM327 / Serial</label>
-        <label><input type="radio" name="hw" value="j2534"> J2534</label>
+
+    <div id="view-connect" class="content content--hidden">
+      <div class="view-body">
+        <div class="panel connect-panel">
+          <div class="form-group">
+            <label>Serial Port</label>
+            <div class="row">
+              <select id="port-select"></select>
+              <button id="btn-refresh-ports" class="btn btn-sm" type="button">Refresh</button>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Baud Rate</label>
+            <select id="baud-select">
+              <option value="10400">10400 (VPW)</option>
+              <option value="9600">9600 (Consult)</option>
+              <option value="115200" selected>115200 (ELM/CAN)</option>
+              <option value="500000">500000 (CAN FD)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Protocol</label>
+            <div class="radio-row">
+              <label><input type="radio" name="proto" value="auto" checked> Auto</label>
+              <label><input type="radio" name="proto" value="vpw"> VPW/J1850</label>
+              <label><input type="radio" name="proto" value="can"> CAN 500k</label>
+              <label><input type="radio" name="proto" value="kwp"> KWP</label>
+              <label><input type="radio" name="proto" value="consult"> Consult</label>
+              <label><input type="radio" name="proto" value="uds"> UDS / ISO-TP</label>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Hardware</label>
+            <div class="radio-row">
+              <label class="radio-card"><input type="radio" name="hw" value="elm" checked> ELM327 / Serial</label>
+              <label class="radio-card"><input type="radio" name="hw" value="j2534"> J2534</label>
+            </div>
+          </div>
+          <div id="j2534-group" class="form-group" hidden>
+            <label>J2534 DLL / Device</label>
+            <input type="text" id="j2534-path" placeholder="Leave empty for registry default">
+            <button id="btn-j2534-list" class="btn btn-sm" type="button">List J2534 registry devices</button>
+            <div id="j2534-list" class="mono-block"></div>
+          </div>
+          <div class="panel inset">
+            <strong>Offline seed → key</strong>
+            <p class="muted">Computes a key from a captured seed. Does not talk to the car. Unverified families are labelled and will not unlock.</p>
+            <div class="row wrap">
+              <input id="seed-hex" placeholder="seed hex e.g. 1234 or DEADBEEF">
+              <select id="seed-family">
+                <option value="P01_0411">P01_0411</option>
+                <option value="GM_P59">GM_P59</option>
+                <option value="EDC16C41">EDC16C41</option>
+                <option value="EDC17_COMMON">EDC17_COMMON</option>
+                <option value="MED17_COMMON">MED17_COMMON</option>
+                <option value="ME7_COMMON">ME7_COMMON</option>
+                <option value="DELPHI_DCM">DELPHI_DCM</option>
+                <option value="SIEMENS_SID803">SIEMENS_SID803</option>
+                <option value="HONDA_KEIHIN">HONDA_KEIHIN</option>
+              </select>
+              <select id="seed-level">
+                <option value="1">Level 1 / Diagnostic</option>
+                <option value="2">Level 2 / Flash</option>
+              </select>
+              <button id="btn-compute-key" class="btn btn-sm" type="button">Compute key</button>
+            </div>
+            <pre id="seed-result" class="mono-block">—</pre>
+          </div>
+          <div class="row">
+            <button id="btn-do-connect" class="btn btn-primary" type="button">Connect</button>
+            <button id="btn-do-disconnect" class="btn btn-danger" type="button">Disconnect</button>
+            <button id="btn-auto-detect" class="btn" type="button">Auto Detect</button>
+          </div>
+          <pre id="connect-log" class="mono-block log-box"></pre>
+        </div>
       </div>
     </div>
-    <div id="j2534-group" style="display:none; margin-top:8px;">
-      <label>J2534 DLL / Device (optional)</label>
-      <input type="text" id="j2534-path" placeholder="Leave empty for default or pick from registry list" style="width:100%; padding:6px;">
-      <button id="btn-j2534-list" class="btn btn-sm" type="button" style="margin-top:6px;">List J2534 registry devices</button>
-      <div id="j2534-list" style="margin-top:6px; font-size:11px; color:#9c9;"></div>
-    </div>
-    <div class="panel" style="margin-top:16px; padding:10px;">
-      <strong>Offline seed → key</strong>
-      <p style="font-size:11px;color:#888;margin:6px 0;">Compute a key from a seed you already captured. Does not talk to the car.</p>
-      <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center;">
-        <input id="seed-hex" placeholder="seed hex e.g. 1234 or DEADBEEF" style="flex:1; min-width:160px; padding:6px;">
-        <select id="seed-family" style="padding:6px;">
-          <option value="P01_0411">P01_0411</option>
-          <option value="GM_P59">GM_P59</option>
-          <option value="EDC16C41">EDC16C41</option>
-          <option value="EDC17_COMMON">EDC17_COMMON</option>
-          <option value="MED17_COMMON">MED17_COMMON</option>
-          <option value="ME7_COMMON">ME7_COMMON</option>
-          <option value="DELPHI_DCM">DELPHI_DCM</option>
-        </select>
-        <select id="seed-level" style="padding:6px;">
-          <option value="1">Level 1 / Diagnostic</option>
-          <option value="2">Level 2 / Flash</option>
-        </select>
-        <button id="btn-compute-key" class="btn btn-sm" type="button">Compute key</button>
+
+    <div id="view-live" class="content content--hidden">
+      <div class="view-body">
+        <div class="panel toolbar-panel">
+          <div class="row wrap">
+            <label>Rate (Hz)
+              <select id="log-rate"><option value="5">5</option><option value="10" selected>10</option><option value="20">20</option></select>
+            </label>
+            <label>Template <select id="log-template"></select></label>
+            <button id="btn-log-apply-tmpl" class="btn btn-sm" type="button">Apply Template</button>
+            <button id="btn-log-start" class="btn btn-primary" type="button">Start Log</button>
+            <button id="btn-log-stop" class="btn btn-danger" type="button">Stop</button>
+            <button id="btn-log-clear" class="btn" type="button">Clear</button>
+            <button id="btn-log-export" class="btn" type="button">Export CSV</button>
+            <button id="btn-log-import" class="btn" type="button">Import CSV</button>
+            <span id="log-status" class="status-ok">Idle</span>
+          </div>
+          <div id="log-session-meta" class="muted mono">—</div>
+        </div>
+        <div class="live-data-grid">
+          <div class="panel">
+            <strong>Channels</strong>
+            <div id="log-channels" class="channel-list"></div>
+            <button id="btn-log-apply-ch" class="btn btn-sm full" type="button">Apply Channel Selection</button>
+          </div>
+          <div>
+            <div class="panel">
+              <strong>Live KPIs</strong>
+              <div id="log-kpis" class="kpi-inline"></div>
+              <canvas id="log-spark" width="720" height="160" aria-label="sample sparkline"></canvas>
+              <p class="muted" id="log-spark-hint">Chart stays empty until a live or imported sample exists.</p>
+            </div>
+            <div class="panel">
+              <strong>Recent Samples</strong>
+              <table id="log-table" class="data-table"><thead id="log-thead"></thead><tbody id="log-tbody"></tbody></table>
+            </div>
+          </div>
+        </div>
       </div>
-      <pre id="seed-result" style="margin-top:8px; font-size:11px; min-height:40px;">—</pre>
     </div>
-    <div style="margin-top:16px; display:flex; gap:8px;">
-      <button id="btn-do-connect" class="btn btn-primary">Connect</button>
-      <button id="btn-do-disconnect" class="btn btn-danger">Disconnect</button>
-      <button id="btn-auto-detect" class="btn">Auto Detect</button>
+
+    <div id="view-diagnostics" class="content content--hidden">
+      <div class="view-body dtc-panel">
+        <div class="dtc-toolbar">
+          <div class="row">
+            <button id="btn-read-dtcs" class="btn btn-primary" type="button">Read DTCs</button>
+            <button id="btn-read-freeze" class="btn" type="button">Read Freeze Frame</button>
+            <button id="btn-clear-dtcs" class="btn btn-danger" type="button">Clear DTCs</button>
+          </div>
+          <div id="dtc-status">Idle</div>
+        </div>
+        <div class="panel">
+          <strong>Codes</strong>
+          <div id="dtc-summary">No read yet.</div>
+          <table id="dtc-table" class="data-table">
+            <thead><tr><th>Code</th><th>Type</th><th>Description</th></tr></thead>
+            <tbody id="dtc-tbody"></tbody>
+          </table>
+        </div>
+        <pre id="freeze-frame" class="mono-block">—</pre>
+      </div>
     </div>
-    <div id="connect-log" style="margin-top:12px; font-family:monospace; font-size:11px; white-space:pre-wrap; background:#111; padding:8px; min-height:60px; border:1px solid #333;"></div>
-  </div>
-</div>
-<div id="view-live" class="content content--hidden">
-  <h2>Data Logging</h2>
-  <div class="panel" style="padding:12px; margin-bottom:12px;">
-    <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center;">
-      <label style="font-size:12px;">Rate (Hz)<select id="log-rate" style="margin-left:4px; padding:4px;"><option value="5">5</option><option value="10" selected>10</option><option value="20">20</option></select></label>
-      <label style="font-size:12px;">Template<select id="log-template" style="margin-left:4px; padding:4px; min-width:140px;"></select></label>
-      <button id="btn-log-apply-tmpl" class="btn btn-sm">Apply Template</button>
-      <button id="btn-log-start" class="btn btn-primary">Start Log</button>
-      <button id="btn-log-stop" class="btn btn-danger">Stop</button>
-      <button id="btn-log-clear" class="btn">Clear</button>
-      <button id="btn-log-export" class="btn">Export CSV</button>
-      <button id="btn-log-import" class="btn">Import CSV</button>
-      <span id="log-status" style="margin-left:8px; font-size:12px; color:#0c0;">Idle</span>
+
+    <div id="view-tables" class="content content--hidden">
+      <div class="toolbar tuning-toolbar">
+        <button id="btn-load-bin" class="btn btn-primary" type="button">Load .BIN</button>
+        <button id="btn-load-xdf" class="btn" type="button">Load XDF / XML</button>
+        <button id="btn-load-a2l" class="btn" type="button">Load A2L</button>
+        <span id="tables-status" class="tool-status">Load a BIN + XDF/A2L (or a catalog family with known maps).</span>
+        <button id="btn-identify-bin" class="btn" type="button">Identify BIN</button>
+        <button id="btn-compare-bins" class="btn" type="button">Compare Another BIN</button>
+        <button id="btn-map-from-log" class="btn" type="button">Map from Log</button>
+        <button id="btn-export-workspace" class="btn" type="button">Export Workspace</button>
+        <button id="btn-import-workspace" class="btn" type="button">Import Workspace</button>
+        <button id="btn-scan-cs" class="btn" type="button">Scan CS windows</button>
+        <button id="btn-save-patched" class="btn" type="button" disabled>Save Patched BIN</button>
+        <label>off <input id="hex-poke-off" placeholder="4000"></label>
+        <label>hex <input id="hex-poke-val" placeholder="AA BB"></label>
+        <button id="btn-hex-poke" class="btn" type="button">Poke bytes</button>
+        <label>* <input id="tbl-scale" placeholder="1.05"></label>
+        <button id="btn-tbl-scale" class="btn" type="button">Scale</button>
+        <label>+ <input id="tbl-offset" placeholder="1.0"></label>
+        <button id="btn-tbl-offset" class="btn" type="button">Offset</button>
+        <button id="btn-tbl-smooth" class="btn" type="button">Smooth</button>
+        <button id="btn-tbl-stft" class="btn" type="button">STFT preview</button>
+      </div>
+      <div class="tables-layout">
+        <div class="tables-list-panel panel">
+          <div class="table-filters">
+            <button class="chip-filter active" data-filter="all" type="button">All</button>
+            <button class="chip-filter" data-filter="1d" type="button">1D</button>
+            <button class="chip-filter" data-filter="2d" type="button">2D</button>
+            <button class="chip-filter" data-filter="3d" type="button">3D</button>
+          </div>
+          <div id="tables-list" class="tables-list"></div>
+        </div>
+        <div class="tables-editor-panel panel">
+          <div class="rw-tab-bar" id="editor-tabs">
+            <button class="editor-tab rw-tab active" data-tab="grid" type="button">Grid</button>
+            <button class="editor-tab rw-tab" data-tab="3d" type="button">Heatmap</button>
+            <button class="editor-tab rw-tab" data-tab="hex" type="button">Hex Dump</button>
+          </div>
+          <div id="editor-content" class="table-visual-area"></div>
+        </div>
+        <div class="tables-side-panel panel">
+          <div id="side-meta"></div>
+          <div id="side-advice"></div>
+          <pre id="side-checksum" class="mono-block">Select a table for details.</pre>
+        </div>
+      </div>
     </div>
-    <div id="log-session-meta" style="margin-top:8px; font-size:11px; color:#888; font-family:monospace;">—</div>
-  </div>
-  <div style="display:grid; grid-template-columns: 280px 1fr; gap:12px;">
-    <div class="panel" style="padding:10px;"><strong>Channels</strong><div id="log-channels" style="margin-top:8px; max-height:360px; overflow:auto; font-size:12px;"></div><button id="btn-log-apply-ch" class="btn btn-sm" style="margin-top:8px; width:100%;">Apply Channel Selection</button></div>
-    <div>
-      <div class="panel" style="padding:10px; margin-bottom:8px;"><strong>Live KPIs</strong><div id="log-kpis" style="display:flex; flex-wrap:wrap; gap:12px; margin-top:8px;"></div></div>
-      <div class="panel" style="padding:10px;"><strong>Recent Samples</strong><table id="log-table" style="width:100%; border-collapse:collapse; font-size:11px;"><thead id="log-thead"></thead><tbody id="log-tbody"></tbody></table></div>
+
+    <div id="view-flash" class="content content--hidden">
+      <div class="view-body">
+        <div class="pipeline-steps" id="flash-steps">
+          <div class="step" data-step="identify"><span class="step-num">1</span> Identify <span class="step-status" id="st-identify">pending</span></div>
+          <div class="step" data-step="voltage"><span class="step-num">2</span> Voltage <span class="step-status" id="st-voltage">pending</span></div>
+          <div class="step" data-step="backup"><span class="step-num">3</span> Backup <span class="step-status" id="st-backup">pending</span></div>
+          <div class="step" data-step="unlock"><span class="step-num">4</span> Unlock <span class="step-status" id="st-unlock">pending</span></div>
+          <div class="step" data-step="write"><span class="step-num">5</span> Write <span class="step-status" id="st-write">pending</span></div>
+          <div class="step" data-step="verify"><span class="step-num">6</span> Verify <span class="step-status" id="st-verify">pending</span></div>
+        </div>
+        <div class="row wrap">
+          <button id="btn-show-risk" class="btn btn-danger" type="button">Show risk confirmation</button>
+          <button id="btn-compare-bin" class="btn" type="button">Compare loaded BIN to ECU</button>
+          <button id="btn-verify-write" class="btn" type="button">Verify after write</button>
+        </div>
+        <div class="progress-track"><div id="flash-bar" class="progress-fill"></div></div>
+        <div>Progress: <span id="flash-progress">0%</span></div>
+        <pre id="compare-result" class="mono-block" hidden></pre>
+        <div id="risk-section" class="panel danger-panel" hidden>
+          <label><input type="checkbox" id="risk-backup"> verified backup</label>
+          <label><input type="checkbox" id="risk-power"> stable power</label>
+          <label><input type="checkbox" id="risk-ground"> proper grounding</label>
+          <label><input type="checkbox" id="risk-understand"> I understand brick risk</label>
+          <label><input type="checkbox" id="risk-unverified"> accept unverified write (not recommended)</label>
+          <button id="btn-run-flash" class="btn btn-danger" type="button" disabled>PROCEED WITH GUIDED FLASH</button>
+        </div>
+        <pre id="flash-log" class="mono-block log-box"></pre>
+      </div>
     </div>
-  </div>
-</div>
-<div id="view-diagnostics" class="content content--hidden">
-  <h2>Diagnostics / DTCs</h2>
-  <div style="display:flex; gap:8px; margin:12px 0;">
-    <button id="btn-read-dtcs" class="btn btn-primary">Read DTCs</button>
-    <button id="btn-read-freeze" class="btn">Read Freeze Frame</button>
-    <button id="btn-clear-dtcs" class="btn btn-danger">Clear DTCs</button>
-  </div>
-  <div id="dtc-status">Idle</div>
-  <div class="panel" style="padding:12px;"><strong>Codes</strong><div id="dtc-summary">No read yet.</div>
-    <table id="dtc-table" style="width:100%; font-size:12px;"><thead><tr><th>Code</th><th>Type</th><th>Description</th></tr></thead><tbody id="dtc-tbody"></tbody></table>
-  </div>
-  <pre id="freeze-frame" style="background:#111; padding:8px; min-height:80px;">—</pre>
-</div>
-<div id="view-tables" class="content content--hidden">
-  <div class="toolbar" style="padding:8px 12px; display:flex; gap:8px; flex-wrap:wrap;">
-    <button id="btn-load-bin" class="btn btn-primary">Load .BIN</button>
-    <button id="btn-load-xdf" class="btn">Load XDF / XML</button>
-    <button id="btn-load-a2l" class="btn">Load A2L</button>
-    <button id="btn-demo-tables" class="btn">Demo Tables</button>
-    <span id="tables-status">No BIN/XDF loaded.</span>
-    <button id="btn-identify-bin" class="btn">Identify BIN</button>
-    <button id="btn-compare-bins" class="btn">Compare Another BIN</button>
-    <button id="btn-map-from-log" class="btn">Map from Log</button>
-    <button id="btn-export-workspace" class="btn">Export Workspace</button>
-    <button id="btn-save-patched" class="btn" disabled>Save Patched BIN</button>
-    <label style="font-size:11px;">off<input id="hex-poke-off" placeholder="4000" style="width:70px;margin-left:4px;"></label>
-    <label style="font-size:11px;">hex<input id="hex-poke-val" placeholder="AA BB" style="width:90px;margin-left:4px;"></label>
-    <button id="btn-hex-poke" class="btn">Poke bytes</button>
-    <label style="font-size:11px;">* <input id="tbl-scale" placeholder="1.05" style="width:48px;margin-left:4px;"></label>
-    <button id="btn-tbl-scale" class="btn">Scale table</button>
-    <label style="font-size:11px;">+ <input id="tbl-offset" placeholder="1.0" style="width:48px;margin-left:4px;"></label>
-    <button id="btn-tbl-offset" class="btn">Offset</button>
-    <button id="btn-tbl-smooth" class="btn">Smooth</button>
-    <button id="btn-tbl-stft" class="btn">STFT preview</button>
-  </div>
-  <div class="tables-layout">
-    <div class="tables-list-panel"><div class="table-filters"><button class="chip-filter active" data-filter="all">All</button></div><div id="tables-list" class="tables-list"></div></div>
-    <div class="tables-editor-panel">
-      <div class="rw-tabs" id="editor-tabs"><button class="editor-tab active" data-tab="grid">Grid</button><button class="editor-tab" data-tab="3d">3D Visual</button><button class="editor-tab" data-tab="hex">Hex Dump</button></div>
-      <div id="editor-content" style="flex:1; overflow:auto; padding:8px;"></div>
+
+    <div id="view-scripts" class="content content--hidden">
+      <div class="view-body">
+        <p class="muted">Bench helpers, not an embedded interpreter. Live checksum / identify / map-from-log lives in the Rust backend.</p>
+        <button id="btn-refresh-scripts" class="btn" type="button">Refresh Script Helpers</button>
+        <div id="custom-scripts-list" class="script-list"></div>
+      </div>
     </div>
-    <div class="tables-side-panel">
-      <div id="side-meta"></div>
-      <div id="side-advice"></div>
-      <span id="side-checksum">Select table for details.</span>
-    </div>
+
+    <footer class="status-bar">
+      <div class="status-left" id="status-left">TuneItVerse 3.10.0</div>
+      <div class="status-center" id="status-center">No invented live values</div>
+      <div class="status-right" id="status-right">Desktop app required</div>
+    </footer>
   </div>
-</div>
-<div id="view-flash" class="content content--hidden">
-  <h2>Flash / Guided Pipeline</h2>
-  <button id="btn-show-risk" class="btn btn-danger">Show Risk Confirmation & Run Guided Flash</button>
-  <button id="btn-compare-bin" class="btn">Compare Loaded BIN to ECU</button>
-  <button id="btn-verify-write" class="btn">Verify After Write</button>
-  <pre id="compare-result" style="display:none;"></pre>
-  <div id="risk-section" style="display:none; border:1px solid #c33; padding:10px;">
-    <label><input type="checkbox" id="risk-backup"> verified backup</label><br>
-    <label><input type="checkbox" id="risk-power"> stable power</label><br>
-    <label><input type="checkbox" id="risk-ground"> proper grounding</label><br>
-    <label><input type="checkbox" id="risk-understand"> I understand brick risk</label><br>
-    <label><input type="checkbox" id="risk-unverified"> accept unverified write (not recommended)</label><br>
-    <button id="btn-run-flash" class="btn btn-danger" disabled>PROCEED WITH GUIDED FLASH</button>
-  </div>
-  <div>Progress: <span id="flash-progress">0%</span></div>
-  <pre id="flash-log" style="background:#111; padding:8px; min-height:120px;"></pre>
-</div>
-<div id="view-scripts" class="content content--hidden">
-  <h2>Python ECU Scripts / Templates</h2>
-  <p style="font-size:12px;color:#888;max-width:720px;">These are bench helpers, not an embedded interpreter. The live checksum / identify / map-from-log path lives in the Rust backend. Refresh lists the shipped helpers.</p>
-  <button id="btn-refresh-scripts" class="btn">Refresh Script Helpers</button>
-  <div id="custom-scripts-list" style="margin-top:12px;"></div>
-</div>
-<script src="main.js"></script>
-<script src="v29.js"></script>
-<script src="v321.js"></script>
-<script src="v330.js"></script>
-<script src="v340.js"></script>
-<script src="v350.js"></script>
-<script src="v360.js"></script>
-<script src="v370.js"></script>
-<script src="v380.js"></script>
+  <script src="main.js"></script>
 </body>
 </html>

@@ -103,7 +103,7 @@ fn push_table(tables: &mut Vec<TableDef>, seen: &mut HashSet<String>, def: Table
 
 fn tables_from_addrs(entry: &EcuDbEntry, addrs: &serde_json::Value, tables: &mut Vec<TableDef>, seen: &mut HashSet<String>) {
     let fam = entry.ecu_family.as_str();
-    let specs: &[(&str, &str, &str, u16, u16, &str, &str, &str, &str)] = &[
+    let specs: &[(&str, &str, &str, usize, usize, &str, &str, &str, &str)] = &[
         ("driver_wish", "driver-wish", "Driver Wish (Torque)", 16, 16, "UWORD", "x*0.1", "Nm", "Torque"),
         ("injection_quantity", "inj-quantity", "Injection Quantity", 16, 16, "UWORD", "x*0.01", "mm3", "Fuel"),
         ("boost_setpoint", "boost-setpoint", "Boost Setpoint", 12, 12, "UWORD", "x*0.1", "mbar", "Boost"),

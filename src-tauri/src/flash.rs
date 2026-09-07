@@ -86,9 +86,26 @@ pub fn orchestrate_guided_flash<F>(port: &mut Box<dyn SerialPort + Send>, reques
 where F: FnMut(FlashProgress),
 {
     let min_v = request.min_voltage_v.unwrap_or(DEFAULT_MIN_VOLTAGE_V);
-    let mut result = GuidedFlashResult { success: false, steps_completed: vec![], backup: None, checksum_report: None, flash_write_result: None, verification_crc: None, verified_live: false, voltage_at_start: None, recovery_prompt: None, logs: vec![format!("Guided flash starting for {}", request.ecu_family)], error: None };
+    let mut result = GuidedFlashResult { success: false, steps_completed: vec![], backup: None, checksum_report: None, flash_write_result: None, verification_crc: None, verified_live: false, voltage_at_start: None, recovery_prompt: None, logs: vec!["Guided flash: identifying image…".into()], error: None };
     if !request.user_confirmed_risks { result.error = Some("Risks not confirmed".into()); return Ok(result); }
     if request.tuned_bin.is_empty() { result.error = Some("Empty tuned_bin".into()); return Ok(result); }
+    let family = match crate::v29_tools::resolved_family(&request.tuned_bin) {
+        Ok(f) => f,
+        Err(e) => {
+            result.error = Some(format!("Identify refused write: {}", e));
+            return Ok(result);
+        }
+    };
+    if !request.ecu_family.is_empty()
+        && !request.ecu_family.eq_ignore_ascii_case(&family)
+        && !request.ecu_family.eq_ignore_ascii_case("auto")
+    {
+        result.logs.push(format!(
+            "UI family '{}' overridden by identify '{}'",
+            request.ecu_family, family
+        ));
+    }
+    result.logs.push(format!("Guided flash starting for {}", family));
     match enforce_voltage_gate(port, min_v, &mut result.logs) {
         Ok(v) => { result.voltage_at_start = Some(v); result.steps_completed.push(format!("Voltage {:.2} V", v)); }
         Err(e) => { result.error = Some(e); return Ok(result); }
@@ -105,23 +122,28 @@ where F: FnMut(FlashProgress),
         }
     }
     if request.perform_backup {
-        let w = crate::live_verify::attempt_live_backup(port, &request.ecu_family, image.len(), &mut result.logs);
+        let w = crate::live_verify::attempt_live_backup(port, &family, image.len(), &mut result.logs);
         let quality = if w.failed { BackupQuality::Failed } else { BackupQuality::PartialDidOnly };
         let backup = BackupResult { path: w.path, quality, bytes: w.bytes, crc32: w.crc32, notes: w.notes };
         if w.failed { result.error = Some("Backup failed. Refusing write.".into()); result.backup = Some(backup); return Ok(result); }
         result.backup = Some(backup);
         result.steps_completed.push("Backup captured".into());
     }
-    let fam = request.ecu_family.to_ascii_uppercase();
+    let fam = family.to_ascii_uppercase();
     if fam.contains("HONDA") || fam.contains("KEIHIN") {
         result.error = Some("Honda write path is not enabled. No verified kernel or corrector.".into());
         return Ok(result);
     }
     let bosch_uds = fam.contains("EDC") || fam.contains("MED") || fam.contains("BOSCH")
         || fam.contains("DELPHI") || fam.contains("DCM") || fam.contains("SID");
+    let gm_vpw = fam.contains("P01") || fam.contains("GM") || fam.contains("P59");
+    if !bosch_uds && !gm_vpw {
+        result.error = Some(format!("No verified write path for family {}", family));
+        return Ok(result);
+    }
     if bosch_uds {
         let lvl = crate::security::BoschSecurityLevel::from_str("programming");
-        match crate::security::bosch_uds_unlock_full(port, &request.ecu_family, lvl) {
+        match crate::security::bosch_uds_unlock_full(port, &family, lvl) {
             Ok(msg) => result.logs.push(format!("Bosch UDS unlock: {}", msg)),
             Err(e) => { result.error = Some(format!("Bosch UDS unlock failed: {}", e)); return Ok(result); }
         }
@@ -151,10 +173,10 @@ where F: FnMut(FlashProgress),
             crc32_written: crc32_ieee(&image),
         });
     } else {
-        if fam.contains("P01") || fam.contains("GM") || fam.contains("P59") { let _ = unlock_level2(port); }
+        let _ = unlock_level2(port);
         let cal_addr: u32 = 0x0002_0000;
         if let Err(e) = send_frame(port, &build_mode34_request(cal_addr, image.len() as u32)) { result.error = Some(e); return Ok(result); }
-        let mut timing = AdaptiveTiming::for_vpw(); timing.sleep();
+        let timing = AdaptiveTiming::for_vpw(); timing.sleep();
         let chunk_size = 128; let total = image.len();
         for (i, chunk) in image.chunks(chunk_size).enumerate() {
             if i > 0 && i % 10 == 0 { if let Err(e) = enforce_voltage_gate(port, min_v, &mut result.logs) { result.error = Some(e); return Ok(result); } }
@@ -166,7 +188,7 @@ where F: FnMut(FlashProgress),
         let _ = send_frame(port, &build_mode37_request());
         result.flash_write_result = Some(FlashWriteResult { bytes_written: image.len() as u32, blocks_written: ((image.len() + chunk_size - 1) / chunk_size) as u32, crc32_written: crc32_ieee(&image) });
     }
-    match verify_after_write(port, &request.ecu_family, &image, &mut result.logs) {
+    match verify_after_write(port, &family, &image, &mut result.logs) {
         Ok((crc, matched)) => { result.verification_crc = Some(crc); result.verified_live = matched; result.success = matched; }
         Err(e) => {
             result.error = Some(e);
@@ -183,5 +205,9 @@ mod tests {
         let req: GuidedFlashRequest = serde_json::from_str(r#"{"ecu_family":"P01_0411"}"#).unwrap();
         assert!(!req.user_confirmed_risks);
         assert!(!req.accept_unverified_write);
+    }
+    #[test] fn unidentified_512k_is_not_p01() {
+        let img = vec![0u8; 524288];
+        assert!(crate::v29_tools::resolved_family(&img).is_err());
     }
 }

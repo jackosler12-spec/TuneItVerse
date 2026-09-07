@@ -1,275 +1,313 @@
-// ==================== CORE INVOKE (real Tauri + safe fallback) ====================
-async function invokeCmd(cmd, args = {}) {
-  try {
-    const t = window.__TAURI__;
-    if (t && t.core && typeof t.core.invoke === 'function') {
-      return await t.core.invoke(cmd, args);
-    }
-    if (t && typeof t.invoke === 'function') {
-      return await t.invoke(cmd, args);
-    }
-    console.warn('[mock invoke]', cmd, args);
-    // Logging mocks so offline browser testing still works
-    if (cmd === 'get_logging_templates') return JSON.stringify([
-      { id: 'base', name: 'Base Street', description: 'RPM MAP ECT TPS', pids: ['rpm','map','ect','tps'], rate_hz: 10 },
-      { id: 'boost', name: 'Boost / Turbo', description: 'Boost focused', pids: ['rpm','map','boost','tps'], rate_hz: 20 },
-      { id: 'diesel', name: 'Diesel', description: 'EDC style', pids: ['rpm','boost','rail','iq','vgt','egr'], rate_hz: 10 },
-      { id: 'ls1', name: 'LS1 / P01', description: 'LS1 set', pids: ['rpm','map','tps','spark','stft','ltft'], rate_hz: 20 }
-    ]);
-    if (cmd === 'log_get_status') return JSON.stringify({ running: false, rate_hz: 10, sample_count: 0, channels: [
-      { id: 'rpm', name: 'Engine RPM', unit: 'RPM', pid: 12, enabled: true },
-      { id: 'map', name: 'MAP', unit: 'kPa', pid: 11, enabled: true },
-      { id: 'ect', name: 'ECT', unit: '°C', pid: 5, enabled: true },
-      { id: 'tps', name: 'TPS', unit: '%', pid: 17, enabled: true },
-      { id: 'batt', name: 'Battery', unit: 'V', pid: 0, enabled: true }
-    ], session_name: 'mock', started_at_ms: null, last_sample: null });
-    if (cmd === 'log_start') return JSON.stringify({ running: true, rate_hz: (args.rate_hz || 10), sample_count: 0, channels: [], session_name: args.session_name || 'mock', started_at_ms: Date.now(), last_sample: null });
-    if (cmd === 'log_stop') return JSON.stringify({ running: false, rate_hz: 10, sample_count: 42, channels: [], session_name: 'mock', started_at_ms: null, last_sample: null });
-    if (cmd === 'log_capture_sample') {
-      const t = Date.now() / 1000;
-      return JSON.stringify({ timestamp_ms: Date.now(), values: { rpm: 1800 + 300 * Math.sin(t), map: 50 + 20 * Math.abs(Math.sin(t * 0.5)), ect: 88, tps: 20 + 15 * Math.abs(Math.sin(t * 0.4)), batt: 13.8 } });
-    }
-    if (cmd === 'log_get_samples') return JSON.stringify([]);
-    if (cmd === 'log_export_csv') return 'timestamp_ms,rpm,map,ect,tps\n' + Date.now() + ',1850,55,88,22\n';
-    if (cmd === 'log_set_channels' || cmd === 'log_apply_template' || cmd === 'log_clear') return JSON.stringify({ running: false, rate_hz: 10, sample_count: 0, channels: [], session_name: 'mock', started_at_ms: null, last_sample: null });
-    if (cmd === 'list_serial_ports') return ['COM3', 'COM4', 'COM5', 'COM10'];
-    if (cmd === 'get_connection_health') return 'Connected';
-    if (cmd === 'parse_xdf_definitions') return [
-      { id: 've-main', name: 'Main VE', description: 'Volumetric efficiency', rows: 16, cols: 16, addr: '0x4000', data_type: 'UBYTE', math: 'x*0.5', units: '%' },
-      { id: 'spark', name: 'Spark Advance', description: 'Base timing', rows: 12, cols: 14, addr: '0x6000', data_type: 'UBYTE', math: '(x-40)/2', units: 'deg' }
-    ];
-    if (cmd === 'extract_table_from_bin') {
-      const r = (args.table && args.table.rows) || 4;
-      const c = (args.table && args.table.cols) || 4;
-      return { id: (args.table && args.table.id) || 'demo', values: Array.from({length:r}, (_,i)=>Array.from({length:c}, (_,j)=> 80 + i*2 + j)), axes_x: [], axes_y: [], note: null };
-    }
-    if (cmd === 'patch_table_into_bin') {
-      const bytes = (args.req && args.req.bin_bytes) || args.bin_bytes || [];
-      return { patched_bytes: bytes, message: 'patched (mock)', checksum_report: null };
-    }
-    if (cmd === 'guided_flash_pipeline') return JSON.stringify({ success: true, steps_completed: ['backup', 'kernel', 'write'], logs: ['Mock flash complete'] });
-    if (cmd === 'get_tuning_advice') return 'Tune around the sample value. Cross check with logs.';
-    if (cmd === 'read_ecu_data') return JSON.stringify({ rpm: 1250 + Math.random()*50|0, map: 45 + Math.random()*10|0, ect: 82, tps: 12, iat: 30, spark: 22, inj_ms: 3.5, stft: 0.2, batt: 13.8 });
-    if (cmd === 'connect_ecu') return 'Connected (mock)';
-    if (cmd === 'disconnect_ecu') return 'Disconnected';
-    if (cmd === 'list_supported_protocols') return ['auto','vpw','can','kwp','consult'];
-    if (cmd === 'list_supported_ecus') return ['P01_0411','EDC16C41','GM_P59','MED17_COMMON','EDC17_COMMON'];
-    if (cmd === 'auto_load_tables_for_bin') {
-      const len = (args.bin_bytes && args.bin_bytes.length) || 0;
-      if (len === 524288 || len === 131072) {
-        return JSON.stringify([
-          { id: 've-main', name: 'Main VE Table', description: 'Volumetric Efficiency main map - 16x16 for LS1 P01', rows: 16, cols: 16, addr: '0x0000', data_type: 'UBYTE', math: 'x*0.5', units: '%', category: 'Fuel', row_major: true, msb: true },
-          { id: 'spark-advance', name: 'Spark Advance', description: 'Base spark timing map', rows: 12, cols: 14, addr: '0x2000', data_type: 'UBYTE', math: '(x-40)/2', units: 'deg BTDC', category: 'Ignition', row_major: true, msb: true }
-        ]);
-      }
-      if (len === 2097152) {
-        return JSON.stringify([
-          { id: 'driver-wish', name: 'Driver Wish (Torque)', description: 'Driver requested torque', rows: 16, cols: 16, addr: '0x80000', data_type: 'UWORD', math: 'x*0.1', units: 'Nm', category: 'Torque', row_major: true, msb: true },
-          { id: 'inj-quantity', name: 'Injection Quantity', description: 'IQ main map', rows: 16, cols: 16, addr: '0x82000', data_type: 'UWORD', math: 'x*0.01', units: 'mm3', category: 'Fuel', row_major: true, msb: true }
-        ]);
-      }
-      return JSON.stringify([]);
-    }
-    if (cmd === 'validate_bin_checksums_summary_cmd' || cmd === 'validate_checksums_cmd') {
-      return 'Checksum validation (mock): All regions valid for demo bin.';
-    }
-    if (cmd === 'correct_bin_checksums') return args.data || [];
-    if (cmd === 'auto_detect_protocol') return 'Detected: VPW/J1850 (mock)';
-    if (cmd === 'read_properties') return JSON.stringify({ os_id: '12225074', vin: 'MOCKVIN', hardware: '0411', ecu_type: 'P01', protocol: 'VPW', status: 'Mock' });
-    if (cmd === 'j2534_list_devices') return ['Tactrix OpenPort 2.0 (install driver + DLL)', 'DrewTech / CarDAQ (J2534 compliant)'];
-    if (cmd === 'j2534_connect') return 'J2534 device opened and ISO15765 channel connected (full DLL binding ready for production)';
-    if (cmd === 'get_ecu_info') return JSON.stringify({ ecu_family: 'P01_0411', display_name: 'Holden LS1 / GM P01 0411 PCM' });
-    if (cmd === 'bosch_uds_unlock') return JSON.stringify({ success: true, level: 'Programming', message: 'Bosch UDS SecurityAccess framework ready (seed/key computed)' });
-    return null;
-  } catch (e) {
-    console.error('invokeCmd error', cmd, e);
-    throw e;
+// TuneItVerse v3.10.0 — single frontend. Desktop Tauri only. No invented values.
+
+function parseMaybe(raw) {
+  if (raw == null) return null;
+  if (typeof raw === 'string') {
+    try { return JSON.parse(raw); } catch (_) { return raw; }
   }
+  return raw;
 }
 
-// ==================== GLOBAL STATE ====================
+async function invokeCmd(cmd, args = {}) {
+  const t = window.__TAURI__;
+  if (t && t.core && typeof t.core.invoke === 'function') {
+    return await t.core.invoke(cmd, args);
+  }
+  if (t && typeof t.invoke === 'function') {
+    return await t.invoke(cmd, args);
+  }
+  throw new Error('TuneItVerse must run as the desktop app (Tauri). Browser file-open has no ECU backend.');
+}
+window.invokeCmd = invokeCmd;
+
+const PAGE_TITLES = {
+  dashboard: ['Dashboard', 'Honest live data. No invented PIDs.'],
+  connect: ['Connect', 'Serial, ELM, or J2534. Fail-closed on silence.'],
+  live: ['Data Logging', 'Mode 01 samples or imported CSV only.'],
+  diagnostics: ['Diagnostics', 'Stored / pending / permanent DTCs from the adapter.'],
+  tables: ['Tables / Maps', 'Your BIN + XDF/A2L. Identify before patch or flash.'],
+  flash: ['Flash', 'Identify → voltage → backup → write → live verify.'],
+  scripts: ['Scripts', 'Bench CLI helpers. Not an embedded interpreter.']
+};
+
 let currentBin = null;
 let currentTables = [];
 let currentTable = null;
 let currentEditorTab = 'grid';
 let currentValues = null;
-let liveTimer = null;
-let portsCache = [];
+let lastIdentify = null;
+let lastMapFromLog = null;
 let isConnected = false;
 let logPollTimer = null;
 let logRunning = false;
-let logChannelsCache = [];
+let healthTimer = null;
+let sparkHistory = [];
 
-// ==================== NAVIGATION ====================
+window.currentBin = null;
+window.currentTables = [];
+window.currentTable = null;
+window.currentValues = null;
+window.lastMapFromLog = null;
+
+function syncGlobals() {
+  window.currentBin = currentBin;
+  window.currentTables = currentTables;
+  window.currentTable = currentTable;
+  window.currentValues = currentValues;
+  window.lastMapFromLog = lastMapFromLog;
+}
+
+function setStatus(msg) {
+  const el = document.getElementById('status-center');
+  if (el) el.textContent = msg;
+}
+
+function banner(id, text) {
+  let el = document.getElementById(id);
+  if (!el) {
+    el = document.createElement('div');
+    el.id = id;
+    el.className = 'banner-warn';
+    const host = document.getElementById('tables-status') || document.getElementById('dash-identify');
+    if (host && host.parentNode) host.parentNode.insertBefore(el, host.nextSibling);
+    else document.body.appendChild(el);
+  }
+  el.textContent = text;
+}
+
 function showView(name) {
-  document.querySelectorAll('.content').forEach(el => el.classList.add('content--hidden'));
+  document.querySelectorAll('.content').forEach((el) => el.classList.add('content--hidden'));
   const v = document.getElementById('view-' + name);
   if (v) v.classList.remove('content--hidden');
-  document.querySelectorAll('.nav-item').forEach(a => a.classList.toggle('active', a.dataset.view === name));
+  document.querySelectorAll('.nav-item').forEach((a) => a.classList.toggle('active', a.dataset.view === name));
+  const titles = PAGE_TITLES[name] || [name, ''];
+  const pt = document.getElementById('page-title');
+  const ps = document.getElementById('page-sub');
+  if (pt) pt.textContent = titles[0];
+  if (ps) ps.textContent = titles[1];
 }
 
 function setupNav() {
-  document.querySelectorAll('.nav-item').forEach(a => {
+  document.querySelectorAll('.nav-item').forEach((a) => {
     a.onclick = (e) => { e.preventDefault(); showView(a.dataset.view); };
   });
-  const topBtn = document.getElementById('btn-connect-top');
-  if (topBtn) topBtn.onclick = () => showView('connect');
-  const d1 = document.getElementById('dash-tables-btn'); if (d1) d1.onclick = () => showView('tables');
-  const d2 = document.getElementById('dash-flash-btn'); if (d2) d2.onclick = () => showView('flash');
-  const d3 = document.getElementById('dash-connect-btn'); if (d3) d3.onclick = () => showView('connect');
-  const d4 = document.getElementById('dash-dtc-btn'); if (d4) d4.onclick = () => showView('diagnostics');
-  const d5 = document.getElementById('dash-log-btn'); if (d5) d5.onclick = () => showView('live');
+  document.getElementById('btn-connect-top')?.addEventListener('click', (e) => {
+    if (isConnected) {
+      e.preventDefault();
+      doDisconnect();
+      return;
+    }
+    showView('connect');
+  });
+  document.querySelectorAll('.workflow-card[data-go]').forEach((card) => {
+    card.onclick = () => showView(card.dataset.go);
+  });
 }
 
-// ==================== DIAGNOSTICS / DTC ====================
-function dtcTypeLabel(rec) {
-  if (rec.is_permanent) return 'Permanent';
-  if (rec.is_pending) return 'Pending';
-  return 'Stored';
-}
-
-function renderDtcRows(result) {
-  const tbody = document.getElementById('dtc-tbody');
-  const summary = document.getElementById('dtc-summary');
-  if (!tbody) return;
-  const rows = [];
-  const pushGroup = (list) => { (list || []).forEach((rec) => rows.push(rec)); };
-  pushGroup(result.stored);
-  pushGroup(result.pending);
-  pushGroup(result.permanent);
-  if (summary) {
-    summary.textContent = `Total ${result.total ?? rows.length} — stored ${result.stored?.length ?? 0}, pending ${result.pending?.length ?? 0}, permanent ${result.permanent?.length ?? 0}`;
+function updateConnStatus(txt, connected) {
+  isConnected = !!connected;
+  const el = document.getElementById('connection-status');
+  if (el) el.textContent = txt;
+  const hint = document.getElementById('dash-conn-hint');
+  if (hint) hint.textContent = txt;
+  const dot = document.getElementById('conn-dot');
+  if (dot) dot.classList.toggle('connected', !!connected);
+  const btn = document.getElementById('btn-connect-top');
+  if (btn) {
+    btn.textContent = connected ? 'Disconnect' : 'Connect ECU';
+    btn.classList.toggle('connected', !!connected);
   }
-  if (rows.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="3" style="padding:8px; color:#0a0;">No DTCs reported.</td></tr>';
-    return;
-  }
-  tbody.innerHTML = rows.map((rec) => {
-    const code = rec.code || '????';
-    const type = dtcTypeLabel(rec);
-    const desc = (rec.description || '').replace(/</g, '<');
-    return `<tr style="border-bottom:1px solid #222;"><td style="padding:4px 8px; color:#f66;">${code}</td><td style="padding:4px 8px;">${type}</td><td style="padding:4px 8px;">${desc}</td></tr>`;
-  }).join('');
+  const right = document.getElementById('status-right');
+  if (right) right.textContent = connected ? txt : 'Disconnected';
 }
 
-async function readDtcs() {
-  const st = document.getElementById('dtc-status');
-  if (st) st.textContent = 'Reading DTCs...';
+async function pollHealth() {
   try {
-    const raw = await invokeCmd('read_dtcs_cmd');
-    const result = typeof raw === 'string' ? JSON.parse(raw) : raw;
-    renderDtcRows(result || { stored: [], pending: [], permanent: [], total: 0 });
-    if (st) st.textContent = 'Read complete';
+    const h = await invokeCmd('get_connection_health');
+    const text = typeof h === 'string' ? h : String(h);
+    const on = /connected/i.test(text) && !/disconnected/i.test(text);
+    updateConnStatus(text, on);
+    if (on) {
+      try {
+        const raw = await invokeCmd('read_ecu_data');
+        const data = parseMaybe(raw) || {};
+        setKpi('kpi-rpm', data.rpm);
+        setKpi('kpi-map', data.map);
+        setKpi('kpi-ect', data.ect);
+        setKpi('kpi-batt', data.batt);
+      } catch (_) { /* stay at last honest value */ }
+    } else {
+      ['kpi-rpm', 'kpi-map', 'kpi-ect', 'kpi-batt'].forEach((id) => setKpi(id, undefined));
+    }
   } catch (e) {
-    if (st) st.textContent = 'Error: ' + e;
+    updateConnStatus('Desktop backend unavailable', false);
+    setStatus(String(e.message || e));
   }
 }
 
-async function readFreezeFrame() {
-  const st = document.getElementById('dtc-status');
-  const pre = document.getElementById('freeze-frame');
-  if (st) st.textContent = 'Reading freeze frame...';
-  try {
-    const raw = await invokeCmd('read_freeze_frame_cmd');
-    const result = typeof raw === 'string' ? JSON.parse(raw) : raw;
-    if (pre) pre.textContent = JSON.stringify(result, null, 2);
-    if (st) st.textContent = 'Freeze frame OK';
-  } catch (e) {
-    if (pre) pre.textContent = String(e);
-    if (st) st.textContent = 'Freeze frame error: ' + e;
+function setKpi(id, value) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  if (value == null || value === '' || Number.isNaN(value)) el.textContent = '—';
+  else el.textContent = typeof value === 'number' ? (Number.isInteger(value) ? String(value) : value.toFixed(1)) : String(value);
+}
+
+function applyIdentify(info) {
+  lastIdentify = info;
+  const dash = document.getElementById('dash-identify');
+  const chip = document.getElementById('vehicle-chip');
+  if (dash && info) {
+    dash.textContent = JSON.stringify({
+      size: info.bin_size_bytes,
+      family: info.family,
+      collision: info.size_collision,
+      honda_os: info.honda_os,
+      gm_p01_os: info.gm_p01_os,
+      correction_safe: info.correction_safe,
+      notes: info.notes
+    }, null, 2);
+  }
+  if (chip) {
+    const fam = (info && (info.family || info.family_by_os)) || 'UNREAD';
+    chip.textContent = 'OS: ' + fam;
+  }
+  if (info && info.size_collision && !info.family) {
+    banner('tiv-collision', 'Size collides across catalog families. Confirm OS string before any corrector.');
+  }
+  if (info && info.honda_os && !info.gm_p01_os) {
+    banner('tiv-honda-guard', 'Honda OS string. P01 additive correction is blocked.');
   }
 }
 
-async function clearDtcs() {
-  if (!confirm('Clear all DTCs and reset readiness monitors? This cannot be undone.')) return;
-  const st = document.getElementById('dtc-status');
-  if (st) st.textContent = 'Clearing DTCs...';
-  try {
-    const raw = await invokeCmd('clear_dtcs_cmd');
-    const result = typeof raw === 'string' ? JSON.parse(raw) : raw;
-    if (st) st.textContent = result.message || (result.success ? 'Cleared' : 'Clear failed');
-    await readDtcs();
-  } catch (e) {
-    if (st) st.textContent = 'Clear error: ' + e;
-  }
+function identifiedFamily() {
+  if (lastIdentify && lastIdentify.family) return lastIdentify.family;
+  return null;
 }
 
-function setupDiagnostics() {
-  document.getElementById('btn-read-dtcs')?.addEventListener('click', readDtcs);
-  document.getElementById('btn-read-freeze')?.addEventListener('click', readFreezeFrame);
-  document.getElementById('btn-clear-dtcs')?.addEventListener('click', clearDtcs);
-}
-
-// ==================== CONNECT ====================
+// ---------- Connect ----------
 async function refreshPorts() {
+  const sel = document.getElementById('port-select');
+  if (!sel) return;
+  sel.innerHTML = '';
   try {
     const ports = await invokeCmd('list_serial_ports');
-    portsCache = ports || [];
-    const sel = document.getElementById('port-select');
-    if (sel) {
-      sel.innerHTML = '';
-      portsCache.forEach(p => {
-        const o = document.createElement('option');
-        o.value = p; o.textContent = p;
-        sel.appendChild(o);
-      });
-      if (portsCache.length === 0) {
-        const o = document.createElement('option'); o.textContent = 'No ports found'; sel.appendChild(o);
-      }
+    const list = Array.isArray(ports) ? ports : [];
+    if (!list.length) {
+      const o = document.createElement('option');
+      o.textContent = 'No ports found';
+      o.value = '';
+      sel.appendChild(o);
+      return;
     }
-  } catch (e) { console.error(e); }
+    list.forEach((p) => {
+      const o = document.createElement('option');
+      o.value = p;
+      o.textContent = p;
+      sel.appendChild(o);
+    });
+  } catch (e) {
+    const o = document.createElement('option');
+    o.textContent = 'Port list failed';
+    o.value = '';
+    sel.appendChild(o);
+    const log = document.getElementById('connect-log');
+    if (log) log.textContent = String(e);
+  }
 }
 
 async function doConnect() {
-  const port = document.getElementById('port-select')?.value || 'COM3';
+  const hw = document.querySelector('input[name="hw"]:checked')?.value || 'elm';
+  const log = document.getElementById('connect-log');
+  if (hw === 'j2534') {
+    const dll = document.getElementById('j2534-path')?.value || '';
+    if (log) log.textContent = 'Opening J2534…\n';
+    try {
+      const msg = await invokeCmd('j2534_connect', dll ? { dll_path: dll } : {});
+      if (log) log.textContent += (typeof msg === 'string' ? msg : JSON.stringify(msg)) + '\n';
+      await pollHealth();
+    } catch (e) {
+      if (log) log.textContent += 'ERROR: ' + e + '\n';
+    }
+    return;
+  }
+  const port = document.getElementById('port-select')?.value;
+  if (!port) {
+    if (log) log.textContent = 'Select a serial port first.\n';
+    return;
+  }
   const baud = parseInt(document.getElementById('baud-select')?.value || '115200', 10);
   const proto = document.querySelector('input[name="proto"]:checked')?.value || 'auto';
-  const log = document.getElementById('connect-log');
-  if (log) log.textContent = 'Connecting to ' + port + ' @ ' + baud + ' (' + proto + ')...\n';
+  if (log) log.textContent = 'Connecting to ' + port + ' @ ' + baud + ' (' + proto + ')…\n';
   try {
     const msg = await invokeCmd('connect_ecu', { port_name: port, baud, protocol: proto });
-    isConnected = true;
-    updateConnStatus('Connected');
     if (log) log.textContent += msg + '\n';
     try {
       const props = await invokeCmd('read_properties');
-      if (log) log.textContent += 'Properties: ' + (typeof props === 'string' ? props : JSON.stringify(props)) + '\n';
+      const obj = parseMaybe(props);
+      if (log) log.textContent += 'Properties: ' + JSON.stringify(obj, null, 2) + '\n';
+      if (obj && obj.os_id && obj.os_id !== 'UNREAD') {
+        document.getElementById('vehicle-chip').textContent = 'OS: ' + obj.os_id;
+      }
     } catch (_) {}
+    await pollHealth();
   } catch (e) {
     if (log) log.textContent += 'ERROR: ' + e + '\n';
-    updateConnStatus('Error');
+    updateConnStatus('Error', false);
   }
 }
 
 async function doDisconnect() {
   try {
     await invokeCmd('disconnect_ecu');
-    isConnected = false;
-    updateConnStatus('Disconnected');
-    const log = document.getElementById('connect-log');
-    if (log) log.textContent += 'Disconnected.\n';
-  } catch (e) { console.error(e); }
+  } catch (_) {}
+  updateConnStatus('Disconnected', false);
+  const log = document.getElementById('connect-log');
+  if (log) log.textContent += 'Disconnected.\n';
 }
 
 async function doAutoDetect() {
-  const port = document.getElementById('port-select')?.value || 'COM3';
+  const port = document.getElementById('port-select')?.value;
   const log = document.getElementById('connect-log');
-  if (log) log.textContent = 'Auto-detecting on ' + port + '...\n';
+  if (!port) {
+    if (log) log.textContent = 'Select a serial port first.\n';
+    return;
+  }
+  if (log) log.textContent = 'Auto-detecting on ' + port + '…\n';
   try {
     const res = await invokeCmd('auto_detect_protocol', { port_name: port });
     if (log) log.textContent += res + '\n';
-    updateConnStatus('Connected (auto)');
-    isConnected = true;
+    await pollHealth();
   } catch (e) {
     if (log) log.textContent += 'Detect error: ' + e + '\n';
+    updateConnStatus('Disconnected', false);
   }
 }
 
-function updateConnStatus(txt) {
-  const el = document.getElementById('connection-status');
-  if (el) el.textContent = txt;
-  const hint = document.getElementById('dash-conn-hint');
-  if (hint) hint.textContent = txt;
+async function computeSeedKeyUi() {
+  const seed = document.getElementById('seed-hex')?.value || '';
+  const family = document.getElementById('seed-family')?.value || 'P01_0411';
+  const level = document.getElementById('seed-level')?.value || '1';
+  const out = document.getElementById('seed-result');
+  try {
+    const raw = await invokeCmd('compute_seed_key', { seed_hex: seed, family, level });
+    const obj = parseMaybe(raw);
+    if (out) out.textContent = typeof obj === 'string' ? obj : JSON.stringify(obj, null, 2);
+  } catch (e) {
+    if (out) out.textContent = 'Error: ' + e;
+  }
+}
+
+async function refreshJ2534Devices() {
+  const box = document.getElementById('j2534-list');
+  const log = document.getElementById('connect-log');
+  try {
+    const list = await invokeCmd('j2534_list_devices');
+    const items = Array.isArray(list) ? list : parseMaybe(list) || [];
+    if (box) box.textContent = items.length ? items.join('\n') : 'No J2534 FunctionLibrary in the registry.';
+    if (log) log.textContent = (log.textContent || '') + 'J2534 devices:\n' + (items.join ? items.join('\n') : String(items)) + '\n';
+  } catch (e) {
+    if (log) log.textContent += 'J2534 list error: ' + e + '\n';
+  }
 }
 
 function setupConnect() {
@@ -277,84 +315,118 @@ function setupConnect() {
   document.getElementById('btn-do-connect')?.addEventListener('click', doConnect);
   document.getElementById('btn-do-disconnect')?.addEventListener('click', doDisconnect);
   document.getElementById('btn-auto-detect')?.addEventListener('click', doAutoDetect);
-  document.querySelectorAll('input[name="hw"]').forEach(r => {
+  document.getElementById('btn-compute-key')?.addEventListener('click', computeSeedKeyUi);
+  document.getElementById('btn-j2534-list')?.addEventListener('click', refreshJ2534Devices);
+  document.querySelectorAll('input[name="hw"]').forEach((r) => {
     r.onchange = () => {
       const g = document.getElementById('j2534-group');
-      if (g) g.style.display = r.value === 'j2534' ? 'block' : 'none';
+      if (g) g.hidden = r.value !== 'j2534';
     };
   });
   refreshPorts();
 }
 
-// ==================== FULL DATA LOGGING ====================
+// ---------- Logging ----------
 async function refreshLogStatus() {
   try {
     const raw = await invokeCmd('log_get_status');
-    const st = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    const st = parseMaybe(raw);
     logRunning = !!st.running;
-    logChannelsCache = st.channels || [];
     const el = document.getElementById('log-status');
-    if (el) el.textContent = st.running ? `LOGGING @ ${st.rate_hz} Hz — ${st.sample_count} samples` : `Idle — ${st.sample_count} samples buffered`;
+    if (el) el.textContent = st.running
+      ? `LOGGING @ ${st.rate_hz} Hz — ${st.sample_count} samples`
+      : `Idle — ${st.sample_count || 0} samples buffered`;
     const meta = document.getElementById('log-session-meta');
-    if (meta) meta.textContent = `Session: ${st.session_name || '—'} | Rate: ${st.rate_hz} Hz | Channels enabled: ${(st.channels || []).filter(c => c.enabled).length}`;
+    if (meta) meta.textContent = `Session: ${st.session_name || '—'} | Rate: ${st.rate_hz} Hz | Enabled: ${(st.channels || []).filter((c) => c.enabled).length}`;
     renderChannelList(st.channels || []);
     if (st.last_sample) updateLogKpis(st.last_sample);
     return st;
   } catch (e) {
-    console.error(e);
+    const el = document.getElementById('log-status');
+    if (el) el.textContent = String(e.message || e);
   }
 }
 
 function renderChannelList(channels) {
   const box = document.getElementById('log-channels');
   if (!box) return;
-  box.innerHTML = channels.map(c => `
-    <label style="display:flex; align-items:center; gap:6px; padding:3px 0; border-bottom:1px solid #222;">
+  box.innerHTML = channels.map((c) => `
+    <label class="row" style="padding:4px 0;border-bottom:1px solid var(--border-subtle);">
       <input type="checkbox" data-ch="${c.id}" ${c.enabled ? 'checked' : ''}>
       <span style="flex:1;">${c.name}</span>
-      <span style="color:#666; font-size:10px;">${c.unit}</span>
+      <span class="muted">${c.unit || ''}</span>
     </label>`).join('');
 }
 
 function updateLogKpis(sample) {
   const box = document.getElementById('log-kpis');
   if (!box || !sample || !sample.values) return;
-  box.innerHTML = Object.entries(sample.values).map(([k, v]) =>
-    `<div><span style="color:#888;">${k}</span>: <strong>${typeof v === 'number' ? v.toFixed(1) : v}</strong></div>`
+  const entries = Object.entries(sample.values);
+  if (!entries.length) {
+    box.innerHTML = '<span class="muted">No live PIDs in this sample.</span>';
+    return;
+  }
+  box.innerHTML = entries.map(([k, v]) =>
+    `<div class="kpi-chip"><span class="k">${k}</span><span class="v">${typeof v === 'number' ? v.toFixed(1) : v}</span></div>`
   ).join('');
 }
 
 function appendLogRow(sample) {
   const thead = document.getElementById('log-thead');
   const tbody = document.getElementById('log-tbody');
-  if (!thead || !tbody || !sample || !sample.values) return;
-  const keys = Object.keys(sample.values);
+  if (!thead || !tbody || !sample) return;
+  const keys = Object.keys(sample.values || {});
   if (!thead.innerHTML) {
-    thead.innerHTML = '<tr style="border-bottom:1px solid #333;"><th style="padding:2px 6px;">t(ms)</th>' +
-      keys.map(k => `<th style="padding:2px 6px;">${k}</th>`).join('') + '</tr>';
+    thead.innerHTML = '<tr><th>t(ms)</th>' + keys.map((k) => `<th>${k}</th>`).join('') + '</tr>';
   }
   const tr = document.createElement('tr');
-  tr.style.borderBottom = '1px solid #1a1a1a';
-  tr.innerHTML = `<td style="padding:2px 6px;">${sample.timestamp_ms}</td>` +
-    keys.map(k => `<td style="padding:2px 6px;">${typeof sample.values[k] === 'number' ? sample.values[k].toFixed(1) : sample.values[k]}</td>`).join('');
+  tr.innerHTML = `<td>${sample.timestamp_ms}</td>` +
+    keys.map((k) => `<td>${typeof sample.values[k] === 'number' ? sample.values[k].toFixed(1) : (sample.values[k] ?? '')}</td>`).join('');
   tbody.insertBefore(tr, tbody.firstChild);
   while (tbody.children.length > 40) tbody.removeChild(tbody.lastChild);
+  if (sample.values && sample.values.rpm != null) sparkHistory.push(sample.values.rpm);
+  else if (keys[0] && sample.values[keys[0]] != null) sparkHistory.push(sample.values[keys[0]]);
+  if (sparkHistory.length > 240) sparkHistory.shift();
+  drawSpark();
+}
+
+function drawSpark() {
+  const canvas = document.getElementById('log-spark');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width, h = canvas.height;
+  ctx.clearRect(0, 0, w, h);
+  const hint = document.getElementById('log-spark-hint');
+  if (sparkHistory.length < 2) {
+    if (hint) hint.textContent = 'Chart stays empty until a live or imported sample exists.';
+    return;
+  }
+  if (hint) hint.textContent = sparkHistory.length + ' points (first enabled numeric channel).';
+  const min = Math.min(...sparkHistory);
+  const max = Math.max(...sparkHistory);
+  const span = max - min || 1;
+  ctx.strokeStyle = '#00c4b4';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  sparkHistory.forEach((v, i) => {
+    const x = (i / (sparkHistory.length - 1)) * w;
+    const y = h - ((v - min) / span) * (h - 8) - 4;
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  });
+  ctx.stroke();
 }
 
 async function logPollTick() {
   if (!logRunning) return;
   try {
     const raw = await invokeCmd('log_capture_sample');
-    const sample = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    const sample = parseMaybe(raw);
     updateLogKpis(sample);
     appendLogRow(sample);
-    const stEl = document.getElementById('log-status');
-    if (stEl) {
-      const st = await refreshLogStatus();
-      if (st) stEl.textContent = `LOGGING @ ${st.rate_hz} Hz — ${st.sample_count} samples`;
-    }
+    await refreshLogStatus();
   } catch (e) {
-    console.warn('log poll', e);
+    const el = document.getElementById('log-status');
+    if (el) el.textContent = String(e.message || e);
   }
 }
 
@@ -363,12 +435,14 @@ async function startLogging() {
   try {
     await invokeCmd('log_start', { rate_hz: rate, session_name: 'session_' + Date.now() });
     logRunning = true;
+    sparkHistory = [];
+    drawSpark();
     const interval = Math.max(40, Math.floor(1000 / rate));
     if (logPollTimer) clearInterval(logPollTimer);
     logPollTimer = setInterval(logPollTick, interval);
-    document.getElementById('log-status').textContent = 'LOGGING...';
     document.getElementById('log-thead').innerHTML = '';
     document.getElementById('log-tbody').innerHTML = '';
+    await refreshLogStatus();
   } catch (e) {
     alert('Start failed: ' + e);
   }
@@ -386,7 +460,7 @@ async function stopLogging() {
 }
 
 async function applyChannels() {
-  const ids = Array.from(document.querySelectorAll('#log-channels input[type=checkbox]:checked')).map(cb => cb.dataset.ch);
+  const ids = Array.from(document.querySelectorAll('#log-channels input[type=checkbox]:checked')).map((cb) => cb.dataset.ch);
   try {
     await invokeCmd('log_set_channels', { enabled_ids: ids });
     await refreshLogStatus();
@@ -405,6 +479,8 @@ async function applyTemplate() {
 async function clearLog() {
   try {
     await invokeCmd('log_clear');
+    sparkHistory = [];
+    drawSpark();
     document.getElementById('log-thead').innerHTML = '';
     document.getElementById('log-tbody').innerHTML = '';
     document.getElementById('log-kpis').innerHTML = '';
@@ -425,40 +501,144 @@ async function exportCsv() {
   }
 }
 
+async function importCsv() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.csv,text/csv';
+  input.onchange = async (ev) => {
+    const file = ev.target.files[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const raw = await invokeCmd('log_import_csv', { csv: text });
+      await refreshLogStatus();
+      const samples = parseMaybe(await invokeCmd('log_get_samples', { limit: 200 }));
+      const list = Array.isArray(samples) ? samples : [];
+      sparkHistory = list.map((s) => s.values && (s.values.rpm ?? Object.values(s.values)[0])).filter((v) => typeof v === 'number');
+      drawSpark();
+      const st = document.getElementById('log-status');
+      if (st) st.textContent = 'Imported CSV: ' + (typeof raw === 'string' ? raw : JSON.stringify(raw));
+    } catch (e) { alert('CSV import failed: ' + e); }
+  };
+  input.click();
+}
+
 async function loadTemplates() {
   try {
     const raw = await invokeCmd('get_logging_templates');
-    const list = typeof raw === 'string' ? JSON.parse(raw) : (raw || []);
+    const list = parseMaybe(raw) || [];
     const sel = document.getElementById('log-template');
     if (!sel) return;
-    sel.innerHTML = list.map(t => `<option value="${t.id}">${t.name} (${t.rate_hz} Hz)</option>`).join('');
-  } catch (e) { console.error(e); }
+    sel.innerHTML = list.map((t) => `<option value="${t.id}">${t.name} (${t.rate_hz} Hz)</option>`).join('');
+  } catch (e) {
+    const sel = document.getElementById('log-template');
+    if (sel) sel.innerHTML = '';
+    setStatus(String(e.message || e));
+  }
 }
 
 function setupLive() {
-  // Legacy buttons still present in older markup — keep harmless
-  document.getElementById('btn-start-log')?.addEventListener('click', startLogging);
-  document.getElementById('btn-stop-log')?.addEventListener('click', stopLogging);
-  document.getElementById('btn-read-once')?.addEventListener('click', async () => {
-    try {
-      const raw = await invokeCmd('read_ecu_data');
-      const data = typeof raw === 'string' ? JSON.parse(raw) : raw;
-      document.getElementById('kpi-rpm') && (document.getElementById('kpi-rpm').textContent = data.rpm ?? '--');
-    } catch (_) {}
-  });
-
-  // Full logger controls
   document.getElementById('btn-log-start')?.addEventListener('click', startLogging);
   document.getElementById('btn-log-stop')?.addEventListener('click', stopLogging);
   document.getElementById('btn-log-clear')?.addEventListener('click', clearLog);
   document.getElementById('btn-log-export')?.addEventListener('click', exportCsv);
+  document.getElementById('btn-log-import')?.addEventListener('click', importCsv);
   document.getElementById('btn-log-apply-ch')?.addEventListener('click', applyChannels);
   document.getElementById('btn-log-apply-tmpl')?.addEventListener('click', applyTemplate);
   loadTemplates();
   refreshLogStatus();
 }
 
-// ==================== TABLES / MAPS ====================
+// ---------- Diagnostics ----------
+function dtcTypeLabel(rec) {
+  if (rec.is_permanent) return 'Permanent';
+  if (rec.is_pending) return 'Pending';
+  return 'Stored';
+}
+
+function renderDtcRows(result) {
+  const tbody = document.getElementById('dtc-tbody');
+  const summary = document.getElementById('dtc-summary');
+  if (!tbody) return;
+  const rows = [];
+  (result.stored || []).forEach((r) => rows.push(r));
+  (result.pending || []).forEach((r) => rows.push(r));
+  (result.permanent || []).forEach((r) => rows.push(r));
+  if (summary) {
+    summary.textContent = `Total ${result.total ?? rows.length} — stored ${result.stored?.length ?? 0}, pending ${result.pending?.length ?? 0}, permanent ${result.permanent?.length ?? 0}`;
+  }
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="3" class="muted">No DTCs reported.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = rows.map((rec) => {
+    const code = rec.code || '????';
+    const desc = String(rec.description || '').replace(/</g, '&lt;');
+    return `<tr><td class="dtc-code">${code}</td><td>${dtcTypeLabel(rec)}</td><td>${desc}</td></tr>`;
+  }).join('');
+}
+
+async function readDtcs() {
+  const st = document.getElementById('dtc-status');
+  if (st) st.textContent = 'Reading DTCs…';
+  try {
+    const result = parseMaybe(await invokeCmd('read_dtcs_cmd')) || { stored: [], pending: [], permanent: [], total: 0 };
+    renderDtcRows(result);
+    if (st) st.textContent = 'Read complete';
+  } catch (e) {
+    if (st) st.textContent = 'Error: ' + e;
+  }
+}
+
+async function readFreezeFrame() {
+  const st = document.getElementById('dtc-status');
+  const pre = document.getElementById('freeze-frame');
+  if (st) st.textContent = 'Reading freeze frame…';
+  try {
+    const result = parseMaybe(await invokeCmd('read_freeze_frame_cmd'));
+    if (pre) pre.textContent = JSON.stringify(result, null, 2);
+    if (st) st.textContent = 'Freeze frame OK';
+  } catch (e) {
+    if (pre) pre.textContent = String(e);
+    if (st) st.textContent = 'Freeze frame error: ' + e;
+  }
+}
+
+async function clearDtcs() {
+  if (!confirm('Clear all DTCs and reset readiness monitors? This cannot be undone.')) return;
+  const st = document.getElementById('dtc-status');
+  if (st) st.textContent = 'Clearing DTCs…';
+  try {
+    const result = parseMaybe(await invokeCmd('clear_dtcs_cmd'));
+    if (st) st.textContent = result.message || (result.success ? 'Cleared' : 'Clear failed');
+    await readDtcs();
+  } catch (e) {
+    if (st) st.textContent = 'Clear error: ' + e;
+  }
+}
+
+function setupDiagnostics() {
+  document.getElementById('btn-read-dtcs')?.addEventListener('click', readDtcs);
+  document.getElementById('btn-read-freeze')?.addEventListener('click', readFreezeFrame);
+  document.getElementById('btn-clear-dtcs')?.addEventListener('click', clearDtcs);
+}
+
+// ---------- Tables ----------
+async function identifyCurrentBin() {
+  if (!currentBin) { alert('Load a .BIN first'); return; }
+  const st = document.getElementById('tables-status');
+  try {
+    const info = parseMaybe(await invokeCmd('identify_bin_cmd', { data: Array.from(currentBin) }));
+    applyIdentify(info);
+    if (st) st.textContent = 'Identified: ' + (info.family || info.family_by_size || 'unknown') + ' (' + info.bin_size_bytes + ' bytes)';
+    const meta = document.getElementById('side-meta');
+    if (meta) meta.innerHTML = '<pre class="mono-block">' + JSON.stringify(info, null, 2) + '</pre>';
+  } catch (e) {
+    if (st) st.textContent = 'Identify error: ' + e;
+  }
+}
+window.identifyCurrentBin = identifyCurrentBin;
+
 async function loadBinFile() {
   const input = document.createElement('input');
   input.type = 'file';
@@ -466,22 +646,25 @@ async function loadBinFile() {
   input.onchange = async (ev) => {
     const file = ev.target.files[0];
     if (!file) return;
-    const st = document.getElementById('tables-status');
-    if (st) st.textContent = 'Loading ' + file.name + ' (' + file.size + ' bytes)...';
     const buf = await file.arrayBuffer();
     currentBin = new Uint8Array(buf);
+    syncGlobals();
+    const st = document.getElementById('tables-status');
+    const save = document.getElementById('btn-save-patched');
+    if (save) save.disabled = false;
     try {
-      const tablesJson = await invokeCmd('auto_load_tables_for_bin', { bin_bytes: Array.from(currentBin) });
-      currentTables = typeof tablesJson === 'string' ? JSON.parse(tablesJson) : (tablesJson || []);
+      const raw = await invokeCmd('auto_load_tables_for_bin', { bin_bytes: Array.from(currentBin) });
+      const list = parseMaybe(raw);
+      currentTables = Array.isArray(list) ? list : [];
       renderTableList();
-      if (st) st.textContent = 'Loaded ' + file.name + ' — auto tables: ' + currentTables.length;
-      setTimeout(validateCurrentBinChecksums, 400);
+      if (st) st.textContent = 'Loaded ' + file.name + ' (' + currentBin.length + ' bytes). Tables from catalog: ' + currentTables.length;
     } catch (e) {
-      if (st) st.textContent = 'BIN loaded but auto-tables failed: ' + e;
       currentTables = [];
       renderTableList();
+      if (st) st.textContent = 'BIN loaded (' + currentBin.length + ' bytes). Catalog tables unavailable: ' + e;
     }
-    document.getElementById('btn-save-patched').disabled = false;
+    await identifyCurrentBin();
+    await validateCurrentBinChecksums();
   };
   input.click();
 }
@@ -489,44 +672,71 @@ async function loadBinFile() {
 async function loadXdfFile() {
   const input = document.createElement('input');
   input.type = 'file';
-  input.accept = '.xdf,.xml,.XML,.XDF';
+  input.accept = '.xdf,.xml,.XDF,.XML,.a2l,.A2L';
   input.onchange = async (ev) => {
     const file = ev.target.files[0];
     if (!file) return;
     const text = await file.text();
     const st = document.getElementById('tables-status');
     try {
-      const defs = await invokeCmd('parse_xdf_definitions', { xml: text });
-      currentTables = Array.isArray(defs) ? defs : (typeof defs === 'string' ? JSON.parse(defs) : []);
+      let defs = await invokeCmd('parse_xdf_definitions', { xml: text });
+      let list = Array.isArray(defs) ? defs : parseMaybe(defs);
+      if ((!list || !list.length) && /BEGIN CHARACTERISTIC/i.test(text)) {
+        defs = await invokeCmd('parse_a2l_definitions', { text });
+        list = Array.isArray(defs) ? defs : parseMaybe(defs);
+      }
+      if (!list || !list.length) {
+        if (st) st.textContent = 'Definition parsed but no tables found';
+        return;
+      }
+      currentTables = list;
       renderTableList();
-      if (st) st.textContent = 'XDF/XML loaded: ' + currentTables.length + ' tables';
+      if (st) st.textContent = 'Definitions loaded: ' + list.length;
     } catch (e) {
-      if (st) st.textContent = 'XDF parse error: ' + e;
+      if (st) st.textContent = 'Parse error: ' + e;
     }
   };
   input.click();
 }
 
-function loadDemoTables() {
-  currentTables = [
-    { id: 'demo-ve', name: 'Demo VE', description: 'Demo volumetric efficiency', rows: 8, cols: 8, addr: '0x4000', data_type: 'UBYTE', math: 'x*0.5', units: '%', category: 'Fuel', row_major: true, msb: true },
-    { id: 'demo-spark', name: 'Demo Spark', description: 'Demo timing', rows: 6, cols: 8, addr: '0x5000', data_type: 'UBYTE', math: '(x-40)/2', units: 'deg', category: 'Ignition', row_major: true, msb: true }
-  ];
-  if (!currentBin) currentBin = new Uint8Array(524288);
-  renderTableList();
-  document.getElementById('tables-status').textContent = 'Demo tables loaded';
-  document.getElementById('btn-save-patched').disabled = false;
+async function loadA2l() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.a2l,.A2L,.txt';
+  input.onchange = async () => {
+    const file = input.files && input.files[0];
+    if (!file) return;
+    const text = await file.text();
+    const st = document.getElementById('tables-status');
+    try {
+      const defs = await invokeCmd('parse_a2l_definitions', { text });
+      const list = Array.isArray(defs) ? defs : parseMaybe(defs);
+      if (!list || !list.length) {
+        if (st) st.textContent = 'A2L parsed but no CHARACTERISTIC found';
+        return;
+      }
+      currentTables = list;
+      renderTableList();
+      if (st) st.textContent = 'A2L loaded: ' + list.length + ' characteristics. Confirm addresses on your dump.';
+    } catch (e) {
+      if (st) st.textContent = 'A2L parse error: ' + e;
+    }
+  };
+  input.click();
 }
 
 function renderTableList() {
   const list = document.getElementById('tables-list');
   if (!list) return;
   list.innerHTML = '';
+  if (!currentTables.length) {
+    list.innerHTML = '<div class="muted" style="padding:12px;">No tables. Load a BIN with catalog maps, or an XDF/A2L.</div>';
+    return;
+  }
   currentTables.forEach((t, idx) => {
     const div = document.createElement('div');
     div.className = 'table-item';
-    div.style.cssText = 'padding:6px 8px; cursor:pointer; border-bottom:1px solid #222; font-size:12px;';
-    div.innerHTML = '<strong>' + (t.name || t.id) + '</strong><br><span style="color:#888;font-size:10px;">' + (t.rows||1) + 'x' + (t.cols||1) + ' @ ' + (t.addr||'?') + ' • ' + (t.units||'') + '</span>';
+    div.innerHTML = '<strong>' + (t.name || t.id) + '</strong><br><span class="muted">' + (t.rows || 1) + '×' + (t.cols || 1) + ' @ ' + (t.addr || '?') + ' • ' + (t.units || '') + '</span>';
     div.onclick = () => selectTable(idx);
     list.appendChild(div);
   });
@@ -534,38 +744,67 @@ function renderTableList() {
 
 async function selectTable(idx) {
   currentTable = currentTables[idx];
-  if (!currentTable || !currentBin) return;
+  syncGlobals();
+  document.querySelectorAll('.table-item').forEach((el, i) => el.classList.toggle('active', i === idx));
   const st = document.getElementById('tables-status');
+  if (!currentTable || !currentBin) {
+    if (st) st.textContent = 'Load a BIN before extracting a table.';
+    currentValues = null;
+    renderCurrentEditor();
+    return;
+  }
   try {
     const extracted = await invokeCmd('extract_table_from_bin', { bin_bytes: Array.from(currentBin), table: currentTable });
     currentValues = extracted.values || extracted;
+    if (!Array.isArray(currentValues)) currentValues = null;
     renderCurrentEditor();
     updateSidePanel();
     if (st) st.textContent = 'Selected: ' + currentTable.name;
   } catch (e) {
-    if (st) st.textContent = 'Extract error: ' + e;
-    const r = currentTable.rows || 4, c = currentTable.cols || 4;
-    currentValues = Array.from({length:r}, () => Array.from({length:c}, () => 50));
+    currentValues = null;
     renderCurrentEditor();
+    if (st) st.textContent = 'Extract error: ' + e;
   }
+}
+
+function tableMinMax(values) {
+  let min = Infinity, max = -Infinity;
+  values.forEach((row) => row.forEach((v) => {
+    if (typeof v === 'number') { if (v < min) min = v; if (v > max) max = v; }
+  }));
+  if (!Number.isFinite(min)) { min = 0; max = 1; }
+  return { min, max };
+}
+
+function heatColor(v, min, max) {
+  const t = max > min ? (v - min) / (max - min) : 0.5;
+  return 'hsl(' + (120 - t * 120) + ',70%,28%)';
 }
 
 function renderCurrentEditor() {
   const el = document.getElementById('editor-content');
-  if (!el || !currentValues) return;
+  if (!el) return;
+  if (!currentValues) {
+    el.innerHTML = '<p class="muted">No table values. Load a BIN and select a definition whose address lands in the image.</p>';
+    return;
+  }
   if (currentEditorTab === 'grid') {
-    let html = '<table style="border-collapse:collapse;font-size:11px;"><tbody>';
+    const { min, max } = tableMinMax(currentValues);
+    let html = '<table class="map-table"><tbody>';
     currentValues.forEach((row, ri) => {
       html += '<tr>';
       row.forEach((v, ci) => {
-        html += '<td style="border:1px solid #333;padding:2px 4px;min-width:36px;text-align:center;" contenteditable="true" data-r="'+ri+'" data-c="'+ci+'">' + (typeof v === 'number' ? v.toFixed(1) : v) + '</td>';
+        const num = typeof v === 'number' ? v : parseFloat(v);
+        const bg = Number.isFinite(num) ? heatColor(num, min, max) : 'transparent';
+        html += '<td contenteditable="true" data-r="' + ri + '" data-c="' + ci + '" style="background:' + bg + '">' +
+          (typeof v === 'number' ? v.toFixed(1) : v) + '</td>';
       });
       html += '</tr>';
     });
-    html += '</tbody></table><div style="margin-top:8px;"><button id="btn-apply-patch" class="btn btn-primary">Apply Patch + Auto Checksum</button></div>';
+    html += '</tbody></table><div class="table-editor-footer"><button id="btn-apply-patch" class="btn btn-primary" type="button">Apply Patch + Auto Checksum</button><span class="muted">min ' + min.toFixed(1) + ' → max ' + max.toFixed(1) + '</span></div>';
     el.innerHTML = html;
     document.getElementById('btn-apply-patch')?.addEventListener('click', applyCurrentPatch);
-    el.querySelectorAll('td[contenteditable]').forEach(td => {
+    el.querySelectorAll('td[contenteditable]').forEach((td) => {
       td.onblur = () => {
         const r = +td.dataset.r, c = +td.dataset.c;
         const num = parseFloat(td.textContent);
@@ -573,27 +812,32 @@ function renderCurrentEditor() {
       };
     });
   } else if (currentEditorTab === '3d') {
-    el.innerHTML = '<canvas id="viz3d" width="480" height="320" style="background:#111;border:1px solid #333;"></canvas>';
+    const { min, max } = tableMinMax(currentValues);
+    el.innerHTML = '<canvas id="viz3d" width="560" height="360"></canvas><div class="heatmap-legend"><span>' + min.toFixed(1) + '</span><div class="heatmap-scale"></div><span>' + max.toFixed(1) + '</span><span id="heat-hover" class="muted">hover a cell</span></div>';
     const canvas = document.getElementById('viz3d');
-    if (canvas && currentValues.length) {
-      const ctx = canvas.getContext('2d');
-      const rows = currentValues.length, cols = currentValues[0].length;
-      let min = Infinity, max = -Infinity;
-      currentValues.forEach(row => row.forEach(v => { if (v < min) min = v; if (v > max) max = v; }));
-      const cellW = 480 / cols, cellH = 320 / rows;
-      for (let r = 0; r < rows; r++) {
-        for (let c = 0; c < cols; c++) {
-          const t = max > min ? (currentValues[r][c] - min) / (max - min) : 0.5;
-          ctx.fillStyle = 'hsl(' + (120 - t * 120) + ',80%,40%)';
-          ctx.fillRect(c * cellW, r * cellH, cellW + 1, cellH + 1);
-        }
+    const ctx = canvas.getContext('2d');
+    const rows = currentValues.length, cols = currentValues[0].length;
+    const cellW = 560 / cols, cellH = 360 / rows;
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        ctx.fillStyle = heatColor(currentValues[r][c], min, max);
+        ctx.fillRect(c * cellW, r * cellH, cellW + 1, cellH + 1);
       }
     }
+    canvas.onmousemove = (ev) => {
+      const rect = canvas.getBoundingClientRect();
+      const c = Math.min(cols - 1, Math.max(0, Math.floor((ev.clientX - rect.left) / rect.width * cols)));
+      const r = Math.min(rows - 1, Math.max(0, Math.floor((ev.clientY - rect.top) / rect.height * rows)));
+      const hover = document.getElementById('heat-hover');
+      if (hover) hover.textContent = 'r' + r + ' c' + c + ' = ' + (typeof currentValues[r][c] === 'number' ? currentValues[r][c].toFixed(2) : currentValues[r][c]);
+    };
   } else if (currentEditorTab === 'hex') {
     if (!currentBin) { el.innerHTML = 'No BIN loaded'; return; }
-    let html = '<pre style="font-size:10px;line-height:1.3;">';
-    const start = 0x20000;
-    const len = Math.min(512, currentBin.length - start);
+    let start = 0;
+    const parsed = parseInt(String(currentTable && currentTable.addr || '0'), 16);
+    if (!isNaN(parsed) && parsed >= 0 && parsed < currentBin.length) start = parsed;
+    const len = Math.min(512, Math.max(0, currentBin.length - start));
+    let html = '<pre class="mono-block">';
     for (let i = 0; i < len; i += 16) {
       const addr = (start + i).toString(16).padStart(6, '0');
       let hex = '', ascii = '';
@@ -604,12 +848,13 @@ function renderCurrentEditor() {
           ascii += (b >= 32 && b < 127) ? String.fromCharCode(b) : '.';
         }
       }
-      html += addr + ': ' + hex + ' | ' + ascii + '\n';
+      html += '<span class="hex-row">' + addr + ': ' + hex + ' | ' + ascii + '</span>\n';
     }
     html += '</pre>';
     el.innerHTML = html;
   }
 }
+window.renderCurrentEditor = renderCurrentEditor;
 
 function updateSidePanel() {
   if (!currentTable) return;
@@ -617,13 +862,15 @@ function updateSidePanel() {
   if (meta) {
     meta.innerHTML = '<div><b>' + currentTable.name + '</b></div>' +
       '<div>ID: ' + currentTable.id + '</div>' +
-      '<div>Size: ' + (currentTable.rows||'?') + ' × ' + (currentTable.cols||'?') + '</div>' +
-      '<div>Addr: ' + (currentTable.addr||'?') + '</div>' +
-      '<div>Type: ' + (currentTable.data_type||'?') + '  Math: ' + (currentTable.math||'X') + '</div>' +
-      '<div>Units: ' + (currentTable.units||'') + '</div>';
+      '<div>Size: ' + (currentTable.rows || '?') + ' × ' + (currentTable.cols || '?') + '</div>' +
+      '<div>Addr: ' + (currentTable.addr || '?') + '</div>' +
+      '<div>Type: ' + (currentTable.data_type || '?') + '  Math: ' + (currentTable.math || 'X') + '</div>' +
+      '<div>Units: ' + (currentTable.units || '') + '</div>';
   }
-  invokeCmd('get_tuning_advice', { table_id: currentTable.id || '', sample_value: 50, ecu_family: currentBin && currentBin.length === 2097152 ? 'EDC16C41' : 'P01_0411' })
-    .then(adv => { const a = document.getElementById('side-advice'); if (a) a.textContent = adv; })
+  const fam = identifiedFamily() || 'unresolved';
+  const sample = (currentValues && currentValues[0] && typeof currentValues[0][0] === 'number') ? currentValues[0][0] : 0;
+  invokeCmd('get_tuning_advice', { table_id: currentTable.id || '', sample_value: sample, ecu_family: fam })
+    .then((adv) => { const a = document.getElementById('side-advice'); if (a) a.textContent = adv; })
     .catch(() => {});
 }
 
@@ -635,13 +882,15 @@ async function applyCurrentPatch() {
     });
     if (res && res.patched_bytes) {
       currentBin = new Uint8Array(res.patched_bytes);
+      syncGlobals();
       const st = document.getElementById('tables-status');
-      if (st) st.textContent = (res.message || 'Patched') + ' — auto-correcting checksums...';
+      if (st) st.textContent = (res.message || 'Patched') + ' — auto-correcting checksums…';
       try {
         const corrected = await invokeCmd('correct_bin_checksums', { data: Array.from(currentBin) });
         if (corrected && corrected.length) {
           currentBin = new Uint8Array(corrected);
-          if (st) st.textContent += ' ✅ CS auto-corrected';
+          syncGlobals();
+          if (st) st.textContent += ' checksums rewritten';
         }
       } catch (cs) {
         if (st) st.textContent += ' (CS note: ' + cs + ')';
@@ -654,12 +903,14 @@ async function applyCurrentPatch() {
 async function validateCurrentBinChecksums() {
   if (!currentBin || !currentBin.length) return;
   const st = document.getElementById('tables-status');
-  if (st) st.textContent = 'Validating checksums...';
+  const cs = document.getElementById('side-checksum');
   try {
     const summary = await invokeCmd('validate_bin_checksums_summary_cmd', { data: Array.from(currentBin) });
-    if (st) st.textContent = '✅ Checksum validation complete';
+    const text = typeof summary === 'string' ? summary : JSON.stringify(summary, null, 2);
+    if (st) st.textContent = (st.textContent || '') + ' | checksum report ready';
+    if (cs) cs.textContent = text;
   } catch (e) {
-    if (st) st.textContent = 'CS error: ' + e;
+    if (cs) cs.textContent = 'CS error: ' + e;
   }
 }
 
@@ -688,24 +939,197 @@ function filterTableList(filter) {
   });
 }
 
+async function compareAnotherBin() {
+  if (!currentBin) { alert('Load the first .BIN first'); return; }
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.bin,.BIN';
+  input.onchange = async (ev) => {
+    const file = ev.target.files[0];
+    if (!file) return;
+    const other = Array.from(new Uint8Array(await file.arrayBuffer()));
+    const st = document.getElementById('tables-status');
+    try {
+      const info = parseMaybe(await invokeCmd('compare_bins_cmd', { a: Array.from(currentBin), b: other }));
+      if (st) st.textContent = info.message || 'Compare done';
+      const cs = document.getElementById('side-checksum');
+      if (cs) cs.textContent = JSON.stringify(info, null, 2);
+    } catch (e) {
+      if (st) st.textContent = 'Compare error: ' + e;
+    }
+  };
+  input.click();
+}
+
+function renderHeatmap(info) {
+  const adv = document.getElementById('side-advice');
+  if (!adv || !info || !info.occupancy_16x16) {
+    if (adv && info && info.advice) adv.textContent = info.advice;
+    return;
+  }
+  const grid = info.occupancy_16x16;
+  let max = 1;
+  for (let r = 0; r < grid.length; r++) for (let c = 0; c < grid[r].length; c++) max = Math.max(max, grid[r][c]);
+  let html = '<div class="muted">' + (info.advice || '') + '</div>';
+  html += '<div style="display:grid;grid-template-columns:repeat(16,12px);gap:1px;margin-top:8px;">';
+  for (let r = 15; r >= 0; r--) {
+    for (let c = 0; c < 16; c++) {
+      const v = grid[r][c];
+      const t = v / max;
+      html += '<div title="r' + r + ' c' + c + ' hits=' + v + '" style="width:12px;height:12px;background:rgba(0,196,180,' + (0.08 + t * 0.92) + ');"></div>';
+    }
+  }
+  html += '</div><div class="muted">rows RPM↑  cols MAP→</div>';
+  adv.innerHTML = html;
+}
+
+async function mapFromLog() {
+  const st = document.getElementById('tables-status');
+  try {
+    const info = parseMaybe(await invokeCmd('map_from_log_cmd'));
+    lastMapFromLog = info;
+    window.lastMapFromLog = info;
+    if (st) st.textContent = info.advice || 'Map-from-log ready';
+    renderHeatmap(info);
+  } catch (e) {
+    if (st) st.textContent = 'Map-from-log: ' + e;
+  }
+}
+
+async function exportWorkspace() {
+  try {
+    const raw = await invokeCmd('export_workspace_cmd', { data: currentBin ? Array.from(currentBin) : null });
+    const text = typeof raw === 'string' ? raw : JSON.stringify(raw, null, 2);
+    const blob = new Blob([text], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'tuneitverse-workspace.json';
+    a.click();
+  } catch (e) { alert('Workspace export failed: ' + e); }
+}
+
+async function importWorkspace() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.json,.txt';
+  input.onchange = async () => {
+    const file = input.files && input.files[0];
+    if (!file) return;
+    const text = await file.text();
+    const st = document.getElementById('tables-status');
+    try {
+      const res = parseMaybe(await invokeCmd('import_workspace_cmd', { jsonText: text }));
+      if (st) st.textContent = 'Workspace import: ' + JSON.stringify(res);
+      if (res && res.identify) applyIdentify(res.identify);
+      if (res && res.map_from_log) {
+        lastMapFromLog = res.map_from_log;
+        renderHeatmap(res.map_from_log);
+      }
+    } catch (e) {
+      if (st) st.textContent = 'Workspace import failed: ' + e;
+    }
+  };
+  input.click();
+}
+
+async function scanCs() {
+  if (!currentBin) { alert('Load a BIN first'); return; }
+  const st = document.getElementById('tables-status');
+  try {
+    const res = parseMaybe(await invokeCmd('scan_checksum_candidates_cmd', { data: Array.from(currentBin) }));
+    const cs = document.getElementById('side-checksum');
+    if (cs) cs.textContent = JSON.stringify(res, null, 2);
+    if (st) st.textContent = 'CS scan: ' + (res && res.note ? res.note : 'done');
+    if (res && res.honda_os && !res.gm_p01_os) banner('tiv-honda-guard', 'Honda OS string on this image. P01 additive correction is blocked.');
+  } catch (e) {
+    if (st) st.textContent = 'CS scan failed: ' + e;
+  }
+}
+
+async function pokeHex() {
+  if (!currentBin) { alert('Load a .BIN first'); return; }
+  const off = parseInt((document.getElementById('hex-poke-off')?.value) || '0', 16);
+  const hex = ((document.getElementById('hex-poke-val')?.value) || '').replace(/[^0-9a-fA-F]/g, '');
+  if (!hex || hex.length % 2) { alert('Value must be even-length hex'); return; }
+  const bytes = [];
+  for (let i = 0; i < hex.length; i += 2) bytes.push(parseInt(hex.substr(i, 2), 16));
+  try {
+    const out = await invokeCmd('patch_bin_bytes_cmd', { data: Array.from(currentBin), offset: off >>> 0, bytes });
+    currentBin = out instanceof Uint8Array ? out : new Uint8Array(out);
+    syncGlobals();
+    const st = document.getElementById('tables-status');
+    if (st) st.textContent = 'Poked ' + bytes.length + ' byte(s) at 0x' + off.toString(16).toUpperCase();
+    renderCurrentEditor();
+  } catch (e) { alert('Poke failed: ' + e); }
+}
+
+async function runMath(op) {
+  if (!currentValues) { alert('Select a table first'); return; }
+  const req = { values: currentValues, op };
+  if (op === 'scale') {
+    req.factor = parseFloat(document.getElementById('tbl-scale')?.value || '1');
+    if (!isFinite(req.factor)) { alert('Scale factor must be a number'); return; }
+  }
+  if (op === 'add') {
+    req.offset = parseFloat(document.getElementById('tbl-offset')?.value || '0');
+    if (!isFinite(req.offset)) { alert('Offset must be a number'); return; }
+  }
+  try {
+    const res = parseMaybe(await invokeCmd('table_math_cmd', { req }));
+    if (!res || !res.values) throw new Error('no values');
+    currentValues = res.values;
+    syncGlobals();
+    renderCurrentEditor();
+    const st = document.getElementById('tables-status');
+    if (st) st.textContent = (res.message || op) + ' — ' + res.cells_changed + ' cells. Apply Patch to write BIN.';
+  } catch (e) { alert('Table math failed: ' + e); }
+}
+
+async function applyStft() {
+  if (!currentValues) { alert('Select a table first'); return; }
+  if (!lastMapFromLog || !lastMapFromLog.occupancy_16x16) { alert('Run Map from Log first so STFT occupancy exists'); return; }
+  try {
+    const res = parseMaybe(await invokeCmd('apply_stft_preview_cmd', {
+      req: { values: currentValues, occupancy: lastMapFromLog.occupancy_16x16, stft_avg: lastMapFromLog.stft_avg_16x16, gain: 0.25, min_hits: 3 }
+    }));
+    if (!res || !res.values) throw new Error('no preview');
+    currentValues = res.values;
+    syncGlobals();
+    renderCurrentEditor();
+    const st = document.getElementById('tables-status');
+    if (st) st.textContent = res.message + ' (' + res.cells_changed + ' cells). Apply Patch to write BIN.';
+  } catch (e) { alert('STFT preview failed: ' + e); }
+}
+
 function setupTablesUI() {
   document.getElementById('btn-load-bin')?.addEventListener('click', loadBinFile);
   document.getElementById('btn-load-xdf')?.addEventListener('click', loadXdfFile);
-  document.getElementById('btn-demo-tables')?.addEventListener('click', loadDemoTables);
+  document.getElementById('btn-load-a2l')?.addEventListener('click', loadA2l);
   document.getElementById('btn-save-patched')?.addEventListener('click', savePatchedBin);
-  document.querySelectorAll('.table-filters .chip-filter').forEach(ch => {
+  document.getElementById('btn-identify-bin')?.addEventListener('click', identifyCurrentBin);
+  document.getElementById('btn-compare-bins')?.addEventListener('click', compareAnotherBin);
+  document.getElementById('btn-map-from-log')?.addEventListener('click', mapFromLog);
+  document.getElementById('btn-export-workspace')?.addEventListener('click', exportWorkspace);
+  document.getElementById('btn-import-workspace')?.addEventListener('click', importWorkspace);
+  document.getElementById('btn-scan-cs')?.addEventListener('click', scanCs);
+  document.getElementById('btn-hex-poke')?.addEventListener('click', pokeHex);
+  document.getElementById('btn-tbl-scale')?.addEventListener('click', () => runMath('scale'));
+  document.getElementById('btn-tbl-offset')?.addEventListener('click', () => runMath('add'));
+  document.getElementById('btn-tbl-smooth')?.addEventListener('click', () => runMath('smooth'));
+  document.getElementById('btn-tbl-stft')?.addEventListener('click', applyStft);
+  document.querySelectorAll('.table-filters .chip-filter').forEach((ch) => {
     ch.onclick = () => {
-      document.querySelectorAll('.table-filters .chip-filter').forEach(c => c.classList.remove('active'));
+      document.querySelectorAll('.table-filters .chip-filter').forEach((c) => c.classList.remove('active'));
       ch.classList.add('active');
       filterTableList(ch.dataset.filter || 'all');
     };
   });
   const tabs = document.getElementById('editor-tabs');
   if (tabs) {
-    tabs.onclick = e => {
+    tabs.onclick = (e) => {
       const b = e.target.closest('.editor-tab');
       if (!b) return;
-      document.querySelectorAll('#editor-tabs .editor-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('#editor-tabs .editor-tab').forEach((t) => t.classList.remove('active'));
       b.classList.add('active');
       currentEditorTab = b.dataset.tab;
       renderCurrentEditor();
@@ -713,11 +1137,47 @@ function setupTablesUI() {
   }
 }
 
-// ==================== FLASH ====================
+// ---------- Flash ----------
+function setFlashStep(id, state) {
+  const el = document.getElementById('st-' + id);
+  if (!el) return;
+  el.textContent = state;
+  el.classList.remove('done', 'active');
+  if (state === 'ok' || state === 'done') el.classList.add('done');
+  if (state === 'running' || state === 'active') el.classList.add('active');
+}
+
+function resetFlashSteps() {
+  ['identify', 'voltage', 'backup', 'unlock', 'write', 'verify'].forEach((s) => setFlashStep(s, 'pending'));
+  const bar = document.getElementById('flash-bar');
+  if (bar) bar.style.width = '0%';
+  const prog = document.getElementById('flash-progress');
+  if (prog) prog.textContent = '0%';
+}
+
+function applyFlashResult(res) {
+  const steps = (res.steps_completed || []).join(' ').toLowerCase();
+  const logs = (res.logs || []).join('\n').toLowerCase();
+  const blob = steps + ' ' + logs;
+  if (identifiedFamily() || /identify|family/.test(blob)) setFlashStep('identify', res.error && /identify|family|honda/i.test(res.error) ? 'fail' : 'ok');
+  if (/voltage/.test(blob)) setFlashStep('voltage', /voltage gate failed/.test(blob) ? 'fail' : 'ok');
+  if (/backup/.test(blob)) setFlashStep('backup', /backup failed/.test(blob) ? 'fail' : 'ok');
+  if (/unlock/.test(blob)) setFlashStep('unlock', /unlock failed/.test(blob) ? 'fail' : 'ok');
+  if (res.flash_write_result) setFlashStep('write', 'ok');
+  if (res.verified_live) setFlashStep('verify', 'ok');
+  else if (res.error && /verify/i.test(res.error)) setFlashStep('verify', 'fail');
+  const n = (res.steps_completed || []).length;
+  const pct = res.success ? 100 : Math.min(90, n * 16);
+  const bar = document.getElementById('flash-bar');
+  if (bar) bar.style.width = pct + '%';
+  const prog = document.getElementById('flash-progress');
+  if (prog) prog.textContent = pct + '%';
+}
+
 function setupFlash() {
   document.getElementById('btn-compare-bin')?.addEventListener('click', async () => {
     const pre = document.getElementById('compare-result');
-    if (pre) { pre.style.display = 'block'; pre.textContent = 'Comparing...'; }
+    if (pre) { pre.hidden = false; pre.textContent = 'Comparing…'; }
     if (!currentBin || !currentBin.length) {
       if (pre) pre.textContent = 'Load a .BIN in Tables first.';
       return;
@@ -731,64 +1191,90 @@ function setupFlash() {
   });
   document.getElementById('btn-verify-write')?.addEventListener('click', async () => {
     const pre = document.getElementById('compare-result');
-    if (pre) { pre.style.display = 'block'; pre.textContent = 'Verifying...'; }
+    if (pre) { pre.hidden = false; pre.textContent = 'Verifying…'; }
     try {
-      const args = currentBin && currentBin.length ? { expected_bytes: Array.from(currentBin) } : {};
-      const res = await invokeCmd('verify_after_write', args);
+      if (!currentBin || !currentBin.length) throw new Error('Load a .BIN in Tables first.');
+      const res = await invokeCmd('verify_after_write', { expected_bytes: Array.from(currentBin) });
       if (pre) pre.textContent = typeof res === 'string' ? res : JSON.stringify(res, null, 2);
     } catch (e) {
       if (pre) pre.textContent = 'Verify error: ' + e;
     }
   });
-  const showRisk = document.getElementById('btn-show-risk');
-  if (showRisk) showRisk.onclick = () => {
+  document.getElementById('btn-show-risk')?.onclick = () => {
     const sec = document.getElementById('risk-section');
-    if (sec) sec.style.display = 'block';
+    if (sec) sec.hidden = false;
   };
-  ['risk-backup','risk-power','risk-ground','risk-understand'].forEach(id => {
+  ['risk-backup', 'risk-power', 'risk-ground', 'risk-understand'].forEach((id) => {
     const cb = document.getElementById(id);
     if (cb) cb.onchange = () => {
-      const all = ['risk-backup','risk-power','risk-ground','risk-understand'].every(i => document.getElementById(i)?.checked);
+      const all = ['risk-backup', 'risk-power', 'risk-ground', 'risk-understand'].every((i) => document.getElementById(i)?.checked);
       const btn = document.getElementById('btn-run-flash');
       if (btn) btn.disabled = !all;
     };
   });
   document.getElementById('btn-run-flash')?.addEventListener('click', async () => {
     const log = document.getElementById('flash-log');
-    const prog = document.getElementById('flash-progress');
-    if (log) log.textContent = 'Starting guided flash pipeline...\n';
+    const risksOk = ['risk-backup', 'risk-power', 'risk-ground', 'risk-understand'].every((i) => document.getElementById(i)?.checked);
+    if (!risksOk) {
+      if (log) log.textContent = 'Fail-closed: tick every risk checkbox before flashing.\n';
+      return;
+    }
+    if (!currentBin || !currentBin.length) {
+      if (log) log.textContent = 'Load a .BIN in Tables first.\n';
+      return;
+    }
+    resetFlashSteps();
+    setFlashStep('identify', 'running');
+    if (log) log.textContent = 'Starting guided flash pipeline…\n';
     try {
+      const fam = identifiedFamily();
+      if (!fam) {
+        await identifyCurrentBin();
+      }
+      const family = identifiedFamily();
+      if (!family) {
+        if (log) log.textContent += 'Identify did not resolve a family. Refusing write.\n';
+        setFlashStep('identify', 'fail');
+        return;
+      }
+      setFlashStep('identify', 'ok');
       const req = {
-        ecu_family: currentBin && currentBin.length === 2097152 ? 'EDC16C41' : 'P01_0411',
-        bin_bytes: currentBin ? Array.from(currentBin) : [],
+        ecu_family: family,
+        bin_bytes: Array.from(currentBin),
         do_backup: true,
         do_kernel: true,
-        do_write: true
+        do_write: true,
+        user_confirmed_risks: true,
+        accept_unverified_write: !!(document.getElementById('risk-unverified') && document.getElementById('risk-unverified').checked)
       };
-      const res = await invokeCmd('guided_flash_pipeline', { request_json: JSON.stringify(req) });
-      if (log) log.textContent += (typeof res === 'string' ? res : JSON.stringify(res, null, 2)) + '\n';
-      if (prog) prog.textContent = '100%';
+      const raw = await invokeCmd('guided_flash_pipeline', { request_json: JSON.stringify(req) });
+      const res = parseMaybe(raw) || {};
+      if (log) log.textContent += (typeof raw === 'string' ? raw : JSON.stringify(res, null, 2)) + '\n';
+      applyFlashResult(res);
     } catch (e) {
       if (log) log.textContent += 'ERROR: ' + e + '\n';
     }
   });
-  document.getElementById('recovery-close')?.addEventListener('click', () => {
-    document.getElementById('recovery-modal')?.classList.add('hidden');
-  });
 }
 
-// ==================== SCRIPTS ====================
+// ---------- Scripts ----------
 async function setupScripts() {
   document.getElementById('btn-refresh-scripts')?.addEventListener('click', async () => {
+    const list = document.getElementById('custom-scripts-list');
     try {
-      const t = await invokeCmd('get_logging_templates');
-      const list = document.getElementById('custom-scripts-list');
-      if (list) list.innerHTML = '<pre style="font-size:11px;">' + (typeof t === 'string' ? t : JSON.stringify(t, null, 2)) + '</pre>';
-    } catch (e) { console.error(e); }
+      const raw = await invokeCmd('list_script_helpers');
+      const helpers = parseMaybe(raw) || [];
+      if (!list) return;
+      if (!helpers.length) { list.innerHTML = '<p class="muted">No helpers returned.</p>'; return; }
+      list.innerHTML = helpers.map((h) =>
+        `<div class="script-card"><strong>${h.name || h.id}</strong><br><code>${h.command || ''}</code></div>`
+      ).join('');
+    } catch (e) {
+      if (list) list.innerHTML = '<p class="muted">' + e + '</p>';
+    }
   });
 }
 
-// ==================== BOOT ====================
 function setupAll() {
   setupNav();
   setupConnect();
@@ -798,9 +1284,10 @@ function setupAll() {
   setupFlash();
   setupScripts();
   showView('dashboard');
-  const st = document.getElementById('tables-status');
-  if (st) st.textContent = 'Load your .BIN — auto tables + checksum ready. Data Logging is fully operational.';
-  console.log('TuneItVerse UI fully wired v2.4.0 — full data logging');
+  pollHealth();
+  if (healthTimer) clearInterval(healthTimer);
+  healthTimer = setInterval(pollHealth, 2500);
+  console.log('TuneItVerse UI v3.10.0');
 }
 
 if (document.readyState === 'loading') {

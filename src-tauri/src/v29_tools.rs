@@ -14,7 +14,7 @@ pub fn map_from_log_cmd() -> Result<String, String> { analyze_log().map(|v| v.to
 pub fn export_workspace_cmd(data: Option<Vec<u8>>) -> Result<String, String> {
     let ident = data.as_deref().map(identify_bin);
     let log = analyze_log().unwrap_or_else(|e| json!({"error": e}));
-    Ok(json!({"tool":"TuneItVerse","version":"3.9.1","families":ecu_database::list_supported_ecu_families(),"identify":ident,"map_from_log":log}).to_string())
+    Ok(json!({"tool":"TuneItVerse","version":"3.10.0","families":ecu_database::list_supported_ecu_families(),"identify":ident,"map_from_log":log}).to_string())
 }
 
 fn sha256_hex(data: &[u8]) -> String {
@@ -128,6 +128,20 @@ pub fn identify_bin(data: &[u8]) -> serde_json::Value {
             "Unknown size — add JSON in reference/ecu_database/."
         }
     })
+}
+
+/// Fail-closed family for write/compare. Size collision or Honda-without-GM stays an error.
+pub fn resolved_family(data: &[u8]) -> Result<String, String> {
+    let v = identify_bin(data);
+    if v.get("honda_os").and_then(|x| x.as_bool()).unwrap_or(false)
+        && !v.get("gm_p01_os").and_then(|x| x.as_bool()).unwrap_or(false)
+    {
+        return Err("Honda OS string. Write/compare refused.".into());
+    }
+    if let Some(f) = v.get("family").and_then(|x| x.as_str()).filter(|s| !s.is_empty()) {
+        return Ok(f.to_string());
+    }
+    Err(v.get("notes").and_then(|x| x.as_str()).unwrap_or("ECU family unresolved").to_string())
 }
 
 #[tauri::command]
@@ -259,9 +273,15 @@ mod tests {
         assert_eq!(v["family"], "HONDA_KEIHIN");
         assert_eq!(v["honda_os"], true);
         assert_eq!(v["correction_safe"], false);
+        assert!(resolved_family(&img).unwrap_err().contains("Honda"));
+    }
+    #[test] fn resolved_family_refuses_512k_collision() {
+        let img = vec![0u8; 524288];
+        let err = resolved_family(&img).unwrap_err();
+        assert!(err.contains("collides") || err.contains("OS"), "{}", err);
     }
     #[test] fn import_workspace_json() {
-        let raw = import_workspace_cmd(r#"{\"tool\":\"TuneItVerse\",\"version\":\"3.9.1\",\"identify\":{\"family\":\"P01_0411\"}}"#.into()).unwrap();
+        let raw = import_workspace_cmd(r#"{"tool":"TuneItVerse","version":"3.10.0","identify":{"family":"P01_0411"}}"#.into()).unwrap();
         let v: serde_json::Value = serde_json::from_str(&raw).unwrap();
         assert_eq!(v["accepted"], true);
         assert_eq!(v["has_identify"], true);

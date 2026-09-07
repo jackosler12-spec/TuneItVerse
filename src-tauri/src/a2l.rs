@@ -46,6 +46,7 @@ pub fn parse_a2l(text: &str) -> Vec<TableDef> {
         if rest.starts_with('"') {
             if let Some(end) = rest[1..].find('"') {
                 desc = rest[1..=end].to_string();
+                rest = rest[end + 2..].trim_start();
             }
         }
         let mut addr = String::new();
@@ -54,6 +55,15 @@ pub fn parse_a2l(text: &str) -> Vec<TableDef> {
         let mut math = "X".to_string();
         let mut units = String::new();
         let mut kind = "VALUE";
+        for tok in rest.split_whitespace() {
+            if addr.is_empty() {
+                if let Some(a) = parse_addr_token(tok) {
+                    if a.len() >= 6 { addr = a; }
+                }
+            }
+            if tok.eq_ignore_ascii_case("MAP") { kind = "MAP"; if rows == 1 { rows = 16; } if cols == 1 { cols = 16; } }
+            if tok.eq_ignore_ascii_case("CURVE") { kind = "CURVE"; if cols == 1 { cols = 16; } }
+        }
         for _ in 0..80 {
             let Some(l) = lines.next() else { break; };
             let s = l.trim();
