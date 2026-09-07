@@ -1,4 +1,4 @@
-// TuneItVerse v3.10.0 — single frontend. Desktop Tauri only. No invented values.
+// TuneItVerse v3.10.1 — sidebar buttons + dual-case Tauri IPC.
 
 function parseMaybe(raw) {
   if (raw == null) return null;
@@ -8,13 +8,25 @@ function parseMaybe(raw) {
   return raw;
 }
 
+function dualCaseArgs(args) {
+  const out = Object.assign({}, args);
+  Object.keys(args || {}).forEach((k) => {
+    if (k.indexOf('_') !== -1) {
+      const camel = k.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
+      if (out[camel] === undefined) out[camel] = args[k];
+    }
+  });
+  return out;
+}
+
 async function invokeCmd(cmd, args = {}) {
+  const payload = dualCaseArgs(args || {});
   const t = window.__TAURI__;
   if (t && t.core && typeof t.core.invoke === 'function') {
-    return await t.core.invoke(cmd, args);
+    return await t.core.invoke(cmd, payload);
   }
   if (t && typeof t.invoke === 'function') {
-    return await t.invoke(cmd, args);
+    return await t.invoke(cmd, payload);
   }
   throw new Error('TuneItVerse must run as the desktop app (Tauri). Browser file-open has no ECU backend.');
 }
@@ -76,31 +88,54 @@ function banner(id, text) {
 }
 
 function showView(name) {
-  document.querySelectorAll('.content').forEach((el) => el.classList.add('content--hidden'));
-  const v = document.getElementById('view-' + name);
-  if (v) v.classList.remove('content--hidden');
-  document.querySelectorAll('.nav-item').forEach((a) => a.classList.toggle('active', a.dataset.view === name));
+  if (!name) return;
+  document.querySelectorAll('[data-view-panel], .content').forEach((el) => {
+    const isTarget = el.id === 'view-' + name || el.getAttribute('data-view-panel') === name;
+    el.classList.toggle('content--hidden', !isTarget);
+    if (isTarget) el.removeAttribute('hidden');
+    else el.setAttribute('hidden', '');
+  });
+  document.querySelectorAll('.nav-item[data-view]').forEach((btn) => {
+    btn.classList.toggle('active', btn.getAttribute('data-view') === name);
+  });
   const titles = PAGE_TITLES[name] || [name, ''];
   const pt = document.getElementById('page-title');
   const ps = document.getElementById('page-sub');
   if (pt) pt.textContent = titles[0];
   if (ps) ps.textContent = titles[1];
+  setStatus('View: ' + titles[0]);
+}
+window.showView = showView;
+
+function onSidebarClick(e) {
+  const nav = e.target.closest('[data-view]');
+  if (nav && nav.classList.contains('nav-item')) {
+    e.preventDefault();
+    e.stopPropagation();
+    showView(nav.getAttribute('data-view'));
+    return;
+  }
+  if (e.target.closest('#btn-connect-top')) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (isConnected) doDisconnect();
+    else {
+      showView('connect');
+      refreshPorts();
+    }
+  }
 }
 
 function setupNav() {
-  document.querySelectorAll('.nav-item').forEach((a) => {
-    a.onclick = (e) => { e.preventDefault(); showView(a.dataset.view); };
-  });
-  document.getElementById('btn-connect-top')?.addEventListener('click', (e) => {
-    if (isConnected) {
-      e.preventDefault();
-      doDisconnect();
-      return;
-    }
-    showView('connect');
-  });
+  const sidebar = document.getElementById('sidebar');
+  if (sidebar && !sidebar.dataset.navBound) {
+    sidebar.dataset.navBound = '1';
+    sidebar.addEventListener('click', onSidebarClick);
+  }
   document.querySelectorAll('.workflow-card[data-go]').forEach((card) => {
-    card.onclick = () => showView(card.dataset.go);
+    if (card.dataset.bound) return;
+    card.dataset.bound = '1';
+    card.addEventListener('click', () => showView(card.getAttribute('data-go')));
   });
 }
 
@@ -1277,19 +1312,18 @@ async function setupScripts() {
 
 function setupAll() {
   setupNav();
-  setupConnect();
-  setupLive();
-  setupDiagnostics();
-  setupTablesUI();
-  setupFlash();
-  setupScripts();
+  const steps = [setupConnect, setupLive, setupDiagnostics, setupTablesUI, setupFlash, setupScripts];
+  steps.forEach((fn) => {
+    try { fn(); } catch (e) { console.error(fn.name, e); setStatus(fn.name + ' failed: ' + e); }
+  });
   showView('dashboard');
   pollHealth();
   if (healthTimer) clearInterval(healthTimer);
   healthTimer = setInterval(pollHealth, 2500);
-  console.log('TuneItVerse UI v3.10.0');
+  console.log('TuneItVerse UI v3.10.1');
 }
 
+setupNav();
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', setupAll);
 } else {

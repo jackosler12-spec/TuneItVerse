@@ -23,9 +23,9 @@ python3 python/ecu_scripting.py checksum path/to/dump.bin
 python3 python/ecu_scripting.py seedkey P01_0411 1234 1
 ```
 
-## Current status (v3.10.0)
+## Current status (v3.10.1)
 
-See [COMPLETION.md](COMPLETION.md). v3.10.0 removes invented live PIDs, refuses unverified Bosch starters on unlock/flash, identifies family before write (no P01 default), and ships a single frontend with the sidebar/KPI visual system. Browser file-open has no mock ECU data.
+See [COMPLETION.md](COMPLETION.md). Sidebar nav buttons switch views (no `href="#"` reload). Connect ECU lists ports or disconnects through Rust. v3.10.0 honesty rules still apply: no invented live PIDs, no unverified Bosch unlock, no P01 default on unknown dumps.
 
 Build your own. No bullshit prices.
 

@@ -1,7 +1,7 @@
 [package]
 name = "TuneItVerse"
-version = "3.10.0"
-description = "ECU Tuning platform for JRTuners. v3.10.0: no invented live PIDs, fail-closed unverified Bosch keys, identified flash family, visual UI."
+version = "3.10.1"
+description = "ECU Tuning platform for JRTuners. v3.10.1: sidebar nav buttons switch views; Connect ECU calls disconnect/list ports."
 authors = ["JRTuners"]
 edition = "2021"
 

@@ -1,3 +1,11 @@
+# TuneItVerse v3.10.1 — sidebar buttons actually switch views (2026-09-07)
+
+v3.10.0 used `<a href="#">` for sidebar nav. In the Tauri webview that navigates/reloads, so clicks looked dead. Connect ECU only changed the view; it did not list ports or disconnect.
+
+**v3.10.1:** sidebar items are `<button type="button">`. Clicks are delegated on `#sidebar`. Views hide with `hidden` + `display: none !important`. Connect ECU lists serial ports (disconnected) or calls `disconnect_ecu` (connected). Invoke args are sent in both snake_case and camelCase.
+
+---
+
 # TuneItVerse v3.10.0 — honest live data, fail-closed flash family, visual UI (2026-09-07)
 
 **Status: v3.9.1 docs said the logger no longer invented RPM. On that tree, `logging.rs::capture_sample` still filled every enabled channel from `simulate_values` before overlaying live PIDs. Missing Mode 01 data therefore stayed fake.**

@@ -1,8 +1,8 @@
 {
   "name": "tuneitverse",
   "private": true,
-  "version": "3.10.0",
-  "description": "TuneItVerse - open ECU tuning platform (Tauri + Rust). v3.10.0: honest live data, fail-closed unverified keys, visual UI, no mock invoke.",
+  "version": "3.10.1",
+  "description": "TuneItVerse - open ECU tuning platform (Tauri + Rust). v3.10.1: sidebar nav buttons actually switch views; Connect ECU wired to backend.",
   "type": "module",
   "scripts": {
     "tauri": "tauri",

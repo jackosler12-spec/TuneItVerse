@@ -1,4 +1,4 @@
-// TuneItVerse lib.rs — Tauri entry + command surface (v3.10.0)
+// TuneItVerse lib.rs — Tauri entry + command surface (v3.10.1)
 #![allow(unused_imports, dead_code, non_snake_case)]
 
 mod a2l;

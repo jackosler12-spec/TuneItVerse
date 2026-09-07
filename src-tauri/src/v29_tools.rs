@@ -14,7 +14,7 @@ pub fn map_from_log_cmd() -> Result<String, String> { analyze_log().map(|v| v.to
 pub fn export_workspace_cmd(data: Option<Vec<u8>>) -> Result<String, String> {
     let ident = data.as_deref().map(identify_bin);
     let log = analyze_log().unwrap_or_else(|e| json!({"error": e}));
-    Ok(json!({"tool":"TuneItVerse","version":"3.10.0","families":ecu_database::list_supported_ecu_families(),"identify":ident,"map_from_log":log}).to_string())
+    Ok(json!({"tool":"TuneItVerse","version":"3.10.1","families":ecu_database::list_supported_ecu_families(),"identify":ident,"map_from_log":log}).to_string())
 }
 
 fn sha256_hex(data: &[u8]) -> String {

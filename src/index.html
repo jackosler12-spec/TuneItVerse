@@ -2,23 +2,23 @@
 <html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8">
-  <title>TuneItVerse v3.10.0</title>
+  <title>TuneItVerse v3.10.1</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-logo">
       <div class="sidebar-logo-mark">TV</div>
-      <div class="sidebar-logo-text">TuneItVerse <span class="version">v3.10.0</span></div>
+      <div class="sidebar-logo-text">TuneItVerse <span class="version">v3.10.1</span></div>
     </div>
-    <nav class="sidebar-nav">
-      <a href="#" class="nav-item active" data-view="dashboard"><span>Dashboard</span></a>
-      <a href="#" class="nav-item" data-view="connect"><span>Connect</span></a>
-      <a href="#" class="nav-item" data-view="live"><span>Data Logging</span></a>
-      <a href="#" class="nav-item" data-view="diagnostics"><span>Diagnostics</span></a>
-      <a href="#" class="nav-item" data-view="tables"><span>Tables / Maps</span></a>
-      <a href="#" class="nav-item" data-view="flash"><span>Flash</span></a>
-      <a href="#" class="nav-item" data-view="scripts"><span>Scripts</span></a>
+    <nav class="sidebar-nav" id="sidebar-nav">
+      <button type="button" class="nav-item active" data-view="dashboard">Dashboard</button>
+      <button type="button" class="nav-item" data-view="connect">Connect</button>
+      <button type="button" class="nav-item" data-view="live">Data Logging</button>
+      <button type="button" class="nav-item" data-view="diagnostics">Diagnostics</button>
+      <button type="button" class="nav-item" data-view="tables">Tables / Maps</button>
+      <button type="button" class="nav-item" data-view="flash">Flash</button>
+      <button type="button" class="nav-item" data-view="scripts">Scripts</button>
     </nav>
     <div class="sidebar-footer">
       <div class="connection-status">
@@ -41,7 +41,7 @@
       </div>
     </header>
 
-    <div id="view-dashboard" class="content">
+    <div id="view-dashboard" class="content" data-view-panel="dashboard">
       <div class="view-body">
         <div class="dash-grid-bg"></div>
         <div class="workflow-cards">
@@ -81,7 +81,7 @@
       </div>
     </div>
 
-    <div id="view-connect" class="content content--hidden">
+    <div id="view-connect" class="content content--hidden" data-view-panel="connect" hidden>
       <div class="view-body">
         <div class="panel connect-panel">
           <div class="form-group">
@@ -158,7 +158,7 @@
       </div>
     </div>
 
-    <div id="view-live" class="content content--hidden">
+    <div id="view-live" class="content content--hidden" data-view-panel="live" hidden>
       <div class="view-body">
         <div class="panel toolbar-panel">
           <div class="row wrap">
@@ -198,7 +198,7 @@
       </div>
     </div>
 
-    <div id="view-diagnostics" class="content content--hidden">
+    <div id="view-diagnostics" class="content content--hidden" data-view-panel="diagnostics" hidden>
       <div class="view-body dtc-panel">
         <div class="dtc-toolbar">
           <div class="row">
@@ -220,7 +220,7 @@
       </div>
     </div>
 
-    <div id="view-tables" class="content content--hidden">
+    <div id="view-tables" class="content content--hidden" data-view-panel="tables" hidden>
       <div class="toolbar tuning-toolbar">
         <button id="btn-load-bin" class="btn btn-primary" type="button">Load .BIN</button>
         <button id="btn-load-xdf" class="btn" type="button">Load XDF / XML</button>
@@ -269,7 +269,7 @@
       </div>
     </div>
 
-    <div id="view-flash" class="content content--hidden">
+    <div id="view-flash" class="content content--hidden" data-view-panel="flash" hidden>
       <div class="view-body">
         <div class="pipeline-steps" id="flash-steps">
           <div class="step" data-step="identify"><span class="step-num">1</span> Identify <span class="step-status" id="st-identify">pending</span></div>
@@ -299,7 +299,7 @@
       </div>
     </div>
 
-    <div id="view-scripts" class="content content--hidden">
+    <div id="view-scripts" class="content content--hidden" data-view-panel="scripts" hidden>
       <div class="view-body">
         <p class="muted">Bench helpers, not an embedded interpreter. Live checksum / identify / map-from-log lives in the Rust backend.</p>
         <button id="btn-refresh-scripts" class="btn" type="button">Refresh Script Helpers</button>
@@ -308,7 +308,7 @@
     </div>
 
     <footer class="status-bar">
-      <div class="status-left" id="status-left">TuneItVerse 3.10.0</div>
+      <div class="status-left" id="status-left">TuneItVerse 3.10.1</div>
       <div class="status-center" id="status-center">No invented live values</div>
       <div class="status-right" id="status-right">Desktop app required</div>
     </footer>
