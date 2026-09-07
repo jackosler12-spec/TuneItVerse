@@ -1,6 +1,6 @@
 {
-  "version": "1.15",
-  "updated": "2026-09-06",
+  "version": "1.16",
+  "updated": "2026-09-07",
   "description": "Master index of TuneItVerse ECU database entries.",
   "families": [
     {"id": "P01_0411", "file": "p01_0411.json", "display_name": "Holden LS1 / GM P01 0411 PCM", "bin_size_bytes": 524288, "primary_protocol": "VPW", "status": "full"},
@@ -13,5 +13,5 @@
     {"id": "SIEMENS_SID803", "file": "siemens_sid803.json", "display_name": "Siemens / Continental SID803", "bin_size_bytes": 1572864, "primary_protocol": "CAN/UDS", "status": "starter catalog — report-only checksum"},
     {"id": "HONDA_KEIHIN", "file": "honda_keihin.json", "display_name": "Honda Keihin K-series", "bin_size_bytes": 524288, "primary_protocol": "KWP", "status": "starter catalog — size collides with P01, identify by OS string"}
   ],
-  "notes": "Add new family JSON + entry here + update loader in ecu_database.rs. Personal dumps only. v3.9.0: Honda/P01 collision is enforced in checksum.rs + identify_bin."
+  "notes": "Add new family JSON + entry here + update loader in ecu_database.rs. Personal dumps only. v3.9.1: Honda/P01 collision is enforced in checksum.rs + identify_bin. Workspace import is metadata-only."
 }
