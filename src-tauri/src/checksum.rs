@@ -1,6 +1,6 @@
 // checksum.rs — Multi-ECU support: P01 additive + EDC16C41 multipoint CRC32 + additive fallback
 //
-// v3.7.1: unknown sizes return a report-only ChecksumReport. Correction stays fail-closed.
+// v3.9.1: Honda OS on a P01-sized image is report-only. Correction stays fail-closed.
 
 use serde::{Serialize, Deserialize};
 
@@ -264,6 +264,17 @@ fn correct_edc16_crc32(data: &[u8]) -> Result<CorrectedCal, String> {
 }
 
 pub fn validate_checksums(data: &[u8]) -> Result<ChecksumReport, String> {
+    if crate::cs_guard::honda_blocks_p01_corrector(data) {
+        return Ok(ChecksumReport {
+            regions: vec![],
+            valid_count: 0,
+            fixed_count: 0,
+            failed_count: 0,
+            all_valid: false,
+            ecu_family: "HONDA_KEIHIN".into(),
+            method_used: "report-only: Honda OS on P01-sized image — P01 additive blocked".into(),
+        });
+    }
     if is_p01_size(data.len()) { validate_p01_checksums(data) }
     else if data.len() == EDC16_FLASH_SIZE { validate_edc16_crc32(data) }
     else {
@@ -280,6 +291,9 @@ pub fn validate_checksums(data: &[u8]) -> Result<ChecksumReport, String> {
 }
 
 pub fn correct_checksums(data: &[u8]) -> Result<CorrectedCal, String> {
+    if crate::cs_guard::honda_blocks_p01_corrector(data) {
+        return Err("Honda OS string on this image. P01 additive correction is blocked.".into());
+    }
     if is_p01_size(data.len()) { correct_p01_checksums(data) }
     else if data.len() == EDC16_FLASH_SIZE { correct_edc16_crc32(data) }
     else { Err(format!("Unsupported size for correction: {}", data.len())) }
@@ -353,5 +367,14 @@ mod tests {
     fn edc16_size_supported() {
         let img = vec![0u8; EDC16_FLASH_SIZE];
         let _ = validate_checksums(&img).unwrap_or_else(|e| panic!("EDC16 size not supported: {}", e));
+    }
+    #[test]
+    fn honda_os_blocks_p01_corrector() {
+        let mut img = vec![0u8; P01_FULL_IMAGE_SIZE];
+        img[0x100..0x108].copy_from_slice(b"37820-PR");
+        let report = validate_checksums(&img).unwrap();
+        assert_eq!(report.ecu_family, "HONDA_KEIHIN");
+        assert!(report.method_used.contains("blocked"));
+        assert!(correct_checksums(&img).is_err());
     }
 }
