@@ -1,7 +1,7 @@
 [package]
 name = "TuneItVerse"
-version = "3.10.1"
-description = "ECU Tuning platform for JRTuners. v3.10.1: sidebar nav buttons switch views; Connect ECU calls disconnect/list ports."
+version = "3.10.2"
+description = "ECU Tuning platform for JRTuners. v3.10.2: native file dialogs, offline BIN/XDF edit and save."
 authors = ["JRTuners"]
 edition = "2021"
 
@@ -24,3 +24,4 @@ sha2 = "0.10"
 chrono = { version = "0.4", features = ["serde"] }
 quick-xml = { version = "0.31", features = ["serialize"] }
 libloading = "0.8"
+rfd = "0.15"

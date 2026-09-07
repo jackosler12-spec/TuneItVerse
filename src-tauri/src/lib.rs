@@ -1,4 +1,4 @@
-// TuneItVerse lib.rs — Tauri entry + command surface (v3.10.1)
+// TuneItVerse lib.rs — Tauri entry + command surface (v3.10.2)
 #![allow(unused_imports, dead_code, non_snake_case)]
 
 mod a2l;
@@ -9,6 +9,7 @@ mod consult;
 mod cs_guard;
 mod dtc;
 mod ecu_database;
+mod file_dialog;
 mod flash;
 mod j2534;
 mod j2534_list;
@@ -431,6 +432,7 @@ pub fn run() {
             auto_load_tables_for_bin, get_tuning_advice, guided_flash_pipeline, compare_bin_to_ecu, verify_after_write,
             unlock_level1, unlock_level2, bosch_uds_unlock, list_script_helpers,
             v29_tools::identify_bin_cmd, v29_tools::compare_bins_cmd, v29_tools::map_from_log_cmd, v29_tools::export_workspace_cmd, v29_tools::import_workspace_cmd, v29_tools::patch_bin_bytes_cmd,
+            file_dialog::dialog_open_file, file_dialog::dialog_save_bytes, file_dialog::dialog_save_text,
             cs_guard::scan_checksum_candidates_cmd,
             j2534_list::j2534_list_devices, j2534::j2534_connect, j2534::j2534_connect_vpw,
             j2534::j2534_write, j2534::j2534_read, j2534::j2534_set_data_rate,

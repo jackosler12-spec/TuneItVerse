@@ -1,3 +1,11 @@
+# TuneItVerse v3.10.2 — offline BIN/XDF, native file dialogs (2026-09-07)
+
+Load BIN / XDF / Save used a detached HTML file input and `<a download>`. In the Tauri WebView those clicks do nothing.
+
+**v3.10.2:** Rust `dialog_open_file` / `dialog_save_bytes` (Windows file picker). No ECU required to load a BIN, load XDF/A2L, edit maps, patch, correct checksums, and save a new BIN. Live log / DTC / flash still need an adapter and say so. All toolbar buttons are bound through one document click map.
+
+---
+
 # TuneItVerse v3.10.1 — sidebar buttons actually switch views (2026-09-07)
 
 v3.10.0 used `<a href="#">` for sidebar nav. In the Tauri webview that navigates/reloads, so clicks looked dead. Connect ECU only changed the view; it did not list ports or disconnect.

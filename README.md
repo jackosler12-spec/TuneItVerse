@@ -25,9 +25,9 @@ python3 python/ecu_scripting.py checksum path/to/dump.bin
 python3 python/ecu_scripting.py seedkey P01_0411 1234 1
 ```
 
-## Current status (v3.10.1)
+## Current status (v3.10.2)
 
-See [COMPLETION.md](COMPLETION.md). Sidebar nav buttons switch views (no `href="#"` reload). Connect ECU lists ports or disconnects through Rust. v3.10.0 honesty rules still apply: no invented live PIDs, no unverified Bosch unlock, no P01 default on unknown dumps.
+See [COMPLETION.md](COMPLETION.md). Offline: Load BIN, Load XDF/A2L, edit maps, Save BIN — native Windows dialogs, no ECU. Live/DTC/flash need an adapter. Sidebar switches views.
 
 Build your own. No bullshit prices.
 

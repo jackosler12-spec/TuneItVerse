@@ -32,6 +32,52 @@ async function invokeCmd(cmd, args = {}) {
 }
 window.invokeCmd = invokeCmd;
 
+function binBytes(bin) {
+  if (!bin) return [];
+  return Array.from(bin);
+}
+
+function setTablesStatus(msg) {
+  const st = document.getElementById('tables-status');
+  if (st) st.textContent = msg;
+  setStatus(msg);
+}
+
+function enableSave(on) {
+  const save = document.getElementById('btn-save-patched');
+  if (save) save.disabled = !on;
+}
+
+async function openNativeFile(kind) {
+  const raw = await invokeCmd('dialog_open_file', { kind: kind || 'bin' });
+  const res = parseMaybe(raw);
+  if (!res) throw new Error('File dialog returned nothing');
+  return res;
+}
+
+async function saveNativeBytes(data, defaultName) {
+  const bytes = typeof data === 'string' ? Array.from(new TextEncoder().encode(data)) : binBytes(data);
+  const raw = await invokeCmd('dialog_save_bytes', { data: bytes, default_name: defaultName || 'tuned.bin' });
+  return parseMaybe(raw);
+}
+
+async function saveNativeText(text, defaultName) {
+  const raw = await invokeCmd('dialog_save_text', { text: String(text), default_name: defaultName || 'export.txt' });
+  return parseMaybe(raw);
+}
+
+async function requireConnected(what) {
+  if (isConnected) return true;
+  try {
+    const h = String(await invokeCmd('get_connection_health') || '');
+    if (/connected/i.test(h) && !/disconnected/i.test(h)) return true;
+  } catch (_) {}
+  const msg = 'Not connected — ' + (what || 'this needs an adapter') + '. Use Tables to load a BIN offline.';
+  setStatus(msg);
+  alert(msg);
+  return false;
+}
+
 const PAGE_TITLES = {
   dashboard: ['Dashboard', 'Honest live data. No invented PIDs.'],
   connect: ['Connect', 'Serial, ELM, or J2534. Fail-closed on silence.'],
@@ -346,12 +392,6 @@ async function refreshJ2534Devices() {
 }
 
 function setupConnect() {
-  document.getElementById('btn-refresh-ports')?.addEventListener('click', refreshPorts);
-  document.getElementById('btn-do-connect')?.addEventListener('click', doConnect);
-  document.getElementById('btn-do-disconnect')?.addEventListener('click', doDisconnect);
-  document.getElementById('btn-auto-detect')?.addEventListener('click', doAutoDetect);
-  document.getElementById('btn-compute-key')?.addEventListener('click', computeSeedKeyUi);
-  document.getElementById('btn-j2534-list')?.addEventListener('click', refreshJ2534Devices);
   document.querySelectorAll('input[name="hw"]').forEach((r) => {
     r.onchange = () => {
       const g = document.getElementById('j2534-group');
@@ -466,6 +506,7 @@ async function logPollTick() {
 }
 
 async function startLogging() {
+  if (!(await requireConnected('live logging'))) return;
   const rate = parseFloat(document.getElementById('log-rate')?.value || '10');
   try {
     await invokeCmd('log_start', { rate_hz: rate, session_name: 'session_' + Date.now() });
@@ -526,36 +567,27 @@ async function clearLog() {
 async function exportCsv() {
   try {
     const csv = await invokeCmd('log_export_csv');
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'tuneitverse_log_' + Date.now() + '.csv';
-    a.click();
+    const res = await saveNativeText(csv, 'tuneitverse_log.csv');
+    if (res && res.cancelled) { setStatus('Save cancelled.'); return; }
+    setStatus('CSV saved' + (res && res.path ? ': ' + res.path : ''));
   } catch (e) {
     alert('Export failed: ' + e);
   }
 }
 
 async function importCsv() {
-  const input = document.createElement('input');
-  input.type = 'file';
-  input.accept = '.csv,text/csv';
-  input.onchange = async (ev) => {
-    const file = ev.target.files[0];
-    if (!file) return;
-    try {
-      const text = await file.text();
-      const raw = await invokeCmd('log_import_csv', { csv: text });
-      await refreshLogStatus();
-      const samples = parseMaybe(await invokeCmd('log_get_samples', { limit: 200 }));
-      const list = Array.isArray(samples) ? samples : [];
-      sparkHistory = list.map((s) => s.values && (s.values.rpm ?? Object.values(s.values)[0])).filter((v) => typeof v === 'number');
-      drawSpark();
-      const st = document.getElementById('log-status');
-      if (st) st.textContent = 'Imported CSV: ' + (typeof raw === 'string' ? raw : JSON.stringify(raw));
-    } catch (e) { alert('CSV import failed: ' + e); }
-  };
-  input.click();
+  try {
+    const file = await openNativeFile('csv');
+    if (file.cancelled) { setStatus('Open cancelled.'); return; }
+    const raw = await invokeCmd('log_import_csv', { csv: file.text || '' });
+    await refreshLogStatus();
+    const samples = parseMaybe(await invokeCmd('log_get_samples', { limit: 200 }));
+    const list = Array.isArray(samples) ? samples : [];
+    sparkHistory = list.map((s) => s.values && (s.values.rpm ?? Object.values(s.values)[0])).filter((v) => typeof v === 'number');
+    drawSpark();
+    const st = document.getElementById('log-status');
+    if (st) st.textContent = 'Imported CSV: ' + (typeof raw === 'string' ? raw : JSON.stringify(raw));
+  } catch (e) { alert('CSV import failed: ' + e); }
 }
 
 async function loadTemplates() {
@@ -573,13 +605,6 @@ async function loadTemplates() {
 }
 
 function setupLive() {
-  document.getElementById('btn-log-start')?.addEventListener('click', startLogging);
-  document.getElementById('btn-log-stop')?.addEventListener('click', stopLogging);
-  document.getElementById('btn-log-clear')?.addEventListener('click', clearLog);
-  document.getElementById('btn-log-export')?.addEventListener('click', exportCsv);
-  document.getElementById('btn-log-import')?.addEventListener('click', importCsv);
-  document.getElementById('btn-log-apply-ch')?.addEventListener('click', applyChannels);
-  document.getElementById('btn-log-apply-tmpl')?.addEventListener('click', applyTemplate);
   loadTemplates();
   refreshLogStatus();
 }
@@ -614,6 +639,7 @@ function renderDtcRows(result) {
 }
 
 async function readDtcs() {
+  if (!(await requireConnected('DTC read'))) return;
   const st = document.getElementById('dtc-status');
   if (st) st.textContent = 'Reading DTCs…';
   try {
@@ -626,6 +652,7 @@ async function readDtcs() {
 }
 
 async function readFreezeFrame() {
+  if (!(await requireConnected('freeze frame'))) return;
   const st = document.getElementById('dtc-status');
   const pre = document.getElementById('freeze-frame');
   if (st) st.textContent = 'Reading freeze frame…';
@@ -640,6 +667,7 @@ async function readFreezeFrame() {
 }
 
 async function clearDtcs() {
+  if (!(await requireConnected('DTC clear'))) return;
   if (!confirm('Clear all DTCs and reset readiness monitors? This cannot be undone.')) return;
   const st = document.getElementById('dtc-status');
   if (st) st.textContent = 'Clearing DTCs…';
@@ -652,18 +680,14 @@ async function clearDtcs() {
   }
 }
 
-function setupDiagnostics() {
-  document.getElementById('btn-read-dtcs')?.addEventListener('click', readDtcs);
-  document.getElementById('btn-read-freeze')?.addEventListener('click', readFreezeFrame);
-  document.getElementById('btn-clear-dtcs')?.addEventListener('click', clearDtcs);
-}
+function setupDiagnostics() {}
 
 // ---------- Tables ----------
 async function identifyCurrentBin() {
   if (!currentBin) { alert('Load a .BIN first'); return; }
   const st = document.getElementById('tables-status');
   try {
-    const info = parseMaybe(await invokeCmd('identify_bin_cmd', { data: Array.from(currentBin) }));
+    const info = parseMaybe(await invokeCmd('identify_bin_cmd', { data: binBytes(currentBin) }));
     applyIdentify(info);
     if (st) st.textContent = 'Identified: ' + (info.family || info.family_by_size || 'unknown') + ' (' + info.bin_size_bytes + ' bytes)';
     const meta = document.getElementById('side-meta');
@@ -674,90 +698,81 @@ async function identifyCurrentBin() {
 }
 window.identifyCurrentBin = identifyCurrentBin;
 
+async function ingestBinBytes(bytes, label) {
+  currentBin = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  syncGlobals();
+  enableSave(true);
+  try {
+    const raw = await invokeCmd('auto_load_tables_for_bin', { bin_bytes: binBytes(currentBin) });
+    const list = parseMaybe(raw);
+    currentTables = Array.isArray(list) ? list : [];
+    renderTableList();
+    setTablesStatus('Loaded ' + (label || 'BIN') + ' (' + currentBin.length + ' bytes). Catalog tables: ' + currentTables.length);
+  } catch (e) {
+    currentTables = [];
+    renderTableList();
+    setTablesStatus('BIN loaded (' + currentBin.length + ' bytes). Catalog tables unavailable: ' + e);
+  }
+  await identifyCurrentBin();
+  await validateCurrentBinChecksums();
+}
+
 async function loadBinFile() {
-  const input = document.createElement('input');
-  input.type = 'file';
-  input.accept = '.bin,.BIN';
-  input.onchange = async (ev) => {
-    const file = ev.target.files[0];
-    if (!file) return;
-    const buf = await file.arrayBuffer();
-    currentBin = new Uint8Array(buf);
-    syncGlobals();
-    const st = document.getElementById('tables-status');
-    const save = document.getElementById('btn-save-patched');
-    if (save) save.disabled = false;
-    try {
-      const raw = await invokeCmd('auto_load_tables_for_bin', { bin_bytes: Array.from(currentBin) });
-      const list = parseMaybe(raw);
-      currentTables = Array.isArray(list) ? list : [];
-      renderTableList();
-      if (st) st.textContent = 'Loaded ' + file.name + ' (' + currentBin.length + ' bytes). Tables from catalog: ' + currentTables.length;
-    } catch (e) {
-      currentTables = [];
-      renderTableList();
-      if (st) st.textContent = 'BIN loaded (' + currentBin.length + ' bytes). Catalog tables unavailable: ' + e;
-    }
-    await identifyCurrentBin();
-    await validateCurrentBinChecksums();
-  };
-  input.click();
+  setTablesStatus('Opening BIN…');
+  try {
+    const res = await openNativeFile('bin');
+    if (res.cancelled) { setTablesStatus('Open cancelled.'); return; }
+    if (!res.bytes || !res.bytes.length) throw new Error('File was empty');
+    await ingestBinBytes(res.bytes, res.path || 'BIN');
+  } catch (e) {
+    setTablesStatus('Load BIN failed: ' + e);
+  }
+}
+
+async function applyDefinitionText(text, source) {
+  let defs = await invokeCmd('parse_xdf_definitions', { xml: text });
+  let list = Array.isArray(defs) ? defs : parseMaybe(defs);
+  if ((!list || !list.length) && /BEGIN CHARACTERISTIC/i.test(text)) {
+    defs = await invokeCmd('parse_a2l_definitions', { text });
+    list = Array.isArray(defs) ? defs : parseMaybe(defs);
+  }
+  if (!list || !list.length) {
+    setTablesStatus((source || 'Definition') + ' parsed but no tables found');
+    return;
+  }
+  currentTables = list;
+  renderTableList();
+  setTablesStatus((source || 'Definitions') + ' loaded: ' + list.length + ' tables. Select one to extract from the BIN.');
 }
 
 async function loadXdfFile() {
-  const input = document.createElement('input');
-  input.type = 'file';
-  input.accept = '.xdf,.xml,.XDF,.XML,.a2l,.A2L';
-  input.onchange = async (ev) => {
-    const file = ev.target.files[0];
-    if (!file) return;
-    const text = await file.text();
-    const st = document.getElementById('tables-status');
-    try {
-      let defs = await invokeCmd('parse_xdf_definitions', { xml: text });
-      let list = Array.isArray(defs) ? defs : parseMaybe(defs);
-      if ((!list || !list.length) && /BEGIN CHARACTERISTIC/i.test(text)) {
-        defs = await invokeCmd('parse_a2l_definitions', { text });
-        list = Array.isArray(defs) ? defs : parseMaybe(defs);
-      }
-      if (!list || !list.length) {
-        if (st) st.textContent = 'Definition parsed but no tables found';
-        return;
-      }
-      currentTables = list;
-      renderTableList();
-      if (st) st.textContent = 'Definitions loaded: ' + list.length;
-    } catch (e) {
-      if (st) st.textContent = 'Parse error: ' + e;
-    }
-  };
-  input.click();
+  setTablesStatus('Opening XDF / XML…');
+  try {
+    const res = await openNativeFile('xdf');
+    if (res.cancelled) { setTablesStatus('Open cancelled.'); return; }
+    await applyDefinitionText(res.text || '', res.path || 'XDF');
+  } catch (e) {
+    setTablesStatus('Load XDF failed: ' + e);
+  }
 }
 
 async function loadA2l() {
-  const input = document.createElement('input');
-  input.type = 'file';
-  input.accept = '.a2l,.A2L,.txt';
-  input.onchange = async () => {
-    const file = input.files && input.files[0];
-    if (!file) return;
-    const text = await file.text();
-    const st = document.getElementById('tables-status');
-    try {
-      const defs = await invokeCmd('parse_a2l_definitions', { text });
-      const list = Array.isArray(defs) ? defs : parseMaybe(defs);
-      if (!list || !list.length) {
-        if (st) st.textContent = 'A2L parsed but no CHARACTERISTIC found';
-        return;
-      }
-      currentTables = list;
-      renderTableList();
-      if (st) st.textContent = 'A2L loaded: ' + list.length + ' characteristics. Confirm addresses on your dump.';
-    } catch (e) {
-      if (st) st.textContent = 'A2L parse error: ' + e;
+  setTablesStatus('Opening A2L…');
+  try {
+    const res = await openNativeFile('a2l');
+    if (res.cancelled) { setTablesStatus('Open cancelled.'); return; }
+    const defs = await invokeCmd('parse_a2l_definitions', { text: res.text || '' });
+    const list = Array.isArray(defs) ? defs : parseMaybe(defs);
+    if (!list || !list.length) {
+      setTablesStatus('A2L parsed but no CHARACTERISTIC found');
+      return;
     }
-  };
-  input.click();
+    currentTables = list;
+    renderTableList();
+    setTablesStatus('A2L loaded: ' + list.length + ' characteristics. Confirm addresses on your dump.');
+  } catch (e) {
+    setTablesStatus('A2L parse error: ' + e);
+  }
 }
 
 function renderTableList() {
@@ -789,7 +804,7 @@ async function selectTable(idx) {
     return;
   }
   try {
-    const extracted = await invokeCmd('extract_table_from_bin', { bin_bytes: Array.from(currentBin), table: currentTable });
+    const extracted = await invokeCmd('extract_table_from_bin', { bin_bytes: binBytes(currentBin), table: currentTable });
     currentValues = extracted.values || extracted;
     if (!Array.isArray(currentValues)) currentValues = null;
     renderCurrentEditor();
@@ -949,13 +964,19 @@ async function validateCurrentBinChecksums() {
   }
 }
 
-function savePatchedBin() {
-  if (!currentBin) return;
-  const blob = new Blob([currentBin], { type: 'application/octet-stream' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = 'tuned_' + Date.now() + '.bin';
-  a.click();
+async function savePatchedBin() {
+  if (!currentBin || !currentBin.length) {
+    setTablesStatus('Load a .BIN first.');
+    return;
+  }
+  setTablesStatus('Saving BIN…');
+  try {
+    const res = await saveNativeBytes(currentBin, 'tuned.bin');
+    if (res && res.cancelled) { setTablesStatus('Save cancelled.'); return; }
+    setTablesStatus('Saved ' + currentBin.length + ' bytes' + (res && res.path ? ' to ' + res.path : ''));
+  } catch (e) {
+    setTablesStatus('Save failed: ' + e);
+  }
 }
 
 function filterTableList(filter) {
@@ -975,25 +996,18 @@ function filterTableList(filter) {
 }
 
 async function compareAnotherBin() {
-  if (!currentBin) { alert('Load the first .BIN first'); return; }
-  const input = document.createElement('input');
-  input.type = 'file';
-  input.accept = '.bin,.BIN';
-  input.onchange = async (ev) => {
-    const file = ev.target.files[0];
-    if (!file) return;
-    const other = Array.from(new Uint8Array(await file.arrayBuffer()));
-    const st = document.getElementById('tables-status');
-    try {
-      const info = parseMaybe(await invokeCmd('compare_bins_cmd', { a: Array.from(currentBin), b: other }));
-      if (st) st.textContent = info.message || 'Compare done';
-      const cs = document.getElementById('side-checksum');
-      if (cs) cs.textContent = JSON.stringify(info, null, 2);
-    } catch (e) {
-      if (st) st.textContent = 'Compare error: ' + e;
-    }
-  };
-  input.click();
+  if (!currentBin) { setTablesStatus('Load the first .BIN first'); return; }
+  setTablesStatus('Opening second BIN…');
+  try {
+    const res = await openNativeFile('bin');
+    if (res.cancelled) { setTablesStatus('Open cancelled.'); return; }
+    const info = parseMaybe(await invokeCmd('compare_bins_cmd', { a: binBytes(currentBin), b: res.bytes || [] }));
+    setTablesStatus(info.message || 'Compare done');
+    const cs = document.getElementById('side-checksum');
+    if (cs) cs.textContent = JSON.stringify(info, null, 2);
+  } catch (e) {
+    setTablesStatus('Compare error: ' + e);
+  }
 }
 
 function renderHeatmap(info) {
@@ -1033,38 +1047,29 @@ async function mapFromLog() {
 
 async function exportWorkspace() {
   try {
-    const raw = await invokeCmd('export_workspace_cmd', { data: currentBin ? Array.from(currentBin) : null });
+    const raw = await invokeCmd('export_workspace_cmd', { data: currentBin ? binBytes(currentBin) : null });
     const text = typeof raw === 'string' ? raw : JSON.stringify(raw, null, 2);
-    const blob = new Blob([text], { type: 'application/json' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'tuneitverse-workspace.json';
-    a.click();
-  } catch (e) { alert('Workspace export failed: ' + e); }
+    const res = await saveNativeText(text, 'tuneitverse-workspace.json');
+    if (res && res.cancelled) { setTablesStatus('Save cancelled.'); return; }
+    setTablesStatus('Workspace saved' + (res && res.path ? ': ' + res.path : ''));
+  } catch (e) { setTablesStatus('Workspace export failed: ' + e); }
 }
 
 async function importWorkspace() {
-  const input = document.createElement('input');
-  input.type = 'file';
-  input.accept = '.json,.txt';
-  input.onchange = async () => {
-    const file = input.files && input.files[0];
-    if (!file) return;
-    const text = await file.text();
-    const st = document.getElementById('tables-status');
-    try {
-      const res = parseMaybe(await invokeCmd('import_workspace_cmd', { jsonText: text }));
-      if (st) st.textContent = 'Workspace import: ' + JSON.stringify(res);
-      if (res && res.identify) applyIdentify(res.identify);
-      if (res && res.map_from_log) {
-        lastMapFromLog = res.map_from_log;
-        renderHeatmap(res.map_from_log);
-      }
-    } catch (e) {
-      if (st) st.textContent = 'Workspace import failed: ' + e;
+  setTablesStatus('Opening workspace JSON…');
+  try {
+    const file = await openNativeFile('json');
+    if (file.cancelled) { setTablesStatus('Open cancelled.'); return; }
+    const res = parseMaybe(await invokeCmd('import_workspace_cmd', { jsonText: file.text || '', json_text: file.text || '' }));
+    setTablesStatus('Workspace import: ' + JSON.stringify(res));
+    if (res && res.identify) applyIdentify(res.identify);
+    if (res && res.map_from_log) {
+      lastMapFromLog = res.map_from_log;
+      renderHeatmap(res.map_from_log);
     }
-  };
-  input.click();
+  } catch (e) {
+    setTablesStatus('Workspace import failed: ' + e);
+  }
 }
 
 async function scanCs() {
@@ -1137,21 +1142,6 @@ async function applyStft() {
 }
 
 function setupTablesUI() {
-  document.getElementById('btn-load-bin')?.addEventListener('click', loadBinFile);
-  document.getElementById('btn-load-xdf')?.addEventListener('click', loadXdfFile);
-  document.getElementById('btn-load-a2l')?.addEventListener('click', loadA2l);
-  document.getElementById('btn-save-patched')?.addEventListener('click', savePatchedBin);
-  document.getElementById('btn-identify-bin')?.addEventListener('click', identifyCurrentBin);
-  document.getElementById('btn-compare-bins')?.addEventListener('click', compareAnotherBin);
-  document.getElementById('btn-map-from-log')?.addEventListener('click', mapFromLog);
-  document.getElementById('btn-export-workspace')?.addEventListener('click', exportWorkspace);
-  document.getElementById('btn-import-workspace')?.addEventListener('click', importWorkspace);
-  document.getElementById('btn-scan-cs')?.addEventListener('click', scanCs);
-  document.getElementById('btn-hex-poke')?.addEventListener('click', pokeHex);
-  document.getElementById('btn-tbl-scale')?.addEventListener('click', () => runMath('scale'));
-  document.getElementById('btn-tbl-offset')?.addEventListener('click', () => runMath('add'));
-  document.getElementById('btn-tbl-smooth')?.addEventListener('click', () => runMath('smooth'));
-  document.getElementById('btn-tbl-stft')?.addEventListener('click', applyStft);
   document.querySelectorAll('.table-filters .chip-filter').forEach((ch) => {
     ch.onclick = () => {
       document.querySelectorAll('.table-filters .chip-filter').forEach((c) => c.classList.remove('active'));
@@ -1209,36 +1199,92 @@ function applyFlashResult(res) {
   if (prog) prog.textContent = pct + '%';
 }
 
-function setupFlash() {
-  document.getElementById('btn-compare-bin')?.addEventListener('click', async () => {
-    const pre = document.getElementById('compare-result');
-    if (pre) { pre.hidden = false; pre.textContent = 'Comparing…'; }
-    if (!currentBin || !currentBin.length) {
-      if (pre) pre.textContent = 'Load a .BIN in Tables first.';
+async function compareBinToEcuUi() {
+  const pre = document.getElementById('compare-result');
+  if (pre) { pre.hidden = false; pre.textContent = 'Comparing…'; }
+  if (!currentBin || !currentBin.length) {
+    if (pre) pre.textContent = 'Load a .BIN in Tables first (works offline). Live compare needs an adapter.';
+    return;
+  }
+  if (!(await requireConnected('live BIN compare'))) {
+    if (pre) pre.textContent = 'Not connected. Offline: use Compare Another BIN on Tables.';
+    return;
+  }
+  try {
+    const res = await invokeCmd('compare_bin_to_ecu', { file_bytes: binBytes(currentBin) });
+    if (pre) pre.textContent = typeof res === 'string' ? res : JSON.stringify(res, null, 2);
+  } catch (e) {
+    if (pre) pre.textContent = 'Compare error: ' + e;
+  }
+}
+
+async function verifyAfterWriteUi() {
+  const pre = document.getElementById('compare-result');
+  if (pre) { pre.hidden = false; pre.textContent = 'Verifying…'; }
+  if (!(await requireConnected('live verify'))) {
+    if (pre) pre.textContent = 'Not connected.';
+    return;
+  }
+  try {
+    if (!currentBin || !currentBin.length) throw new Error('Load a .BIN in Tables first.');
+    const res = await invokeCmd('verify_after_write', { expected_bytes: binBytes(currentBin) });
+    if (pre) pre.textContent = typeof res === 'string' ? res : JSON.stringify(res, null, 2);
+  } catch (e) {
+    if (pre) pre.textContent = 'Verify error: ' + e;
+  }
+}
+
+function showRiskUi() {
+  const sec = document.getElementById('risk-section');
+  if (sec) sec.hidden = false;
+}
+
+async function runGuidedFlashUi() {
+  const log = document.getElementById('flash-log');
+  if (!(await requireConnected('guided flash'))) {
+    if (log) log.textContent = 'Not connected — flash needs an adapter. Load/edit/save a BIN on Tables without an ECU.\n';
+    return;
+  }
+  const risksOk = ['risk-backup', 'risk-power', 'risk-ground', 'risk-understand'].every((i) => document.getElementById(i)?.checked);
+  if (!risksOk) {
+    if (log) log.textContent = 'Fail-closed: tick every risk checkbox before flashing.\n';
+    return;
+  }
+  if (!currentBin || !currentBin.length) {
+    if (log) log.textContent = 'Load a .BIN in Tables first.\n';
+    return;
+  }
+  resetFlashSteps();
+  setFlashStep('identify', 'running');
+  if (log) log.textContent = 'Starting guided flash pipeline…\n';
+  try {
+    if (!identifiedFamily()) await identifyCurrentBin();
+    const family = identifiedFamily();
+    if (!family) {
+      if (log) log.textContent += 'Identify did not resolve a family. Refusing write.\n';
+      setFlashStep('identify', 'fail');
       return;
     }
-    try {
-      const res = await invokeCmd('compare_bin_to_ecu', { file_bytes: Array.from(currentBin) });
-      if (pre) pre.textContent = typeof res === 'string' ? res : JSON.stringify(res, null, 2);
-    } catch (e) {
-      if (pre) pre.textContent = 'Compare error: ' + e;
-    }
-  });
-  document.getElementById('btn-verify-write')?.addEventListener('click', async () => {
-    const pre = document.getElementById('compare-result');
-    if (pre) { pre.hidden = false; pre.textContent = 'Verifying…'; }
-    try {
-      if (!currentBin || !currentBin.length) throw new Error('Load a .BIN in Tables first.');
-      const res = await invokeCmd('verify_after_write', { expected_bytes: Array.from(currentBin) });
-      if (pre) pre.textContent = typeof res === 'string' ? res : JSON.stringify(res, null, 2);
-    } catch (e) {
-      if (pre) pre.textContent = 'Verify error: ' + e;
-    }
-  });
-  document.getElementById('btn-show-risk')?.onclick = () => {
-    const sec = document.getElementById('risk-section');
-    if (sec) sec.hidden = false;
-  };
+    setFlashStep('identify', 'ok');
+    const req = {
+      ecu_family: family,
+      bin_bytes: binBytes(currentBin),
+      do_backup: true,
+      do_kernel: true,
+      do_write: true,
+      user_confirmed_risks: true,
+      accept_unverified_write: !!(document.getElementById('risk-unverified') && document.getElementById('risk-unverified').checked)
+    };
+    const raw = await invokeCmd('guided_flash_pipeline', { request_json: JSON.stringify(req) });
+    const res = parseMaybe(raw) || {};
+    if (log) log.textContent += (typeof raw === 'string' ? raw : JSON.stringify(res, null, 2)) + '\n';
+    applyFlashResult(res);
+  } catch (e) {
+    if (log) log.textContent += 'ERROR: ' + e + '\n';
+  }
+}
+
+function setupFlash() {
   ['risk-backup', 'risk-power', 'risk-ground', 'risk-understand'].forEach((id) => {
     const cb = document.getElementById(id);
     if (cb) cb.onchange = () => {
@@ -1247,71 +1293,80 @@ function setupFlash() {
       if (btn) btn.disabled = !all;
     };
   });
-  document.getElementById('btn-run-flash')?.addEventListener('click', async () => {
-    const log = document.getElementById('flash-log');
-    const risksOk = ['risk-backup', 'risk-power', 'risk-ground', 'risk-understand'].every((i) => document.getElementById(i)?.checked);
-    if (!risksOk) {
-      if (log) log.textContent = 'Fail-closed: tick every risk checkbox before flashing.\n';
-      return;
-    }
-    if (!currentBin || !currentBin.length) {
-      if (log) log.textContent = 'Load a .BIN in Tables first.\n';
-      return;
-    }
-    resetFlashSteps();
-    setFlashStep('identify', 'running');
-    if (log) log.textContent = 'Starting guided flash pipeline…\n';
-    try {
-      const fam = identifiedFamily();
-      if (!fam) {
-        await identifyCurrentBin();
-      }
-      const family = identifiedFamily();
-      if (!family) {
-        if (log) log.textContent += 'Identify did not resolve a family. Refusing write.\n';
-        setFlashStep('identify', 'fail');
-        return;
-      }
-      setFlashStep('identify', 'ok');
-      const req = {
-        ecu_family: family,
-        bin_bytes: Array.from(currentBin),
-        do_backup: true,
-        do_kernel: true,
-        do_write: true,
-        user_confirmed_risks: true,
-        accept_unverified_write: !!(document.getElementById('risk-unverified') && document.getElementById('risk-unverified').checked)
-      };
-      const raw = await invokeCmd('guided_flash_pipeline', { request_json: JSON.stringify(req) });
-      const res = parseMaybe(raw) || {};
-      if (log) log.textContent += (typeof raw === 'string' ? raw : JSON.stringify(res, null, 2)) + '\n';
-      applyFlashResult(res);
-    } catch (e) {
-      if (log) log.textContent += 'ERROR: ' + e + '\n';
-    }
-  });
 }
 
-// ---------- Scripts ----------
-async function setupScripts() {
-  document.getElementById('btn-refresh-scripts')?.addEventListener('click', async () => {
-    const list = document.getElementById('custom-scripts-list');
-    try {
-      const raw = await invokeCmd('list_script_helpers');
-      const helpers = parseMaybe(raw) || [];
-      if (!list) return;
-      if (!helpers.length) { list.innerHTML = '<p class="muted">No helpers returned.</p>'; return; }
-      list.innerHTML = helpers.map((h) =>
-        `<div class="script-card"><strong>${h.name || h.id}</strong><br><code>${h.command || ''}</code></div>`
-      ).join('');
-    } catch (e) {
-      if (list) list.innerHTML = '<p class="muted">' + e + '</p>';
-    }
+async function refreshScriptsUi() {
+  const list = document.getElementById('custom-scripts-list');
+  try {
+    const raw = await invokeCmd('list_script_helpers');
+    const helpers = parseMaybe(raw) || [];
+    if (!list) return;
+    if (!helpers.length) { list.innerHTML = '<p class="muted">No helpers returned.</p>'; return; }
+    list.innerHTML = helpers.map((h) =>
+      `<div class="script-card"><strong>${h.name || h.id}</strong><br><code>${h.command || ''}</code></div>`
+    ).join('');
+  } catch (e) {
+    if (list) list.innerHTML = '<p class="muted">' + e + '</p>';
+  }
+}
+
+function setupScripts() {}
+
+function bindAppClicks() {
+  if (document.body.dataset.actionsBound) return;
+  document.body.dataset.actionsBound = '1';
+  const actions = {
+    'btn-refresh-ports': refreshPorts,
+    'btn-do-connect': doConnect,
+    'btn-do-disconnect': doDisconnect,
+    'btn-auto-detect': doAutoDetect,
+    'btn-compute-key': computeSeedKeyUi,
+    'btn-j2534-list': refreshJ2534Devices,
+    'btn-log-start': startLogging,
+    'btn-log-stop': stopLogging,
+    'btn-log-clear': clearLog,
+    'btn-log-export': exportCsv,
+    'btn-log-import': importCsv,
+    'btn-log-apply-ch': applyChannels,
+    'btn-log-apply-tmpl': applyTemplate,
+    'btn-read-dtcs': readDtcs,
+    'btn-read-freeze': readFreezeFrame,
+    'btn-clear-dtcs': clearDtcs,
+    'btn-load-bin': loadBinFile,
+    'btn-load-xdf': loadXdfFile,
+    'btn-load-a2l': loadA2l,
+    'btn-save-patched': savePatchedBin,
+    'btn-identify-bin': identifyCurrentBin,
+    'btn-compare-bins': compareAnotherBin,
+    'btn-map-from-log': mapFromLog,
+    'btn-export-workspace': exportWorkspace,
+    'btn-import-workspace': importWorkspace,
+    'btn-scan-cs': scanCs,
+    'btn-hex-poke': pokeHex,
+    'btn-tbl-scale': () => runMath('scale'),
+    'btn-tbl-offset': () => runMath('add'),
+    'btn-tbl-smooth': () => runMath('smooth'),
+    'btn-tbl-stft': applyStft,
+    'btn-compare-bin': compareBinToEcuUi,
+    'btn-verify-write': verifyAfterWriteUi,
+    'btn-show-risk': showRiskUi,
+    'btn-run-flash': runGuidedFlashUi,
+    'btn-refresh-scripts': refreshScriptsUi
+  };
+  document.body.addEventListener('click', (e) => {
+    const btn = e.target.closest('button[id]');
+    if (!btn || !actions[btn.id]) return;
+    e.preventDefault();
+    Promise.resolve(actions[btn.id]()).catch((err) => {
+      console.error(btn.id, err);
+      setStatus(btn.id + ': ' + (err && err.message ? err.message : err));
+    });
   });
 }
 
 function setupAll() {
   setupNav();
+  bindAppClicks();
   const steps = [setupConnect, setupLive, setupDiagnostics, setupTablesUI, setupFlash, setupScripts];
   steps.forEach((fn) => {
     try { fn(); } catch (e) { console.error(fn.name, e); setStatus(fn.name + ' failed: ' + e); }
@@ -1320,7 +1375,7 @@ function setupAll() {
   pollHealth();
   if (healthTimer) clearInterval(healthTimer);
   healthTimer = setInterval(pollHealth, 2500);
-  console.log('TuneItVerse UI v3.10.1');
+  console.log('TuneItVerse UI v3.10.2');
 }
 
 setupNav();
