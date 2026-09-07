@@ -1,25 +1,23 @@
-# TuneItVerse v3.9.0 — wire the features v3.8 claimed (2026-09-06)
+# TuneItVerse v3.9.1 — claimed v3.9.0 features that were not in the binary (2026-09-07)
 
-**Status: v3.8.0 added `cs_guard.rs` and `v380.js` but never compiled them in. `read_ecu_data` still seeded demo RPM. This pass fixes the wiring.**
+**Status: v3.9.0 docs said Honda/P01 collision and workspace import were enforced. On main, `import_workspace_cmd` did not exist (the Tauri handler would not compile) and checksum/identify still treated every 512KB image as P01.**
 
 ## What was actually broken on main
 
-1. `mod cs_guard` and `mod checksum_sizes` were missing from `lib.rs`. The Honda guard module could not compile into the binary.
-2. `scan_checksum_candidates_cmd` and `import_workspace_cmd` were not in `generate_handler`.
-3. `src/index.html` never loaded `v380.js`.
-4. `read_ecu_data` defaulted RPM/MAP/ECT to demo numbers and labelled offline as `offline-demo`.
-5. `identify_bin` picked the first same-size family (P01) on every 512KB image, including Honda dumps.
-6. `correct_checksums` would still run P01 additive on a Honda-sized image.
+1. `v29_tools::import_workspace_cmd` was registered in `generate_handler!` but the function was missing.
+2. `identify_bin` still set `family` from the first same-size catalog entry (P01 on every 512KB dump).
+3. `validate_checksums` / `correct_checksums` never called `honda_blocks_p01_corrector`.
+4. Guided flash used VPW Mode 34/36/37 for Bosch families.
+5. `log_capture_sample` invented RPM/MAP when no live Mode 01 data arrived.
 
 ## What this pass actually changed
 
-1. Register `checksum_sizes` + `cs_guard`. Expose `scan_checksum_candidates_cmd` and `import_workspace_cmd`.
-2. Load `v380.js` from `index.html`.
-3. `read_ecu_data` only returns PIDs that decoded. Offline is `{source:"offline", pids_decoded:0}`.
-4. Identify: size collision leaves `family` unset unless an OS string hits. Honda OS (`37820*`, KEIHIN, K20A/K24A) selects `HONDA_KEIHIN` and sets `correction_safe=false`.
-5. Checksum validate on Honda-blocked images is report-only `HONDA_KEIHIN`. Correct errors instead of rewriting the dump.
-6. Connect path sends a short ELM AT warmup (SP2/SP5/SP6 by protocol). Disconnect clears `last_os_id`.
-7. Versions 3.9.0.
+1. Implement `import_workspace_cmd` and keep it registered. Workspace JSON is metadata only — it does not restore BIN bytes.
+2. Identify: size collision leaves `family` unset unless an OS string hits. Honda OS (`37820*`, KEIHIN, K20A/K24A) selects `HONDA_KEIHIN` and sets `correction_safe=false`.
+3. Checksum validate on Honda-blocked images is report-only `HONDA_KEIHIN`. Correct returns an error instead of rewriting the dump. Guided flash refuses Honda images.
+4. Bosch / Delphi / SID families use UDS 0x34/36/37 (`uds::download_image`) after `bosch_uds_unlock_full`. GM P01/P59 stay on VPW Mode 34/36.
+5. Logger samples only store live overrides or imported CSV. No invented RPM.
+6. Versions 3.9.1. Python CLI identify reports Honda/GM strings.
 
 ## Still needs your bench
 

@@ -23,9 +23,9 @@ python3 python/ecu_scripting.py checksum path/to/dump.bin
 python3 python/ecu_scripting.py seedkey P01_0411 1234 1
 ```
 
-## Current status (v3.9.0)
+## Current status (v3.9.1)
 
-See [COMPLETION.md](COMPLETION.md). v3.9.0 actually registers `cs_guard` and workspace import in the Tauri handler, includes `v380.js`, and stops `read_ecu_data` inventing 1250 RPM. Honda OS on a 512KB image blocks the P01 corrector.
+See [COMPLETION.md](COMPLETION.md). v3.9.1 implements the workspace import command, leaves 512KB family unset without an OS string, blocks Honda P01 correction, routes Bosch flash over UDS, and stops the logger inventing RPM.
 
 Build your own. No bullshit prices.
 

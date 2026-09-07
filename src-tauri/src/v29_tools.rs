@@ -14,7 +14,7 @@ pub fn map_from_log_cmd() -> Result<String, String> { analyze_log().map(|v| v.to
 pub fn export_workspace_cmd(data: Option<Vec<u8>>) -> Result<String, String> {
     let ident = data.as_deref().map(identify_bin);
     let log = analyze_log().unwrap_or_else(|e| json!({"error": e}));
-    Ok(json!({"tool":"TuneItVerse","version":"3.6.0","families":ecu_database::list_supported_ecu_families(),"identify":ident,"map_from_log":log}).to_string())
+    Ok(json!({"tool":"TuneItVerse","version":"3.9.1","families":ecu_database::list_supported_ecu_families(),"identify":ident,"map_from_log":log}).to_string())
 }
 
 fn sha256_hex(data: &[u8]) -> String {
@@ -78,7 +78,23 @@ pub fn identify_bin(data: &[u8]) -> serde_json::Value {
     let os_hits = match_os_ids(&strings);
     let family_by_os = os_hits.first().and_then(|h| h.get("family").and_then(|v| v.as_str()).map(|s| s.to_string()));
     let family_by_size = size_matches.first().map(|e| e.ecu_family.clone());
-    let family = family_by_os.clone().or(family_by_size.clone());
+    let honda_os = crate::cs_guard::looks_like_honda(data);
+    let gm_p01_os = crate::cs_guard::looks_like_gm_p01(data);
+    let size_collision = size_matches.len() > 1;
+    let family = if honda_os && !gm_p01_os {
+        Some("HONDA_KEIHIN".to_string())
+    } else if let Some(os) = family_by_os.clone() {
+        Some(os)
+    } else if size_collision {
+        None
+    } else {
+        family_by_size.clone()
+    };
+    let correction_safe = match family.as_deref() {
+        Some("P01_0411") | Some("GM_P59") if !honda_os => true,
+        Some("EDC16C41") if size == crate::checksum_sizes::EDC16_FLASH_SIZE => true,
+        _ => false,
+    };
     let display = family.as_ref().and_then(|f| ecu_database::get_ecu_by_family(f).map(|e| e.display_name));
     let families_same_size: Vec<String> = size_matches.iter().map(|e| e.ecu_family.clone()).collect();
     let head_n = size.min(4096);
@@ -96,14 +112,39 @@ pub fn identify_bin(data: &[u8]) -> serde_json::Value {
         "sha256_head_4k": sha256_hex(&data[..head_n]),
         "sha256_tail_4k": sha256_hex(tail),
         "printable_strings": strings.into_iter().take(24).collect::<Vec<_>>(),
-        "notes": if family_by_os.is_some() {
+        "honda_os": honda_os,
+        "gm_p01_os": gm_p01_os,
+        "size_collision": size_collision,
+        "correction_safe": correction_safe,
+        "notes": if honda_os && !gm_p01_os {
+            "Honda OS string. P01 additive correction is blocked."
+        } else if family_by_os.is_some() {
             "OS/part string matched the ECU catalog. Confirm the dump is yours before write."
+        } else if size_collision {
+            "Size collides across catalog families. Confirm OS string before any corrector."
         } else if family_by_size.is_some() {
-            "Size matched at least one family. Confirm OS ID against strings."
+            "Size matched one family. Confirm OS ID against strings."
         } else {
             "Unknown size — add JSON in reference/ecu_database/."
         }
     })
+}
+
+#[tauri::command]
+pub fn import_workspace_cmd(json_text: String) -> Result<String, String> {
+    let v: serde_json::Value = serde_json::from_str(&json_text)
+        .map_err(|e| format!("invalid workspace JSON: {}", e))?;
+    Ok(json!({
+        "accepted": true,
+        "tool": v.get("tool").and_then(|x| x.as_str()).unwrap_or(""),
+        "version": v.get("version").and_then(|x| x.as_str()).unwrap_or("unknown"),
+        "has_identify": v.get("identify").is_some(),
+        "has_map_from_log": v.get("map_from_log").is_some(),
+        "identify": v.get("identify"),
+        "map_from_log": v.get("map_from_log"),
+        "families": v.get("families"),
+        "note": "Workspace metadata imported. BIN bytes are not restored from JSON — load the dump separately."
+    }).to_string())
 }
 
 #[tauri::command]
@@ -204,7 +245,27 @@ fn analyze_log() -> Result<serde_json::Value, String> {
 mod tests {
     use super::*;
     #[test] fn identify_unknown_size() { let v = identify_bin(&[0u8;64]); assert_eq!(v["bin_size_bytes"], 64); assert!(v["sha256"].as_str().unwrap().len() == 64); }
-    #[test] fn identify_p01_size() { let v = identify_bin(&vec![0u8;524288]); assert_eq!(v["family_by_size"], "P01_0411"); }
+    #[test] fn identify_p01_size() {
+        let v = identify_bin(&vec![0u8;524288]);
+        assert_eq!(v["family_by_size"], "P01_0411");
+        assert!(v["family"].is_null(), "512KB collides with Honda — family stays unset without an OS string");
+        assert_eq!(v["size_collision"], true);
+        assert_eq!(v["correction_safe"], false);
+    }
+    #[test] fn identify_honda_os() {
+        let mut img = vec![0u8; 524288];
+        img[0x40..0x48].copy_from_slice(b"37820-PR");
+        let v = identify_bin(&img);
+        assert_eq!(v["family"], "HONDA_KEIHIN");
+        assert_eq!(v["honda_os"], true);
+        assert_eq!(v["correction_safe"], false);
+    }
+    #[test] fn import_workspace_json() {
+        let raw = import_workspace_cmd(r#"{\"tool\":\"TuneItVerse\",\"version\":\"3.9.1\",\"identify\":{\"family\":\"P01_0411\"}}"#.into()).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&raw).unwrap();
+        assert_eq!(v["accepted"], true);
+        assert_eq!(v["has_identify"], true);
+    }
     #[test] fn identify_os_string() {
         let mut img = vec![0u8; 128];
         img[10..18].copy_from_slice(b"12225074");
