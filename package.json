@@ -7,8 +7,9 @@
   "scripts": {
     "tauri": "tauri",
     "dev": "tauri dev",
-    "build": "tauri build",
-    "build:innosetup": "tauri build --target x86_64-pc-windows-msvc && iscc installer\\TuneItVerse.iss",
+    "build": "tauri build && node scripts/copy-installer.js",
+    "copy:exe": "node scripts/copy-installer.js",
+    "build:innosetup": "tauri build --target x86_64-pc-windows-msvc && iscc installer\\TuneItVerse.iss && node scripts/copy-installer.js",
     "build:win-exe": "tauri build --target x86_64-pc-windows-msvc && node scripts/copy-installer.js",
     "bump-version": "node scripts/bump-version.js",
     "check": "tauri info",

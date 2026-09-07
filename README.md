@@ -13,8 +13,10 @@ TuneItVerse is a desktop ECU tuning and diagnostics application: a Tauri (Rust) 
 ```bash
 npm install
 npm run dev      # Tauri dev
-npm run build    # release desktop binary
+npm run build    # release desktop binary + copy TuneItVerse.exe to this folder
 ```
+
+After every release build, `TuneItVerse.exe` is copied to the repository root (this folder). Double-click that file to run the current version.
 
 Bench helper for personal dumps:
 ```bash
