@@ -25,9 +25,9 @@ python3 python/ecu_scripting.py checksum path/to/dump.bin
 python3 python/ecu_scripting.py seedkey P01_0411 1234 1
 ```
 
-## Current status (v3.10.2)
+## Current status (v3.11.0)
 
-See [COMPLETION.md](COMPLETION.md). Offline: Load BIN, Load XDF/A2L, edit maps, Save BIN — native Windows dialogs, no ECU. Live/DTC/flash need an adapter. Sidebar switches views.
+See [COMPLETION.md](COMPLETION.md). Offline: Load BIN, Load XDF/A2L, edit maps, Save BIN — native Windows dialogs, no ECU. Live Mode 01 / VIN / DTCs speak ELM ASCII on CAN/UDS adapters and raw VPW only when you pick VPW. J2534 shows as connected. Sidebar switches views.
 
 Build your own. No bullshit prices.
 

@@ -1,8 +1,8 @@
 {
   "name": "tuneitverse",
   "private": true,
-  "version": "3.10.2",
-  "description": "TuneItVerse - open ECU tuning platform (Tauri + Rust). v3.10.2: native file dialogs, offline BIN/XDF edit and save.",
+  "version": "3.11.0",
+  "description": "TuneItVerse - open ECU tuning platform (Tauri + Rust). v3.11.0: ELM/CAN Mode 01 transport, J2534 connection health, ECU catalog.",
   "type": "module",
   "scripts": {
     "tauri": "tauri",
