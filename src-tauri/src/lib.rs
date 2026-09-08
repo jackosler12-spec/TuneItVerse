@@ -253,3 +253,184 @@ fn read_ecu_data() -> Result<String, String> {
     with_port(|port| Ok(serde_json::Value::Object(crate::transport::decode_live_map(port)).to_string()))
         .or_else(|_| Ok(json!({"source":"offline","pids_decoded":0,"honest":true,"note":"Offline — no invented live PIDs."}).to_string()))
 }
+
+#[tauri::command] fn get_logging_templates() -> Result<String, String> { Ok(serde_json::to_string(&logging::list_templates()).unwrap_or_else(|_| "[]".into())) }
+#[tauri::command] fn log_get_status() -> Result<String, String> { Ok(serde_json::to_string(&logging::get_status()).unwrap_or_else(|_| "{}".into())) }
+#[tauri::command] fn log_start(rate_hz: Option<f64>, session_name: Option<String>) -> Result<String, String> { Ok(serde_json::to_string(&logging::start_session(rate_hz, session_name)?).unwrap_or_else(|_| "{}".into())) }
+#[tauri::command] fn log_stop() -> Result<String, String> { Ok(serde_json::to_string(&logging::stop_session()?).unwrap_or_else(|_| "{}".into())) }
+#[tauri::command] fn log_set_channels(enabled_ids: Vec<String>) -> Result<String, String> { Ok(serde_json::to_string(&logging::set_channels(enabled_ids)?).unwrap_or_else(|_| "{}".into())) }
+#[tauri::command] fn log_apply_template(template_id: String) -> Result<String, String> { Ok(serde_json::to_string(&logging::apply_template(&template_id)?).unwrap_or_else(|_| "{}".into())) }
+#[tauri::command]
+fn log_capture_sample() -> Result<String, String> {
+    use crate::pid_decode::*;
+    let live_overrides = with_port(|port| {
+        let mut map: HashMap<String, f64> = HashMap::new();
+        if let Some(d)=pull_mode01(port,0x0C){ if let Some(v)=decode_engine_rpm(&d){ map.insert("rpm".into(), v as f64);} }
+        if let Some(d)=pull_mode01(port,0x0B){ if let Some(v)=decode_map(&d){ map.insert("map".into(), v as f64);} }
+        if let Some(d)=pull_mode01(port,0x05){ if let Some(v)=decode_ect(&d){ map.insert("ect".into(), v as f64);} }
+        if let Some(d)=pull_mode01(port,0x11){ if let Some(v)=decode_throttle_pos(&d){ map.insert("tps".into(), v as f64);} }
+        if let Some(d)=pull_mode01(port,0x0F){ if let Some(v)=decode_iat(&d){ map.insert("iat".into(), v as f64);} }
+        if let Some(d)=pull_mode01(port,0x0E){ if let Some(v)=decode_timing_advance(&d){ map.insert("spark".into(), v as f64);} }
+        if let Some(d)=pull_mode01(port,0x06){ if let Some(v)=decode_stft_bank1(&d){ map.insert("stft".into(), v as f64);} }
+        if let Some(d)=pull_mode01(port,0x07){ if let Some(v)=decode_ltft_bank1(&d){ map.insert("ltft".into(), v as f64);} }
+        if let Some(d)=pull_mode01(port,0x10){ if let Some(v)=decode_maf_obd(&d){ map.insert("maf".into(), v as f64);} }
+        if let Some(d)=pull_mode01(port,0x0D){ if let Some(v)=decode_vss(&d){ map.insert("vss".into(), v as f64);} }
+        if let Some(d)=pull_mode01(port,0x04){ if let Some(v)=decode_engine_load(&d){ map.insert("load".into(), v as f64);} }
+        if let Some(v)=crate::flash::read_battery_voltage(port){ map.insert("batt".into(), v as f64); }
+        if let Some(d)=pull_mode01(port,0x14){ if let Some(v)=decode_o2_b1s1_obd(&d){ map.insert("o2b1s1".into(), v as f64);} }
+        if let Some(d)=pull_mode01(port,0x15){ if let Some(v)=decode_o2_b1s2_obd(&d){ map.insert("o2b1s2".into(), v as f64);} }
+        if let Some(d)=pull_mode01(port,0x33){ if let Some(&b)=d.first(){ map.insert("baro".into(), b as f64);} }
+        if let Some(d)=pull_mode01(port,0x03){ if let Some(v)=decode_fuel_system_status(&d){ map.insert("fuel_status".into(), v as f64);} }
+        if let Some(d)=pull_mode01(port,0x2F){ if let Some(v)=decode_fuel_level(&d){ map.insert("fuel_level".into(), v as f64);} }
+        Ok(map)
+    }).ok();
+    Ok(serde_json::to_string(&logging::capture_sample(live_overrides)?).unwrap_or_else(|_| "{}".into()))
+}
+#[tauri::command] fn log_get_samples(limit: Option<usize>) -> Result<String, String> { Ok(serde_json::to_string(&logging::get_samples(limit)).unwrap_or_else(|_| "[]".into())) }
+#[tauri::command] fn log_clear() -> Result<String, String> { Ok(serde_json::to_string(&logging::clear_samples()?).unwrap_or_else(|_| "{}".into())) }
+#[tauri::command] fn log_export_csv() -> Result<String, String> { logging::export_csv() }
+#[tauri::command] fn log_import_csv(csv: String) -> Result<String, String> { Ok(serde_json::to_string(&logging::import_csv(&csv)?).unwrap_or_else(|_| "{}".into())) }
+
+#[tauri::command]
+fn compute_seed_key(seed_hex: String, family: Option<String>, level: Option<String>) -> Result<String, String> {
+    let cleaned: String = seed_hex.chars().filter(|c| c.is_ascii_hexdigit()).collect();
+    if cleaned.is_empty() || cleaned.len() % 2 != 0 { return Err("seed_hex must be an even-length hex string".into()); }
+    let mut seed = Vec::new();
+    let bytes = cleaned.as_bytes();
+    let mut i = 0;
+    while i + 1 < bytes.len() {
+        let pair = std::str::from_utf8(&bytes[i..i+2]).map_err(|e| e.to_string())?;
+        seed.push(u8::from_str_radix(pair, 16).map_err(|e| format!("bad hex: {}", e))?);
+        i += 2;
+    }
+    let fam = family.unwrap_or_else(|| "P01_0411".into());
+    let fam_up = fam.to_ascii_uppercase();
+    let lvl = level.unwrap_or_else(|| "1".into());
+    if fam_up.contains("P01") || fam_up.contains("P59") || fam_up.contains("GM") {
+        if seed.len() < 2 { return Err("P01/P59 seed must be at least 2 bytes".into()); }
+        let (kh, kl) = if lvl == "2" { security::p01_key_l2(seed[0], seed[1]) } else { security::p01_key_l1(seed[0], seed[1]) };
+        let key = vec![kh, kl];
+        return Ok(json!({"family":fam,"level":lvl,"algo":"p01_lfsr16","verified":true,"note":"GM P01/P59 LFSR.","seed_hex":cleaned.to_ascii_uppercase(),"key_hex":key.iter().map(|b| format!("{:02X}", b)).collect::<String>(),"key_len":key.len()}).to_string());
+    }
+    let r = security::bosch_key_result(&seed, &fam);
+    Ok(json!({"family":fam,"level":lvl,"algo":r.algo,"verified":r.verified,"note":r.note,"seed_hex":cleaned.to_ascii_uppercase(),"key_hex":r.key.iter().map(|b| format!("{:02X}", b)).collect::<String>(),"key_len":r.key.len()}).to_string())
+}
+
+#[tauri::command] fn read_dtcs_cmd() -> Result<String, String> {
+    with_port(|port| dtc::read_dtcs(port).map(|r| serde_json::to_string(&r).unwrap_or_else(|_| "{}".into())))
+        .or_else(|_| Ok(json!({"stored":[],"pending":[],"permanent":[],"total":0}).to_string()))
+}
+#[tauri::command] fn read_freeze_frame_cmd() -> Result<String, String> {
+    with_port(|port| dtc::read_freeze_frame(port).map(|r| serde_json::to_string(&r).unwrap_or_else(|_| "{}".into()))).or_else(|_| Ok("{}".into()))
+}
+#[tauri::command] fn clear_dtcs_cmd() -> Result<String, String> {
+    with_port(|port| dtc::clear_dtcs(port, 0).map(|r| serde_json::to_string(&r).unwrap_or_else(|_| "{\"success\":true}".into())))
+        .or_else(|_| Ok(json!({"success":false,"message":"DTC clear refused offline. Connect an adapter."}).to_string()))
+}
+#[tauri::command] fn validate_bin_checksums_summary_cmd(data: Vec<u8>) -> Result<String, String> { checksum::validate_bin_checksums_summary(&data) }
+#[tauri::command] fn validate_checksums_cmd(data: Vec<u8>) -> Result<String, String> { Ok(serde_json::to_string_pretty(&checksum::validate_checksums(&data)?).unwrap_or_else(|_| "{}".into())) }
+#[tauri::command] fn correct_bin_checksums(data: Vec<u8>) -> Result<Vec<u8>, String> { Ok(checksum::correct_checksums(&data)?.data) }
+#[tauri::command] fn auto_load_tables_for_bin(bin_bytes: Vec<u8>) -> Result<String, String> { Ok(serde_json::to_string(&ecu_database::get_tables_for_bin_size(bin_bytes.len())).unwrap_or_else(|_| "[]".into())) }
+#[tauri::command] fn get_tuning_advice(table_id: String, sample_value: f64, ecu_family: String) -> Result<String, String> {
+    let log = crate::v29_tools::map_from_log_cmd().ok();
+    Ok(format!(
+        "Advice for {} on {}: sample {:.1}. Use Map-from-log + STFT preview, then patch the BIN and correct checksums. Never flash without a verified backup.{}",
+        table_id, ecu_family, sample_value, log.map(|s| format!(" Log hint: {}", s)).unwrap_or_default()
+    ))
+}
+#[tauri::command]
+fn guided_flash_pipeline(request_json: String) -> Result<String, String> {
+    let request: flash::GuidedFlashRequest = serde_json::from_str(&request_json).map_err(|e| format!("Invalid GuidedFlashRequest: {}", e))?;
+    with_port(|port| {
+        let result = flash::orchestrate_guided_flash(port, request, |_| {})?;
+        Ok(serde_json::to_string(&result).unwrap_or_else(|_| "{}".into()))
+    }).or_else(|e| Ok(json!({"success":false,"steps_completed":[],"logs":[format!("Fail-closed: not connected ({})", e)],"verified_live":false,"error":format!("Not connected: {}", e)}).to_string()))
+}
+#[tauri::command]
+fn list_script_helpers() -> Result<String, String> {
+    Ok(json!([{"id":"identify","name":"Identify dump","command":"python3 python/ecu_scripting.py identify path/to/dump.bin"},{"id":"checksum","name":"Checksum report","command":"python3 python/ecu_scripting.py checksum path/to/dump.bin"},{"id":"seedkey","name":"Seed/key bench","command":"python3 python/ecu_scripting.py seedkey P01_0411 1234 1"}]).to_string())
+}
+fn family_from_bin_or_state(file_bytes: &[u8]) -> Result<String, String> {
+    match crate::v29_tools::resolved_family(file_bytes) {
+        Ok(f) => {
+            if let Ok(mut guard) = STATE.lock() {
+                guard.last_family = Some(f.clone());
+            }
+            Ok(f)
+        }
+        Err(ident_err) => {
+            let guard = STATE.lock().map_err(|e| e.to_string())?;
+            if let Some(f) = guard.last_family.clone() { return Ok(f); }
+            if let Some(os) = guard.last_os_id.clone() {
+                if let Some(e) = crate::ecu_database::get_ecu_by_os_id(&os) {
+                    return Ok(e.ecu_family);
+                }
+            }
+            Err(format!("Family unresolved: {}", ident_err))
+        }
+    }
+}
+
+#[tauri::command]
+fn compare_bin_to_ecu(file_bytes: Vec<u8>) -> Result<String, String> {
+    let fam = family_from_bin_or_state(&file_bytes)?;
+    with_port(|port| {
+        let mut logs = Vec::new();
+        let windows = crate::live_verify::probe_live_windows(port, &fam, file_bytes.len(), &mut logs);
+        match crate::live_verify::compare_windows(&file_bytes, &windows, &mut logs) {
+            Ok((crc, matched)) => Ok(json!({"family":fam,"windows":windows.len(),"matched":matched,"crc":format!("0x{:08X}", crc),"logs":logs}).to_string()),
+            Err(e) => Ok(json!({"family":fam,"windows":windows.len(),"matched":false,"error":e,"logs":logs}).to_string()),
+        }
+    }).or_else(|e| Ok(json!({"success":false,"error":format!("Not connected: {}", e)}).to_string()))
+}
+#[tauri::command]
+fn verify_after_write(expected_bytes: Option<Vec<u8>>) -> Result<String, String> {
+    let data = expected_bytes.unwrap_or_default();
+    if data.is_empty() { return Err("No expected image provided".into()); }
+    let fam = family_from_bin_or_state(&data)?;
+    with_port(|port| {
+        match flash::verify_after_write(port, &fam, &data, &mut vec![]) {
+            Ok((crc, matched)) => Ok(format!("Live CRC 0x{:08X} matched={} family={}", crc, matched, fam)),
+            Err(e) => Ok(format!("Verify note: {}", e)),
+        }
+    }).or_else(|_| Ok("Not connected".into()))
+}
+#[tauri::command] fn unlock_level1() -> Result<String, String> { with_port(|port| Ok(serde_json::to_string(&security::unlock_level1(port)?).unwrap_or_else(|_| "{}".into()))) }
+#[tauri::command] fn unlock_level2() -> Result<String, String> { with_port(|port| Ok(serde_json::to_string(&security::unlock_level2(port)?).unwrap_or_else(|_| "{}".into()))) }
+#[tauri::command]
+fn bosch_uds_unlock(family: Option<String>, level: Option<String>) -> Result<String, String> {
+    let fam = family.unwrap_or_else(|| "EDC16C41".into());
+    let lvl = security::BoschSecurityLevel::from_str(&level.unwrap_or_else(|| "programming".into()));
+    with_port(|port| security::bosch_uds_unlock_full(port, &fam, lvl))
+        .or_else(|e| Ok(json!({"success":false,"message":"Bosch UDS unlock refused offline. Connect an adapter.","family":fam,"error":e}).to_string()))
+}
+
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    tauri::Builder::default()
+        .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_dialog::init())
+        .invoke_handler(tauri::generate_handler![
+            list_serial_ports, get_connection_health, connect_ecu, disconnect_ecu, auto_detect_protocol,
+            list_supported_protocols, list_supported_ecus, list_ecu_catalog, get_ecu_info, read_properties, read_ecu_data,
+            get_logging_templates, log_get_status, log_start, log_stop, log_set_channels, log_apply_template,
+            log_capture_sample, log_get_samples, log_clear, log_export_csv, log_import_csv,
+            compute_seed_key, read_dtcs_cmd, read_freeze_frame_cmd, clear_dtcs_cmd,
+            validate_bin_checksums_summary_cmd, validate_checksums_cmd, correct_bin_checksums,
+            xdf::parse_xdf_definitions, xdf::extract_table_from_bin, xdf::patch_table_into_bin,
+            a2l::parse_a2l_definitions, a2l::parse_a2l_summary,
+            table_tools::table_math_cmd, table_tools::apply_stft_preview_cmd,
+            auto_load_tables_for_bin, get_tuning_advice, guided_flash_pipeline, compare_bin_to_ecu, verify_after_write,
+            unlock_level1, unlock_level2, bosch_uds_unlock, list_script_helpers,
+            v29_tools::identify_bin_cmd, v29_tools::compare_bins_cmd, v29_tools::map_from_log_cmd, v29_tools::export_workspace_cmd, v29_tools::import_workspace_cmd, v29_tools::patch_bin_bytes_cmd,
+            file_dialog::dialog_open_file, file_dialog::dialog_save_bytes, file_dialog::dialog_save_text,
+            cs_guard::scan_checksum_candidates_cmd,
+            j2534_list::j2534_list_devices, j2534::j2534_connect, j2534::j2534_connect_vpw, j2534::j2534_disconnect,
+            j2534::j2534_write, j2534::j2534_read, j2534::j2534_set_data_rate,
+            j2534::j2534_set_vpw_high_speed, j2534::j2534_set_vpw_normal_speed,
+            j2534::j2534_read_vbatt, j2534::j2534_set_iso15765_timing, j2534::j2534_clear_buffers,
+        ])
+        .run(tauri::generate_context!())
+        .expect("error while running TuneItVerse");
+}
