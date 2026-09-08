@@ -1,4 +1,4 @@
-// TuneItVerse lib.rs — Tauri entry + command surface (v3.10.2)
+// TuneItVerse lib.rs — Tauri entry + command surface (v3.11.0)
 #![allow(unused_imports, dead_code, non_snake_case)]
 
 mod a2l;
@@ -23,6 +23,7 @@ mod uds;
 mod vpw;
 mod xdf;
 mod v29_tools;
+mod transport;
 
 use serialport::SerialPort;
 use std::sync::Mutex;
@@ -30,14 +31,14 @@ use std::time::Duration;
 use serde_json::json;
 use std::collections::HashMap;
 
-struct AppState {
+pub(crate) struct AppState {
     port: Option<Box<dyn SerialPort + Send>>,
     protocol: String,
     last_os_id: Option<String>,
     last_family: Option<String>,
 }
 
-static STATE: Mutex<AppState> = Mutex::new(AppState { port: None, protocol: String::new(), last_os_id: None, last_family: None });
+pub(crate) static STATE: Mutex<AppState> = Mutex::new(AppState { port: None, protocol: String::new(), last_os_id: None, last_family: None });
 
 fn with_port<F, R>(f: F) -> Result<R, String>
 where F: FnOnce(&mut Box<dyn SerialPort + Send>) -> Result<R, String>,
@@ -77,6 +78,9 @@ fn list_serial_ports() -> Result<Vec<String>, String> {
 }
 #[tauri::command]
 fn get_connection_health() -> Result<String, String> {
+    if crate::j2534::is_device_open() {
+        return Ok("Connected (j2534)".into());
+    }
     let guard = STATE.lock().map_err(|e| e.to_string())?;
     if guard.port.is_some() { Ok(format!("Connected ({})", guard.protocol)) } else { Ok("Disconnected".into()) }
 }
@@ -103,6 +107,14 @@ fn connect_ecu(port_name: String, baud: u32, protocol: String) -> Result<String,
     let mut port = serialport::new(&port_name, baud).timeout(Duration::from_millis(500)).open()
         .map_err(|e| format!("Failed to open {}: {}", port_name, e))?;
     elm_warmup(port.as_mut(), &protocol);
+    let proto_l = protocol.to_ascii_lowercase();
+    if proto_l.contains("can") || proto_l.contains("uds") {
+        let _ = crate::can::elm_init_can_500k(&mut port);
+    } else if proto_l.contains("consult") {
+        let _ = crate::consult::consult_init(&mut port);
+    } else if proto_l.contains("kwp") {
+        let _ = crate::kwp::kwp_fast_init(&mut port);
+    }
     let mut guard = STATE.lock().map_err(|e| e.to_string())?;
     guard.port = Some(port);
     guard.protocol = protocol.clone();
@@ -110,6 +122,7 @@ fn connect_ecu(port_name: String, baud: u32, protocol: String) -> Result<String,
 }
 #[tauri::command]
 fn disconnect_ecu() -> Result<String, String> {
+    let _ = crate::j2534::j2534_disconnect();
     let mut guard = STATE.lock().map_err(|e| e.to_string())?;
     guard.port = None; guard.protocol = String::new(); guard.last_os_id = None; guard.last_family = None;
     Ok("Disconnected".into())
@@ -170,6 +183,23 @@ fn list_supported_protocols() -> Result<Vec<String>, String> {
 #[tauri::command]
 fn list_supported_ecus() -> Result<Vec<String>, String> { Ok(ecu_database::list_supported_ecu_families()) }
 #[tauri::command]
+fn list_ecu_catalog() -> Result<String, String> {
+    let rows: Vec<serde_json::Value> = ecu_database::load_ecu_database()
+        .into_iter()
+        .map(|e| json!({
+            "ecu_family": e.ecu_family,
+            "display_name": e.display_name,
+            "protocol": e.protocol,
+            "bin_size_bytes": e.bin_size_bytes,
+            "hardware": e.hardware,
+            "vehicles": e.vehicles,
+            "checksum": e.checksum.r#type,
+            "security": e.security_access.r#type,
+        }))
+        .collect();
+    Ok(json!(rows).to_string())
+}
+#[tauri::command]
 fn get_ecu_info(family_or_os: String) -> Result<String, String> {
     if let Some(e) = ecu_database::get_ecu_by_os_id(&family_or_os).or_else(|| ecu_database::get_ecu_by_family(&family_or_os)) {
         Ok(serde_json::to_string_pretty(&e).unwrap_or_else(|_| "{}".into()))
@@ -179,28 +209,20 @@ fn get_ecu_info(family_or_os: String) -> Result<String, String> {
 }
 
 fn pull_mode01(port: &mut Box<dyn SerialPort + Send>, pid: u8) -> Option<Vec<u8>> {
-    use crate::vpw::{build_obd_request, request_response, parse_mode01_response};
-    request_response(port, &build_obd_request(pid)).ok().and_then(|resp| parse_mode01_response(&resp, pid))
+    crate::transport::pull_mode01(port, pid)
 }
 
 #[tauri::command]
 fn read_properties() -> Result<String, String> {
     let protocol = STATE.lock().map(|g| g.protocol.clone()).unwrap_or_default();
     let inner = with_port(|port| {
-        use crate::vpw::{build_mode09_request, parse_mode09_response, ascii_from_obd_payload, request_response};
         let mut vin = "UNREAD".to_string();
         let mut calid = "UNREAD".to_string();
-        if let Ok(resp) = request_response(port, &build_mode09_request(0x02)) {
-            if let Some(data) = parse_mode09_response(&resp, 0x02) {
-                let parsed = ascii_from_obd_payload(&data);
-                if parsed.len() >= 8 { vin = parsed; }
-            }
+        if let Some(parsed) = crate::transport::pull_mode09(port, 0x02) {
+            if parsed.len() >= 8 { vin = parsed; }
         }
-        if let Ok(resp) = request_response(port, &build_mode09_request(0x04)) {
-            if let Some(data) = parse_mode09_response(&resp, 0x04) {
-                let parsed = ascii_from_obd_payload(&data);
-                if !parsed.is_empty() { calid = parsed; }
-            }
+        if let Some(parsed) = crate::transport::pull_mode09(port, 0x04) {
+            if !parsed.is_empty() { calid = parsed; }
         }
         let os_id = if calid != "UNREAD" { calid.clone() } else { "UNREAD".to_string() };
         let ecu = crate::ecu_database::get_ecu_by_os_id(&os_id);
@@ -228,38 +250,8 @@ fn read_properties() -> Result<String, String> {
 
 #[tauri::command]
 fn read_ecu_data() -> Result<String, String> {
-    with_port(|port| {
-        use crate::pid_decode::*;
-        let mut obj = serde_json::Map::new();
-        let mut decoded = 0u32;
-        let mut put = |k: &str, v: Option<f32>| {
-            if let Some(val) = v {
-                obj.insert(k.to_string(), json!(val));
-                decoded += 1;
-            }
-        };
-        put("rpm", pull_mode01(port,0x0C).and_then(|d| decode_engine_rpm(&d)));
-        put("map", pull_mode01(port,0x0B).and_then(|d| decode_map(&d)));
-        put("ect", pull_mode01(port,0x05).and_then(|d| decode_ect(&d)));
-        put("tps", pull_mode01(port,0x11).and_then(|d| decode_throttle_pos(&d)));
-        put("iat", pull_mode01(port,0x0F).and_then(|d| decode_iat(&d)));
-        put("spark", pull_mode01(port,0x0E).and_then(|d| decode_timing_advance(&d)));
-        put("batt", crate::flash::read_battery_voltage(port));
-        put("stft", pull_mode01(port,0x06).and_then(|d| decode_stft_bank1(&d)));
-        put("ltft", pull_mode01(port,0x07).and_then(|d| decode_ltft_bank1(&d)));
-        put("maf", pull_mode01(port,0x10).and_then(|d| decode_maf_obd(&d)));
-        put("vss", pull_mode01(port,0x0D).and_then(|d| decode_vss(&d)));
-        put("load", pull_mode01(port,0x04).and_then(|d| decode_engine_load(&d)));
-        put("o2b1s1", pull_mode01(port,0x14).and_then(|d| decode_o2_b1s1_obd(&d)));
-        put("o2b1s2", pull_mode01(port,0x15).and_then(|d| decode_o2_b1s2_obd(&d)));
-        put("baro", pull_mode01(port,0x33).and_then(|d| d.first().map(|&b| b as f32)));
-        put("fuel_status", pull_mode01(port,0x03).and_then(|d| decode_fuel_system_status(&d)));
-        put("fuel_level", pull_mode01(port,0x2F).and_then(|d| decode_fuel_level(&d)));
-        obj.insert("pids_decoded".into(), json!(decoded));
-        obj.insert("source".into(), json!(if decoded > 0 { "live-Mode01" } else { "live-empty" }));
-        obj.insert("honest".into(), json!(true));
-        Ok(serde_json::Value::Object(obj).to_string())
-    }).or_else(|_| Ok(json!({"source":"offline","pids_decoded":0,"honest":true,"note":"Offline — no invented live PIDs."}).to_string()))
+    with_port(|port| Ok(serde_json::Value::Object(crate::transport::decode_live_map(port)).to_string()))
+        .or_else(|_| Ok(json!({"source":"offline","pids_decoded":0,"honest":true,"note":"Offline — no invented live PIDs."}).to_string()))
 }
 
 #[tauri::command] fn get_logging_templates() -> Result<String, String> { Ok(serde_json::to_string(&logging::list_templates()).unwrap_or_else(|_| "[]".into())) }
@@ -421,7 +413,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             list_serial_ports, get_connection_health, connect_ecu, disconnect_ecu, auto_detect_protocol,
-            list_supported_protocols, list_supported_ecus, get_ecu_info, read_properties, read_ecu_data,
+            list_supported_protocols, list_supported_ecus, list_ecu_catalog, get_ecu_info, read_properties, read_ecu_data,
             get_logging_templates, log_get_status, log_start, log_stop, log_set_channels, log_apply_template,
             log_capture_sample, log_get_samples, log_clear, log_export_csv, log_import_csv,
             compute_seed_key, read_dtcs_cmd, read_freeze_frame_cmd, clear_dtcs_cmd,
@@ -434,7 +426,7 @@ pub fn run() {
             v29_tools::identify_bin_cmd, v29_tools::compare_bins_cmd, v29_tools::map_from_log_cmd, v29_tools::export_workspace_cmd, v29_tools::import_workspace_cmd, v29_tools::patch_bin_bytes_cmd,
             file_dialog::dialog_open_file, file_dialog::dialog_save_bytes, file_dialog::dialog_save_text,
             cs_guard::scan_checksum_candidates_cmd,
-            j2534_list::j2534_list_devices, j2534::j2534_connect, j2534::j2534_connect_vpw,
+            j2534_list::j2534_list_devices, j2534::j2534_connect, j2534::j2534_connect_vpw, j2534::j2534_disconnect,
             j2534::j2534_write, j2534::j2534_read, j2534::j2534_set_data_rate,
             j2534::j2534_set_vpw_high_speed, j2534::j2534_set_vpw_normal_speed,
             j2534::j2534_read_vbatt, j2534::j2534_set_iso15765_timing, j2534::j2534_clear_buffers,

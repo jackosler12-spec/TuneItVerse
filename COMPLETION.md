@@ -1,47 +1,17 @@
-# TuneItVerse v3.10.2 — offline BIN/XDF, native file dialogs (2026-09-07)
+# TuneItVerse v3.11.0 — protocol-aware live I/O (2026-09-08)
 
-Load BIN / XDF / Save used a detached HTML file input and `<a download>`. In the Tauri WebView those clicks do nothing.
-
-**v3.10.2:** Rust `dialog_open_file` / `dialog_save_bytes` (Windows file picker). No ECU required to load a BIN, load XDF/A2L, edit maps, patch, correct checksums, and save a new BIN. Live log / DTC / flash still need an adapter and say so. All toolbar buttons are bound through one document click map.
-
----
-
-# TuneItVerse v3.10.1 — sidebar buttons actually switch views (2026-09-07)
-
-v3.10.0 used `<a href="#">` for sidebar nav. In the Tauri webview that navigates/reloads, so clicks looked dead. Connect ECU only changed the view; it did not list ports or disconnect.
-
-**v3.10.1:** sidebar items are `<button type="button">`. Clicks are delegated on `#sidebar`. Views hide with `hidden` + `display: none !important`. Connect ECU lists serial ports (disconnected) or calls `disconnect_ecu` (connected). Invoke args are sent in both snake_case and camelCase.
-
----
-
-# TuneItVerse v3.10.0 — honest live data, fail-closed flash family, visual UI (2026-09-07)
-
-**Status: v3.9.1 docs said the logger no longer invented RPM. On that tree, `logging.rs::capture_sample` still filled every enabled channel from `simulate_values` before overlaying live PIDs. Missing Mode 01 data therefore stayed fake.**
-
-## What was actually broken
-
-1. Logger stored simulated RPM/MAP/ECT/… whenever a PID did not decode.
-2. Diesel template enabled `rail` / `iq` / `vgt` with PID `0x0000` (never decoded).
-3. Guided flash and BIN-to-ECU compare defaulted unknown images to `P01_0411`.
-4. EDC17 / MED17 / generic Bosch starters were sent as unlock keys.
-5. Auto-detect labelled any adapter noise as VPW and kept the port “connected”.
-6. Frontend mocks invented VIN, RPM, COM ports, and a successful flash when Tauri was missing.
-7. Demo Tables fabricated an 8×8 map and a 512 KB zero image.
-8. Table extract failure filled cells with `50`. Hex dump started at hardcoded `0x20000`.
-9. Scripts tab called `get_logging_templates` instead of `list_script_helpers`.
-10. J2534 radio still opened serial `connect_ecu`.
-11. Eight overlay scripts (`v29.js`–`v380.js`) wrapped `invokeCmd`. HTML did not use the sidebar/KPI layout already in `styles.css`. Version strings disagreed (3.9.0 vs 3.9.1).
+v3.10.2 made offline BIN/XDF work. Live data on a cheap ELM327 still looked dead because `read_ecu_data` / Mode 09 / DTC always sent raw J1850 VPW frames. J2534 connect never flipped connection health, so the UI stayed Disconnected after a successful PassThru open.
 
 ## What this pass actually changed
 
-1. `capture_sample` stores only live overrides (or imported CSV). `simulate_values` is gone.
-2. Diesel / boost templates use Mode 01 PIDs only.
-3. `resolved_family` refuses Honda-blocked and size-collision images. Flash/compare never default to P01.
-4. `bosch_key_result` marks EDC16C41 4-byte as verified. Unverified families are labelled on the bench and refused on unlock/flash.
-5. Auto-detect requires an ELM identity + Mode 01, or a VPW Mode 01 header. Silence is an error; the port is not kept connected.
-6. Browser-without-Tauri throws. No mock COM list, VIN, RPM, or flash success.
-7. Overlay JS folded into `src/main.js`. Sidebar + KPI + pipeline UI uses the existing design tokens. Connection pulse, view fade, map heat colors, and flash step chips are driven by real state.
-8. Versions 3.10.0 across package, crate, Tauri window, HTML, workspace export.
+1. New `transport.rs`: ELM ASCII Mode 01 / Mode 09 (`010C`, `0902`) when the session is CAN / UDS / ELM / auto. Raw VPW frames only when the protocol is VPW/J1850.
+2. `get_connection_health` reports `Connected (j2534)` when a PassThru device is open. `j2534_connect` stamps `STATE.protocol`. `disconnect_ecu` releases the J2534 handle.
+3. Connect warmup calls `elm_init_can_500k`, `consult_init`, or `kwp_fast_init` based on the radio the user picked.
+4. DTC read uses ELM services 03 / 07 / 0A on ASCII transports instead of VPW headers.
+5. Battery voltage prefers J2534 `READ_VBATT`, then ELM PID 0x42, then VPW.
+6. UDS download re-checks J2534 voltage every 4 KB when a PassThru device is open.
+7. Dashboard lists the embedded ECU catalog (`list_ecu_catalog`).
+8. Versions 3.11.0 across package, crate, Tauri window, HTML, workspace export.
 
 ## Still needs your bench
 
@@ -50,7 +20,6 @@ v3.10.0 used `<a href="#">` for sidebar nav. In the Tauri webview that navigates
 3. A vendor J2534 DLL on Windows so the registry walk returns a real FunctionLibrary path.
 4. A kernel-resident Mode 3C full-image dump. Windowed probes are not a full backup.
 5. ME7 / SID block checksum routines measured on a personal dump before a corrector ships.
-6. Honda vs P01: always confirm OS string. The guard is string-based; a stripped dump with no 37820 ASCII can still look like P01 — and 512 KB without an OS string will not flash.
 
 Never flash without a verified backup and stable power. Personal dumps only.
 

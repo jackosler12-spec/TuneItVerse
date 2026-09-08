@@ -1,7 +1,7 @@
 [package]
 name = "TuneItVerse"
-version = "3.10.2"
-description = "ECU Tuning platform for JRTuners. v3.10.2: native file dialogs, offline BIN/XDF edit and save."
+version = "3.11.0"
+description = "ECU Tuning platform for JRTuners. v3.11.0: ELM/CAN Mode 01 transport, J2534 health, ECU catalog."
 authors = ["JRTuners"]
 edition = "2021"
 
