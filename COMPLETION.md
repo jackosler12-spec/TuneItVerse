@@ -1,17 +1,17 @@
-# TuneItVerse v3.11.0 — protocol-aware live I/O (2026-09-08)
+# TuneItVerse v3.12.0 — catalog, checksum UI, mid-UDS voltage (2026-09-09)
 
-v3.10.2 made offline BIN/XDF work. Live data on a cheap ELM327 still looked dead because `read_ecu_data` / Mode 09 / DTC always sent raw J1850 VPW frames. J2534 connect never flipped connection health, so the UI stayed Disconnected after a successful PassThru open.
+v3.11.0 made live I/O protocol-aware. The HTML/footer still said 3.10.2, the dashboard did not render the ECU catalog the docs claimed, Tables had no Validate/Correct checksum buttons, and Flash had no standalone voltage or unlock controls. UDS 0x34/36/37 also skipped the mid-transfer voltage abort that VPW already had.
 
 ## What this pass actually changed
 
-1. New `transport.rs`: ELM ASCII Mode 01 / Mode 09 (`010C`, `0902`) when the session is CAN / UDS / ELM / auto. Raw VPW frames only when the protocol is VPW/J1850.
-2. `get_connection_health` reports `Connected (j2534)` when a PassThru device is open. `j2534_connect` stamps `STATE.protocol`. `disconnect_ecu` releases the J2534 handle.
-3. Connect warmup calls `elm_init_can_500k`, `consult_init`, or `kwp_fast_init` based on the radio the user picked.
-4. DTC read uses ELM services 03 / 07 / 0A on ASCII transports instead of VPW headers.
-5. Battery voltage prefers J2534 `READ_VBATT`, then ELM PID 0x42, then VPW.
-6. UDS download re-checks J2534 voltage every 4 KB when a PassThru device is open.
-7. Dashboard lists the embedded ECU catalog (`list_ecu_catalog`).
-8. Versions 3.11.0 across package, crate, Tauri window, HTML, workspace export.
+1. Version 3.12.0 across package, crate, Tauri window, installer, HTML, workspace export, and UI.
+2. Dashboard renders `list_ecu_catalog` and live VIN/CALID from `read_properties` when connected.
+3. Tables: Validate checksums + Correct checksums (fail-closed Honda / unknown size).
+4. Flash: Check battery voltage, Unlock L1/L2, Bosch UDS unlock — wired to existing Rust commands.
+5. UDS `download_image` aborts if a J2534 `READ_VBATT` sample drops below 12.5 V every 4 KB.
+6. `app_info`, `read_battery_voltage_cmd`, `correct_bin_checksums_report` commands.
+7. Map-from-log also reports mean LTFT and engine load.
+8. Last serial port / baud / protocol restored from localStorage.
 
 ## Still needs your bench
 

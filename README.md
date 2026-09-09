@@ -25,9 +25,15 @@ python3 python/ecu_scripting.py checksum path/to/dump.bin
 python3 python/ecu_scripting.py seedkey P01_0411 1234 1
 ```
 
-## Current status (v3.11.0)
+## Current status (v3.12.0)
 
-See [COMPLETION.md](COMPLETION.md). Offline: Load BIN, Load XDF/A2L, edit maps, Save BIN — native Windows dialogs, no ECU. Live Mode 01 / VIN / DTCs speak ELM ASCII on CAN/UDS adapters and raw VPW only when you pick VPW. J2534 shows as connected. Sidebar switches views.
+See [COMPLETION.md](COMPLETION.md).
+
+Offline (no ECU): Load BIN, Load XDF/A2L, identify family, validate/correct checksums (P01 / EDC16 only), edit maps, Save BIN.
+
+Live: Mode 01 / VIN / DTCs on ELM ASCII for CAN/UDS; raw VPW only when you pick VPW. J2534 shows Connected when PassThru is open. Dashboard lists the embedded ECU catalog.
+
+Flash: identify → voltage gate → backup → unlock → write. Mid-transfer voltage abort on VPW chunks and J2534 UDS downloads. Honda write stays blocked.
 
 Build your own. No bullshit prices.
 
