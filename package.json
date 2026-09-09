@@ -1,8 +1,8 @@
 {
   "name": "tuneitverse",
   "private": true,
-  "version": "3.11.0",
-  "description": "TuneItVerse - open ECU tuning platform (Tauri + Rust). v3.11.0: ELM/CAN Mode 01 transport, J2534 connection health, ECU catalog.",
+  "version": "3.12.0",
+  "description": "TuneItVerse - open ECU tuning platform (Tauri + Rust). v3.12.0: dashboard catalog, checksum correct, mid-UDS voltage, flash helpers.",
   "type": "module",
   "scripts": {
     "tauri": "tauri",

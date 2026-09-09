@@ -1,4 +1,4 @@
-// flash.rs — Guided flash pipeline v3.9.1
+// flash.rs — Guided flash pipeline v3.12.0 (mid-transfer voltage on VPW + UDS)
 use serde::{Serialize, Deserialize};
 use crate::checksum::ChecksumReport;
 use serialport::SerialPort;
@@ -166,6 +166,9 @@ where F: FnMut(FlashProgress),
         if let Err(e) = write {
             result.error = Some(e);
             return Ok(result);
+        }
+        if let Ok(v) = enforce_voltage_gate(port, min_v, &mut result.logs) {
+            result.logs.push(format!("Post-write voltage {:.2} V", v));
         }
         result.flash_write_result = Some(FlashWriteResult {
             bytes_written: image.len() as u32,
