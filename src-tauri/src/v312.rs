@@ -1,15 +1,15 @@
-//! v3.12.0 command extras: app_info, battery voltage, checksum report.
+//! v3.13.0 command extras: app_info, battery voltage, checksum report, session snapshot.
 use serde_json::json;
 
 #[tauri::command]
 pub fn app_info() -> Result<String, String> {
     Ok(json!({
         "name": "TuneItVerse",
-        "version": "3.12.0",
+        "version": "3.13.0",
         "families": crate::ecu_database::list_supported_ecu_families(),
         "protocols": ["auto","vpw","can","kwp","consult","uds"],
         "honest": true,
-        "note": "Offline BIN/XDF works without an ECU. Live I/O needs an adapter."
+        "note": "Offline BIN/XDF works without an ECU. Live I/O needs an adapter. Honda write stays blocked."
     }).to_string())
 }
 
@@ -38,4 +38,33 @@ pub fn correct_bin_checksums_report(data: Vec<u8>) -> Result<String, String> {
         Ok(c) => Ok(json!({"success": true, "report": c.report, "bytes": c.data.len()}).to_string()),
         Err(e) => Ok(json!({"success": false, "error": e}).to_string()),
     }
+}
+
+#[tauri::command]
+pub fn session_snapshot() -> Result<String, String> {
+    let health = if crate::j2534::is_device_open() {
+        "Connected (j2534)".to_string()
+    } else if let Ok(g) = crate::STATE.lock() {
+        if g.port.is_some() {
+            format!("Connected ({})", g.protocol)
+        } else {
+            "Disconnected".into()
+        }
+    } else {
+        "Disconnected".into()
+    };
+    let (os, family, proto) = if let Ok(g) = crate::STATE.lock() {
+        (g.last_os_id.clone(), g.last_family.clone(), g.protocol.clone())
+    } else {
+        (None, None, String::new())
+    };
+    Ok(json!({
+        "version": "3.13.0",
+        "health": health,
+        "protocol": proto,
+        "last_os_id": os,
+        "last_family": family,
+        "families": crate::ecu_database::list_supported_ecu_families(),
+        "j2534_open": crate::j2534::is_device_open(),
+    }).to_string())
 }

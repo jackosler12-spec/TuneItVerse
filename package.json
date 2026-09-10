@@ -1,8 +1,8 @@
 {
   "name": "tuneitverse",
   "private": true,
-  "version": "3.12.0",
-  "description": "TuneItVerse - open ECU tuning platform (Tauri + Rust). v3.12.0: dashboard catalog, checksum correct, mid-UDS voltage, flash helpers.",
+  "version": "3.13.0",
+  "description": "TuneItVerse - open ECU tuning platform (Tauri + Rust). v3.13.0: wire catalog/checksum/voltage commands, last-port restore, session snapshot.",
   "type": "module",
   "scripts": {
     "tauri": "tauri",

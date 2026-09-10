@@ -25,7 +25,7 @@ python3 python/ecu_scripting.py checksum path/to/dump.bin
 python3 python/ecu_scripting.py seedkey P01_0411 1234 1
 ```
 
-## Current status (v3.12.0)
+## Current status (v3.13.0)
 
 See [COMPLETION.md](COMPLETION.md).
 

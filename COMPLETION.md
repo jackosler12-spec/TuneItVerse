@@ -1,17 +1,16 @@
-# TuneItVerse v3.12.0 — catalog, checksum UI, mid-UDS voltage (2026-09-09)
+# TuneItVerse v3.13.0 — wire the v3.12 surface that never compiled in (2026-09-10)
 
-v3.11.0 made live I/O protocol-aware. The HTML/footer still said 3.10.2, the dashboard did not render the ECU catalog the docs claimed, Tables had no Validate/Correct checksum buttons, and Flash had no standalone voltage or unlock controls. UDS 0x34/36/37 also skipped the mid-transfer voltage abort that VPW already had.
+v3.12.0 documented dashboard catalog, Validate/Correct checksum buttons, flash voltage/unlock helpers, and mid-UDS voltage abort. On main those extras lived in `v312.rs` / `v312.js` but `mod v312` was missing, the new commands were not in `generate_handler!`, `index.html` never loaded `v312.js`, and the catalog / checksum / voltage buttons were not in the HTML. A desktop build of 3.12 therefore could not invoke the new commands.
 
 ## What this pass actually changed
 
-1. Version 3.12.0 across package, crate, Tauri window, installer, HTML, workspace export, and UI.
-2. Dashboard renders `list_ecu_catalog` and live VIN/CALID from `read_properties` when connected.
-3. Tables: Validate checksums + Correct checksums (fail-closed Honda / unknown size).
-4. Flash: Check battery voltage, Unlock L1/L2, Bosch UDS unlock — wired to existing Rust commands.
-5. UDS `download_image` aborts if a J2534 `READ_VBATT` sample drops below 12.5 V every 4 KB.
-6. `app_info`, `read_battery_voltage_cmd`, `correct_bin_checksums_report` commands.
-7. Map-from-log also reports mean LTFT and engine load.
-8. Last serial port / baud / protocol restored from localStorage.
+1. Version 3.13.0 across package, crate, Tauri window, installer, HTML, overlay, and docs.
+2. `mod v312` + registered `app_info`, `read_battery_voltage_cmd`, `correct_bin_checksums_report`, `session_snapshot`.
+3. Dashboard renders `list_ecu_catalog` and VIN/CALID from `read_properties` / `session_snapshot`.
+4. Tables: Validate checksums + Correct checksums (fail-closed Honda / unknown size). Wired in both `main.js` and `v312.js`.
+5. Flash: Check battery voltage, Unlock L1/L2, Bosch UDS unlock — wired to existing Rust commands.
+6. Last serial port / baud / protocol restored from `localStorage` after port refresh.
+7. `index.html` loads `v312.js` after `main.js`. Mid-UDS voltage abort from v3.12 remains in the UDS write path.
 
 ## Still needs your bench
 
