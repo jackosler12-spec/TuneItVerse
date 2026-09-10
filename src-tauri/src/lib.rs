@@ -1,4 +1,4 @@
-// TuneItVerse lib.rs — Tauri entry + command surface (v3.11.0)
+// TuneItVerse lib.rs — Tauri entry + command surface (v3.13.0)
 #![allow(unused_imports, dead_code, non_snake_case)]
 
 mod a2l;
@@ -24,6 +24,7 @@ mod vpw;
 mod xdf;
 mod v29_tools;
 mod transport;
+mod v312;
 
 use serialport::SerialPort;
 use std::sync::Mutex;
@@ -430,6 +431,8 @@ pub fn run() {
             j2534::j2534_write, j2534::j2534_read, j2534::j2534_set_data_rate,
             j2534::j2534_set_vpw_high_speed, j2534::j2534_set_vpw_normal_speed,
             j2534::j2534_read_vbatt, j2534::j2534_set_iso15765_timing, j2534::j2534_clear_buffers,
+            v312::app_info, v312::read_battery_voltage_cmd, v312::correct_bin_checksums_report,
+            v312::session_snapshot,
         ])
         .run(tauri::generate_context!())
         .expect("error while running TuneItVerse");
