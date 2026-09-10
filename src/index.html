@@ -2,14 +2,14 @@
 <html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8">
-  <title>TuneItVerse v3.10.2</title>
+  <title>TuneItVerse v3.13.0</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-logo">
       <div class="sidebar-logo-mark">TV</div>
-      <div class="sidebar-logo-text">TuneItVerse <span class="version">v3.10.2</span></div>
+      <div class="sidebar-logo-text">TuneItVerse <span class="version">v3.13.0</span></div>
     </div>
     <nav class="sidebar-nav" id="sidebar-nav">
       <button type="button" class="nav-item active" data-view="dashboard">Dashboard</button>
@@ -76,7 +76,19 @@
           <div class="panel">
             <div class="panel-header"><span class="panel-title">BIN identity</span></div>
             <pre id="dash-identify" class="mono-block">Load a BIN on Tables to identify family / OS strings.</pre>
+            <div class="muted" id="dash-vin-calid">VIN / CALID: —</div>
           </div>
+        </div>
+        <div class="panel" style="margin-top:12px">
+          <div class="panel-header"><span class="panel-title">ECU catalog</span></div>
+          <table class="data-table" id="ecu-catalog">
+            <thead>
+              <tr><th>Family</th><th>Hardware</th><th>Protocol</th><th>Size</th><th>Checksum</th><th>Security</th></tr>
+            </thead>
+            <tbody id="catalog-tbody">
+              <tr><td colspan="6">Loading catalog…</td></tr>
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
@@ -232,6 +244,8 @@
         <button id="btn-export-workspace" class="btn" type="button">Export Workspace</button>
         <button id="btn-import-workspace" class="btn" type="button">Import Workspace</button>
         <button id="btn-scan-cs" class="btn" type="button">Scan CS windows</button>
+        <button id="btn-validate-cs" class="btn" type="button">Validate checksums</button>
+        <button id="btn-correct-cs" class="btn" type="button">Correct checksums</button>
         <button id="btn-save-patched" class="btn" type="button" disabled>Save Patched BIN</button>
         <label>off <input id="hex-poke-off" placeholder="4000"></label>
         <label>hex <input id="hex-poke-val" placeholder="AA BB"></label>
@@ -283,6 +297,10 @@
           <button id="btn-show-risk" class="btn btn-danger" type="button">Show risk confirmation</button>
           <button id="btn-compare-bin" class="btn" type="button">Compare loaded BIN to ECU</button>
           <button id="btn-verify-write" class="btn" type="button">Verify after write</button>
+          <button id="btn-check-voltage" class="btn" type="button">Check battery voltage</button>
+          <button id="btn-unlock-l1" class="btn" type="button">Unlock L1</button>
+          <button id="btn-unlock-l2" class="btn" type="button">Unlock L2</button>
+          <button id="btn-bosch-unlock" class="btn" type="button">Bosch UDS unlock</button>
         </div>
         <div class="progress-track"><div id="flash-bar" class="progress-fill"></div></div>
         <div>Progress: <span id="flash-progress">0%</span></div>
@@ -308,11 +326,12 @@
     </div>
 
     <footer class="status-bar">
-      <div class="status-left" id="status-left">TuneItVerse 3.10.2</div>
+      <div class="status-left" id="status-left">TuneItVerse 3.13.0</div>
       <div class="status-center" id="status-center">No invented live values</div>
       <div class="status-right" id="status-right">Desktop app required</div>
     </footer>
   </div>
   <script src="main.js"></script>
+  <script src="v312.js"></script>
 </body>
 </html>
