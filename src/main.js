@@ -825,7 +825,7 @@ function renderTableList() {
   if (!list) return;
   list.innerHTML = '';
   if (!currentTables.length) {
-    list.innerHTML = '<div class="muted" style="padding:12px;">No tables located. Load a P01 BIN (GM OS string) or an XDF/A2L.</div>';
+    list.innerHTML = '<div class="muted" style="padding:12px;">No tables located. Load a Holden/GM P01 BIN or an XDF/A2L.</div>';
     return;
   }
   let shown = 0;
@@ -834,12 +834,20 @@ function renderTableList() {
     shown += 1;
     const div = document.createElement('div');
     div.className = 'table-item';
+    div.setAttribute('data-idx', String(idx));
     div.innerHTML = '<strong>' + (t.name || t.id) + '</strong><br><span class="muted">' +
       (t.category ? t.category + ' · ' : '') + (t.rows || 1) + '×' + (t.cols || 1) + ' @ ' + (t.addr || '?') +
       (t.units ? ' · ' + t.units : '') + '</span>';
     div.onclick = () => selectTable(idx);
     list.appendChild(div);
   });
+  const count = document.createElement('div');
+  count.className = 'muted';
+  count.style.padding = '8px 12px';
+  count.textContent = shown === currentTables.length
+    ? currentTables.length + ' parameters'
+    : 'Showing ' + shown + ' of ' + currentTables.length;
+  list.appendChild(count);
   if (!shown) {
     list.innerHTML = '<div class="muted" style="padding:12px;">No tables match the filter.</div>';
   }
@@ -848,7 +856,7 @@ function renderTableList() {
 async function selectTable(idx) {
   currentTable = currentTables[idx];
   syncGlobals();
-  document.querySelectorAll('.table-item').forEach((el, i) => el.classList.toggle('active', i === idx));
+  document.querySelectorAll('.table-item').forEach((el) => el.classList.toggle('active', +el.getAttribute('data-idx') === idx));
   const st = document.getElementById('tables-status');
   if (!currentTable || !currentBin) {
     if (st) st.textContent = 'Load a BIN before extracting a table.';

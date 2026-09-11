@@ -157,7 +157,11 @@ pub fn tables_for_bin(data: &[u8]) -> AutoTablesResult {
             note: "Honda OS string. P01 TableSeek pack is not applied.".into(),
         };
     }
-    if crate::cs_guard::looks_like_gm_p01(data) {
+    // Holden/GM P01 is 128 KB cal or 512 KB full. OS ID is not always 12225074 —
+    // run TableSeek on any P01-sized dump that is not Honda, plus any dump that
+    // already has a GM P01 OS string.
+    let p01_sized = crate::checksum_sizes::is_p01_size(data.len());
+    if p01_sized || crate::cs_guard::looks_like_gm_p01(data) {
         let (tables, located, missing) = crate::tableseek::locate_p01_tables(data);
         return AutoTablesResult {
             note: format!("P01/P59 TableSeek: {} located, {} not in this dump.", located, missing),
@@ -267,5 +271,7 @@ mod tests {
         let img = vec![0u8; 524288];
         let r = tables_for_bin(&img);
         assert!(!r.tables.iter().any(|t| t.id == "ve-main"));
+        assert_eq!(r.pack, "tableseek-p01-p59");
+        assert_eq!(r.located, 0);
     }
 }

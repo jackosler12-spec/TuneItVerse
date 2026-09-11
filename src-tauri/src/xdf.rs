@@ -29,6 +29,7 @@ pub struct TableDef {
     pub math: String,
     pub units: String,
     pub row_major: bool,
+    #[serde(default = "default_true")]
     pub msb: bool,
     #[serde(default)]
     pub row_headers: Option<String>,
@@ -95,6 +96,7 @@ struct TableDataXml {
 }
 
 fn one() -> String { "1".into() }
+fn default_true() -> bool { true }
 
 /// Parse a TableData / TableSeek style XML (or snippet) into our TableDef list.
 /// This is the "XDF XML parser" implementation (quick-xml).
@@ -202,6 +204,57 @@ pub fn cal_base_for_bytes(len: usize) -> usize {
     if len >= 0x28000 { 0x20000 } else { 0 }
 }
 
+pub fn cell_width(data_type: &str) -> usize {
+    let u = data_type.to_ascii_uppercase();
+    if u.contains("32") || u.contains("LONG") || u.contains("DWORD") { 4 }
+    else if u.contains("WORD") { 2 }
+    else { 1 }
+}
+
+fn is_signed_type(data_type: &str) -> bool {
+    let u = data_type.to_ascii_uppercase();
+    u.starts_with('S') || u.starts_with("INT")
+}
+
+fn read_cell(bin: &[u8], off: usize, width: usize, signed: bool, msb: bool) -> f64 {
+    if off + width > bin.len() { return 0.0; }
+    let mut v: u32 = 0;
+    if msb {
+        for i in 0..width { v = (v << 8) | bin[off + i] as u32; }
+    } else {
+        for i in (0..width).rev() { v = (v << 8) | bin[off + i] as u32; }
+    }
+    if signed {
+        match width {
+            1 => v as i8 as f64,
+            2 => v as i16 as f64,
+            4 => v as i32 as f64,
+            _ => v as f64,
+        }
+    } else {
+        v as f64
+    }
+}
+
+fn write_cell(bin: &mut [u8], off: usize, width: usize, raw: f64, msb: bool) {
+    if off + width > bin.len() { return; }
+    let max = match width {
+        1 => 0xFFu32,
+        2 => 0xFFFFu32,
+        _ => 0xFFFF_FFFFu32,
+    };
+    let mut u = raw.round() as i64;
+    if u < 0 {
+        u += match width { 1 => 0x100, 2 => 0x10000, _ => 0x1_0000_0000 };
+    }
+    let mut v = u as u32;
+    if v > max { v = max; }
+    for i in 0..width {
+        let shift = if msb { (width - 1 - i) * 8 } else { i * 8 };
+        bin[off + i] = ((v >> shift) & 0xff) as u8;
+    }
+}
+
 /// Extract physical values for one table from the BIN bytes using *exact* P01 addressing.
 /// This is the core of "real byte extraction from loaded BINs using exact P01 offsets".
 pub fn extract_table(bin: &[u8], def: &TableDef) -> ExtractedTable {
@@ -209,10 +262,9 @@ pub fn extract_table(bin: &[u8], def: &TableDef) -> ExtractedTable {
     let off = table_file_offset(bin.len(), addr, def.file_offset);
     let rows = def.rows.max(1);
     let cols = def.cols.max(1);
-    let is_word = def.data_type.to_uppercase().contains("WORD");
-    let is_signed = def.data_type.to_uppercase().starts_with('S');
-    let _esz = if is_word { 2 } else { 1 };
-    let need = off + rows * cols * _esz;
+    let width = cell_width(&def.data_type);
+    let signed = is_signed_type(&def.data_type);
+    let need = off + rows * cols * width;
 
     let mut values: Vec<Vec<f64>> = vec![vec![0.0; cols]; rows];
     let mut note = None;
@@ -225,17 +277,8 @@ pub fn extract_table(bin: &[u8], def: &TableDef) -> ExtractedTable {
     let mut idx = off;
     for r in 0..rows {
         for c in 0..cols {
-            let raw = if is_word {
-                if idx + 1 >= bin.len() { 0.0 } else {
-                    let v = ((bin[idx] as u16) << 8) | (bin[idx + 1] as u16);
-                    idx += 2;
-                    if is_signed && v > 0x7FFF { (v as i32 - 0x10000) as i32 as f64 } else { v as f64 }
-                }
-            } else {
-                let v = bin[idx] as i32;
-                idx += 1;
-                if is_signed && v > 0x7F { (v - 0x100) as f64 } else { v as f64 }
-            };
+            let raw = read_cell(bin, idx, width, signed, def.msb);
+            idx += width;
             values[r][c] = apply_math(raw, &def.math);
         }
     }
@@ -254,29 +297,13 @@ pub fn extract_table(bin: &[u8], def: &TableDef) -> ExtractedTable {
 pub fn patch_table(mut bin: Vec<u8>, def: &TableDef, new_values: &[Vec<f64>]) -> Vec<u8> {
     let addr = parse_addr(&def.addr);
     let mut off = table_file_offset(bin.len(), addr, def.file_offset);
-    let is_word = def.data_type.to_uppercase().contains("WORD");
-    let _esz = if is_word { 2 } else { 1 };
+    let width = cell_width(&def.data_type);
 
     for row in new_values {
         for phys in row {
             let raw = inverse_math(*phys, &def.math);
-            if is_word {
-                let mut u = raw.round() as i64;
-                if u < 0 { u += 0x10000; }
-                if off + 1 < bin.len() {
-                    bin[off] = ((u >> 8) & 0xff) as u8;
-                    bin[off + 1] = (u & 0xff) as u8;
-                }
-                off += 2;
-            } else {
-                let mut u = raw.round() as i64;
-                if u < 0 { u = 0; }
-                if u > 255 { u = 255; }
-                if off < bin.len() {
-                    bin[off] = u as u8;
-                }
-                off += 1;
-            }
+            write_cell(&mut bin, off, width, raw, def.msb);
+            off += width;
         }
     }
     bin
@@ -359,8 +386,7 @@ pub fn extract_table_from_bin(bin_bytes: Vec<u8>, table: TableDef) -> Result<Ext
 pub fn patch_table_into_bin(req: PatchRequest) -> Result<PatchResult, String> {
     let addr = parse_addr(&req.table.addr);
     let off = table_file_offset(req.bin_bytes.len(), addr, req.table.file_offset);
-    let is_word = req.table.data_type.to_uppercase().contains("WORD");
-    let esz = if is_word { 2 } else { 1 };
+    let esz = cell_width(&req.table.data_type);
     let rows = req.new_values.len();
     let cols = req.new_values.first().map(|r| r.len()).unwrap_or(0);
     let need = off + rows * cols * esz;

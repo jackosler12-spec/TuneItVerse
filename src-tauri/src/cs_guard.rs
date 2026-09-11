@@ -20,6 +20,15 @@ pub fn looks_like_honda(data: &[u8]) -> bool {
     false
 }
 
+const GM_P01_MARKERS: &[&str] = &[
+    "P01",
+    "12225074", "12200411",
+    "12576171", "12576106", "12579256", "12579405",
+    "12583560", "12586242", "12587603", "12589806",
+    "12593358", "12596165",
+    "12602871", "12612384", "12623914",
+];
+
 pub fn looks_like_gm_p01(data: &[u8]) -> bool {
     let mut cur = String::new();
     for &b in data {
@@ -29,7 +38,7 @@ pub fn looks_like_gm_p01(data: &[u8]) -> bool {
                 cur = cur[cur.len() - 32..].to_string();
             }
             let up = cur.to_ascii_uppercase();
-            if up.contains("12225074") || up.contains("12200411") || up.contains("P01") {
+            if GM_P01_MARKERS.iter().any(|m| up.contains(m)) {
                 return true;
             }
         } else {

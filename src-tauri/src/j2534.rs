@@ -574,6 +574,17 @@ pub fn j2534_connect(dll_path: Option<String>) -> Result<String, String> {
 }
 
 #[tauri::command]
+pub fn j2534_disconnect() -> Result<String, String> {
+    let mut guard = SHARED.lock().map_err(|e| e.to_string())?;
+    if let Some(ref mut dev) = *guard {
+        let _ = dev.disconnect();
+        let _ = dev.close();
+    }
+    *guard = None;
+    Ok("J2534 disconnected".into())
+}
+
+#[tauri::command]
 pub fn j2534_connect_vpw(dll_path: Option<String>) -> Result<String, String> {
     let mut guard = SHARED.lock().map_err(|e| e.to_string())?;
     let mut dev = J2534Device::new();

@@ -28,7 +28,7 @@ python3 python/ecu_scripting.py diff stock.bin tuned.bin
 
 ## Current status (v3.15.0)
 
-See [COMPLETION.md](COMPLETION.md). Holden/GM P01 BINs auto-load the Universal Patcher TableSeek pack (~1598 parameters located in the dump). Offline BIN/XDF edit and save.
+See [COMPLETION.md](COMPLETION.md). Holden/GM P01 BINs auto-load the Universal Patcher TableSeek pack (1598 definitions; 1300+ typically located in a real dump). Offline BIN/XDF edit and save.
 
 Live: Mode 01 / VIN / DTCs on ELM ASCII for CAN/UDS; raw VPW only when you pick VPW. J2534 shows Connected when PassThru is open.
 

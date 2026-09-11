@@ -106,8 +106,11 @@ fn elm_warmup(port: &mut dyn SerialPort, protocol: &str) {
 
 #[tauri::command]
 fn connect_ecu(port_name: String, baud: u32, protocol: String) -> Result<String, String> {
-    let mut port = serialport::new(&port_name, baud).timeout(Duration::from_millis(500)).open()
+    let opened = serialport::new(&port_name, baud).timeout(Duration::from_millis(500)).open()
         .map_err(|e| format!("Failed to open {}: {}", port_name, e))?;
+    // serialport 4 returns Box<dyn SerialPort>; AppState requires Send. Windows COM ports are Send.
+    let mut port: Box<dyn SerialPort + Send> =
+        unsafe { std::mem::transmute::<Box<dyn SerialPort>, Box<dyn SerialPort + Send>>(opened) };
     elm_warmup(port.as_mut(), &protocol);
     let proto_l = protocol.to_ascii_lowercase();
     if proto_l.contains("can") || proto_l.contains("uds") {
