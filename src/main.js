@@ -79,14 +79,45 @@ async function requireConnected(what) {
 }
 
 const PAGE_TITLES = {
-  dashboard: ['Dashboard', 'Honest live data. No invented PIDs.'],
-  connect: ['Connect', 'Serial, ELM, or J2534. Fail-closed on silence.'],
+  dashboard: ['Dashboard', 'Connect, log, edit maps, then flash — in that order.'],
+  connect: ['Connect', 'Serial, ELM, or J2534. Fail-closed if nothing answers.'],
   live: ['Data Logging', 'Mode 01 samples or imported CSV only.'],
-  diagnostics: ['Diagnostics', 'Stored / pending / permanent DTCs from the adapter.'],
-  tables: ['Tables / Maps', 'Your BIN + XDF/A2L. Identify before patch or flash.'],
-  flash: ['Flash', 'Identify → voltage → backup → write → live verify.'],
+  diagnostics: ['Diagnostics', 'Read, inspect, or clear DTCs from the adapter.'],
+  tables: ['Maps', 'Load a BIN, pick a parameter, edit, save. No ECU required.'],
+  flash: ['Flash', 'Identify → voltage → backup → write → verify.'],
   scripts: ['Scripts', 'Bench CLI helpers. Not an embedded interpreter.']
 };
+
+function escapeHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function tableKind(t) {
+  const r = t.rows || 1, c = t.cols || 1;
+  if (r === 1 && c === 1) return ['1D', 't1d'];
+  if (r === 1 || c === 1) return ['2D', 't2d'];
+  return ['3D', 't3d'];
+}
+
+function setBinChip(label, ready) {
+  const el = document.getElementById('bin-chip');
+  if (!el) return;
+  el.textContent = label || 'No BIN loaded';
+  el.classList.toggle('ready', !!ready);
+}
+
+function setIdentChip(text) {
+  const el = document.getElementById('bin-ident-chip');
+  if (el) el.textContent = text || 'Family unresolved';
+}
+
+function setEditorHeading(title, sub) {
+  const h = document.getElementById('editor-title');
+  const p = document.getElementById('editor-sub');
+  if (h) h.textContent = title || 'Select a parameter';
+  if (p) p.textContent = sub || '';
+}
 
 let currentBin = null;
 let currentTables = [];
@@ -235,6 +266,7 @@ function setKpi(id, value) {
 
 function applyIdentify(info) {
   lastIdentify = info;
+  window.lastIdentify = info;
   const dash = document.getElementById('dash-identify');
   const chip = document.getElementById('vehicle-chip');
   if (dash && info) {
@@ -252,6 +284,11 @@ function applyIdentify(info) {
     const fam = (info && (info.family || info.family_by_os)) || 'UNREAD';
     chip.textContent = 'OS: ' + fam;
   }
+  const identBits = [];
+  if (info && (info.family || info.family_by_os)) identBits.push(info.family || info.family_by_os);
+  if (info && info.bin_size_bytes) identBits.push(info.bin_size_bytes + ' bytes');
+  if (info && info.gm_p01_os) identBits.push('P01');
+  setIdentChip(identBits.length ? identBits.join(' · ') : 'Family unresolved');
   if (info && info.size_collision && !info.family) {
     banner('tiv-collision', 'Size collides across catalog families. Confirm OS string before any corrector.');
   }
@@ -702,6 +739,8 @@ async function ingestBinBytes(bytes, label) {
   currentBin = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
   syncGlobals();
   enableSave(true);
+  const short = (label || 'BIN').replace(/^.*[\\/]/, '');
+  setBinChip(short + ' · ' + currentBin.length.toLocaleString() + ' bytes', true);
   try {
     const raw = await invokeCmd('auto_load_tables_for_bin', { bin_bytes: binBytes(currentBin) });
     const parsed = parseMaybe(raw);
@@ -788,23 +827,29 @@ let tableCat = 'all';
 let tableSearch = '';
 
 function rebuildCategoryChips() {
-  const host = document.getElementById('table-cats');
-  if (!host) return;
   const cats = [];
   currentTables.forEach((t) => {
     const c = (t.category || '').trim();
     if (c && cats.indexOf(c) < 0) cats.push(c);
   });
   cats.sort();
-  host.innerHTML = '<button class="chip-filter' + (tableCat === 'all' ? ' active' : '') + '" data-cat="all" type="button">All cats</button>' +
-    cats.slice(0, 48).map((c) => '<button class="chip-filter' + (tableCat === c ? ' active' : '') + '" data-cat="' + c.replace(/"/g, '') + '" type="button">' + c + '</button>').join('');
-  host.querySelectorAll('.chip-filter').forEach((ch) => {
-    ch.onclick = () => {
-      tableCat = ch.getAttribute('data-cat') || 'all';
-      rebuildCategoryChips();
-      renderTableList();
-    };
-  });
+  const sel = document.getElementById('table-cat-select');
+  if (sel) {
+    const keep = tableCat;
+    sel.innerHTML = '<option value="all">All categories (' + cats.length + ')</option>' +
+      cats.map((c) => '<option value="' + escapeHtml(c) + '">' + escapeHtml(c) + '</option>').join('');
+    sel.value = keep && (keep === 'all' || cats.indexOf(keep) >= 0) ? keep : 'all';
+    tableCat = sel.value;
+    if (!sel.dataset.bound) {
+      sel.dataset.bound = '1';
+      sel.addEventListener('change', () => {
+        tableCat = sel.value || 'all';
+        renderTableList();
+      });
+    }
+  }
+  const host = document.getElementById('table-cats');
+  if (host) host.innerHTML = '';
 }
 
 function tablePassesFilter(t) {
@@ -822,34 +867,34 @@ function tablePassesFilter(t) {
 
 function renderTableList() {
   const list = document.getElementById('tables-list');
+  const countEl = document.getElementById('table-count');
   if (!list) return;
   list.innerHTML = '';
   if (!currentTables.length) {
-    list.innerHTML = '<div class="muted" style="padding:12px;">No tables located. Load a Holden/GM P01 BIN or an XDF/A2L.</div>';
+    list.innerHTML = '<div class="empty-state"><div class="empty-mark">BIN</div><h3>No maps yet</h3><p>Load a Holden/GM P01 BIN, or an XDF/A2L definition file.</p></div>';
+    if (countEl) countEl.textContent = '0';
     return;
   }
   let shown = 0;
   currentTables.forEach((t, idx) => {
     if (!tablePassesFilter(t)) return;
     shown += 1;
+    const kind = tableKind(t);
     const div = document.createElement('div');
     div.className = 'table-item';
     div.setAttribute('data-idx', String(idx));
-    div.innerHTML = '<strong>' + (t.name || t.id) + '</strong><br><span class="muted">' +
-      (t.category ? t.category + ' · ' : '') + (t.rows || 1) + '×' + (t.cols || 1) + ' @ ' + (t.addr || '?') +
-      (t.units ? ' · ' + t.units : '') + '</span>';
+    div.title = (t.name || t.id) + ' · ' + (t.category || '') + ' @ ' + (t.addr || '?');
+    div.innerHTML = '<span class="tbl-type ' + kind[1] + '">' + kind[0] + '</span>' +
+      '<span class="tbl-name">' + escapeHtml(t.name || t.id) + '</span>' +
+      '<span class="tbl-meta">' + (t.rows || 1) + '×' + (t.cols || 1) + '</span>';
     div.onclick = () => selectTable(idx);
     list.appendChild(div);
   });
-  const count = document.createElement('div');
-  count.className = 'muted';
-  count.style.padding = '8px 12px';
-  count.textContent = shown === currentTables.length
-    ? currentTables.length + ' parameters'
-    : 'Showing ' + shown + ' of ' + currentTables.length;
-  list.appendChild(count);
+  if (countEl) {
+    countEl.textContent = shown === currentTables.length ? String(shown) : shown + '/' + currentTables.length;
+  }
   if (!shown) {
-    list.innerHTML = '<div class="muted" style="padding:12px;">No tables match the filter.</div>';
+    list.innerHTML = '<div class="empty-state"><h3>No match</h3><p>Clear the search or pick another category.</p></div>';
   }
 }
 
@@ -860,10 +905,18 @@ async function selectTable(idx) {
   const st = document.getElementById('tables-status');
   if (!currentTable || !currentBin) {
     if (st) st.textContent = 'Load a BIN before extracting a table.';
+    setEditorHeading('Select a parameter', 'Load a BIN, then choose a table from the list.');
     currentValues = null;
     renderCurrentEditor();
     return;
   }
+  const kind = tableKind(currentTable);
+  setEditorHeading(
+    currentTable.name || currentTable.id,
+    (currentTable.category ? currentTable.category + ' · ' : '') + kind[0] + ' · ' +
+      (currentTable.rows || 1) + '×' + (currentTable.cols || 1) + ' @ ' + (currentTable.addr || '?') +
+      (currentTable.units ? ' · ' + currentTable.units : '')
+  );
   try {
     const extracted = await invokeCmd('extract_table_from_bin', { bin_bytes: binBytes(currentBin), table: currentTable });
     currentValues = extracted.values || extracted;
@@ -896,7 +949,7 @@ function renderCurrentEditor() {
   const el = document.getElementById('editor-content');
   if (!el) return;
   if (!currentValues) {
-    el.innerHTML = '<p class="muted">No table values. Load a BIN and select a definition whose address lands in the image.</p>';
+    el.innerHTML = '<div class="empty-state"><div class="empty-mark">MAP</div><h3>Nothing to edit</h3><p>Load a BIN and select a parameter whose address lands in the image.</p></div>';
     return;
   }
   if (currentEditorTab === 'grid') {
@@ -939,11 +992,15 @@ function renderCurrentEditor() {
     });
   } else if (currentEditorTab === '3d') {
     const { min, max } = tableMinMax(currentValues);
-    el.innerHTML = '<canvas id="viz3d" width="560" height="360"></canvas><div class="heatmap-legend"><span>' + min.toFixed(1) + '</span><div class="heatmap-scale"></div><span>' + max.toFixed(1) + '</span><span id="heat-hover" class="muted">hover a cell</span></div>';
+    el.innerHTML = '<canvas id="viz3d"></canvas><div class="heatmap-legend"><span>' + min.toFixed(1) + '</span><div class="heatmap-scale"></div><span>' + max.toFixed(1) + '</span><span id="heat-hover" class="muted">hover a cell</span></div>';
     const canvas = document.getElementById('viz3d');
     const ctx = canvas.getContext('2d');
+    const w = Math.max(320, el.clientWidth - 8);
+    const h = Math.max(220, Math.min(420, el.clientHeight - 48) || 320);
+    canvas.width = w;
+    canvas.height = h;
     const rows = currentValues.length, cols = currentValues[0].length;
-    const cellW = 560 / cols, cellH = 360 / rows;
+    const cellW = w / cols, cellH = h / rows;
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
         ctx.fillStyle = heatColor(currentValues[r][c], min, max);
@@ -958,7 +1015,10 @@ function renderCurrentEditor() {
       if (hover) hover.textContent = 'r' + r + ' c' + c + ' = ' + (typeof currentValues[r][c] === 'number' ? currentValues[r][c].toFixed(2) : currentValues[r][c]);
     };
   } else if (currentEditorTab === 'hex') {
-    if (!currentBin) { el.innerHTML = 'No BIN loaded'; return; }
+    if (!currentBin) {
+      el.innerHTML = '<div class="empty-state"><div class="empty-mark">HEX</div><h3>No BIN loaded</h3><p>Load a binary first to inspect bytes at the table address.</p></div>';
+      return;
+    }
     let start = 0;
     const parsed = parseInt(String(currentTable && currentTable.addr || '0'), 16);
     if (!isNaN(parsed) && parsed >= 0 && parsed < currentBin.length) start = parsed;
@@ -986,12 +1046,18 @@ function updateSidePanel() {
   if (!currentTable) return;
   const meta = document.getElementById('side-meta');
   if (meta) {
-    meta.innerHTML = '<div><b>' + currentTable.name + '</b></div>' +
-      '<div>ID: ' + currentTable.id + '</div>' +
-      '<div>Size: ' + (currentTable.rows || '?') + ' × ' + (currentTable.cols || '?') + '</div>' +
-      '<div>Addr: ' + (currentTable.addr || '?') + '</div>' +
-      '<div>Type: ' + (currentTable.data_type || '?') + '  Math: ' + (currentTable.math || 'X') + '</div>' +
-      '<div>Units: ' + (currentTable.units || '') + '</div>';
+    const rows = [
+      ['Name', currentTable.name || currentTable.id],
+      ['Category', currentTable.category || '—'],
+      ['Size', (currentTable.rows || '?') + ' × ' + (currentTable.cols || '?')],
+      ['Address', currentTable.addr || '?'],
+      ['Type', currentTable.data_type || '?'],
+      ['Math', currentTable.math || 'X'],
+      ['Units', currentTable.units || '—']
+    ];
+    meta.innerHTML = rows.map((r) =>
+      '<div class="detail-row"><div class="detail-k">' + escapeHtml(r[0]) + '</div><div class="detail-v">' + escapeHtml(r[1]) + '</div></div>'
+    ).join('');
   }
   const fam = identifiedFamily() || 'unresolved';
   const sample = (currentValues && currentValues[0] && typeof currentValues[0][0] === 'number') ? currentValues[0][0] : 0;
@@ -1242,6 +1308,8 @@ function setupTablesUI() {
       renderCurrentEditor();
     };
   }
+  renderTableList();
+  renderCurrentEditor();
 }
 
 // ---------- Flash ----------
@@ -1383,9 +1451,12 @@ async function refreshScriptsUi() {
     const raw = await invokeCmd('list_script_helpers');
     const helpers = parseMaybe(raw) || [];
     if (!list) return;
-    if (!helpers.length) { list.innerHTML = '<p class="muted">No helpers returned.</p>'; return; }
+    if (!helpers.length) {
+      list.innerHTML = '<div class="empty-state"><div class="empty-mark">CLI</div><h3>No helpers</h3><p>Refresh to list bench commands from the backend.</p></div>';
+      return;
+    }
     list.innerHTML = helpers.map((h) =>
-      `<div class="script-card"><strong>${h.name || h.id}</strong><br><code>${h.command || ''}</code></div>`
+      `<div class="script-card"><strong>${escapeHtml(h.name || h.id)}</strong><p class="muted">${escapeHtml(h.description || 'Bench helper')}</p><code>${escapeHtml(h.command || '')}</code></div>`
     ).join('');
   } catch (e) {
     if (list) list.innerHTML = '<p class="muted">' + e + '</p>';

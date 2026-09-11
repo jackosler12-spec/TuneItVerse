@@ -1,8 +1,8 @@
 {
   "name": "tuneitverse",
   "private": true,
-  "version": "3.15.0",
-  "description": "TuneItVerse - open ECU tuning platform. v3.15.0: P01 TableSeek pack (~1598 UP parameters).",
+  "version": "3.15.1",
+  "description": "TuneItVerse - open ECU tuning platform. v3.15.1: map editor and app-wide workspace chrome.",
   "type": "module",
   "scripts": {
     "tauri": "tauri",

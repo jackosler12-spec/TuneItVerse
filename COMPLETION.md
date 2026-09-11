@@ -1,3 +1,9 @@
+# TuneItVerse v3.15.1 — map workspace chrome
+
+The Maps page was a wrap of mixed file, checksum, hex-poke, and scale buttons with 48 category chips. v3.15.1 groups File / BIN / Session on a page toolbar, puts Edit and Hex poke under the grid, uses a category dropdown, and shows 1D/2D/3D list rows with empty states. Connect, Log, Diagnostics, Flash, and Scripts use the same toolbar + panel pattern.
+
+---
+
 # TuneItVerse v3.15.0 — P01 TableSeek pack (~1598 Universal Patcher parameters)
 
 Loading a Holden P01 BIN used to show three stub maps. The real pack is `reference/tableseek-p01-p59.xml` (1598 TableSeek entries). v3.15.0 embeds that pack and locates tables with the same SearchStr rules as Universal Patcher: `*` is a wildcard, `@` bytes are the address, `+D12` follows a 32-bit pointer. Hits only — no invented addresses. Any 128/512 KB dump that is not Honda gets the pack (Holden OS IDs are not only `12225074`). On the reference LS1 `12225074` dump this locates 1300+ parameters; tables whose opcode sequence is absent from that OS are listed as missing. Honda 512 KB dumps are not given the P01 pack. Tables UI: search + category chips.

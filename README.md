@@ -26,7 +26,7 @@ python3 python/ecu_scripting.py seedkey P01_0411 1234 1
 python3 python/ecu_scripting.py diff stock.bin tuned.bin
 ```
 
-## Current status (v3.15.0)
+## Current status (v3.15.1)
 
 See [COMPLETION.md](COMPLETION.md). Holden/GM P01 BINs auto-load the Universal Patcher TableSeek pack (1598 definitions; 1300+ typically located in a real dump). Offline BIN/XDF edit and save.
 

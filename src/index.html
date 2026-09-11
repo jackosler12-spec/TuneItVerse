@@ -2,21 +2,21 @@
 <html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8">
-  <title>TuneItVerse v3.15.0</title>
+  <title>TuneItVerse v3.15.1</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-logo">
       <div class="sidebar-logo-mark">TV</div>
-      <div class="sidebar-logo-text">TuneItVerse <span class="version">v3.15.0</span></div>
+      <div class="sidebar-logo-text">TuneItVerse <span class="version">v3.15.1</span></div>
     </div>
     <nav class="sidebar-nav" id="sidebar-nav">
       <button type="button" class="nav-item active" data-view="dashboard">Dashboard</button>
       <button type="button" class="nav-item" data-view="connect">Connect</button>
       <button type="button" class="nav-item" data-view="live">Data Logging</button>
       <button type="button" class="nav-item" data-view="diagnostics">Diagnostics</button>
-      <button type="button" class="nav-item" data-view="tables">Tables / Maps</button>
+      <button type="button" class="nav-item" data-view="tables">Maps</button>
       <button type="button" class="nav-item" data-view="flash">Flash</button>
       <button type="button" class="nav-item" data-view="scripts">Scripts</button>
     </nav>
@@ -41,7 +41,7 @@
       </div>
     </header>
 
-    <div id="view-dashboard" class="content" data-view-panel="dashboard">
+    <div id="view-dashboard" class="content view-page" data-view-panel="dashboard">
       <div class="view-body">
         <div class="dash-grid-bg"></div>
         <div class="workflow-cards">
@@ -55,7 +55,7 @@
           </div>
           <div class="panel workflow-card" data-go="tables">
             <div class="workflow-icon">03</div>
-            <div><strong>Tables</strong><span class="page-sub">Load your BIN + XDF/A2L. Identify before you patch.</span></div>
+            <div><strong>Maps</strong><span class="page-sub">Load a BIN, edit parameters, save. Identify before you flash.</span></div>
           </div>
           <div class="panel workflow-card" data-go="flash">
             <div class="workflow-icon">04</div>
@@ -75,7 +75,7 @@
           </div>
           <div class="panel">
             <div class="panel-header"><span class="panel-title">BIN identity</span></div>
-            <pre id="dash-identify" class="mono-block">Load a BIN on Tables to identify family / OS strings.</pre>
+            <pre id="dash-identify" class="mono-block">Load a BIN on Maps to identify family / OS strings.</pre>
             <div class="muted" id="dash-vin-calid">VIN / CALID: —</div>
           </div>
         </div>
@@ -93,9 +93,11 @@
       </div>
     </div>
 
-    <div id="view-connect" class="content content--hidden" data-view-panel="connect" hidden>
+    <div id="view-connect" class="content content--hidden view-page" data-view-panel="connect" hidden>
       <div class="view-body">
-        <div class="panel connect-panel">
+        <div class="connect-grid">
+        <div class="panel connect-panel quiet-panel">
+          <div class="panel-header"><span class="panel-title">Adapter</span></div>
           <div class="form-group">
             <label>Serial Port</label>
             <div class="row">
@@ -136,9 +138,16 @@
             <button id="btn-j2534-list" class="btn btn-sm" type="button">List J2534 registry devices</button>
             <div id="j2534-list" class="mono-block"></div>
           </div>
-          <div class="panel inset">
-            <strong>Offline seed → key</strong>
-            <p class="muted">Computes a key from a captured seed. Does not talk to the car. Unverified families are labelled and will not unlock.</p>
+          <div class="row">
+            <button id="btn-do-connect" class="btn btn-primary" type="button">Connect</button>
+            <button id="btn-do-disconnect" class="btn btn-danger" type="button">Disconnect</button>
+            <button id="btn-auto-detect" class="btn" type="button">Auto Detect</button>
+          </div>
+          <pre id="connect-log" class="mono-block log-box"></pre>
+        </div>
+        <div class="panel quiet-panel">
+          <div class="panel-header"><span class="panel-title">Offline seed → key</span></div>
+          <p class="muted">Computes a key from a captured seed. Does not talk to the car. Unverified families are labelled and will not unlock.</p>
             <div class="row wrap">
               <input id="seed-hex" placeholder="seed hex e.g. 1234 or DEADBEEF">
               <select id="seed-family">
@@ -159,21 +168,15 @@
               <button id="btn-compute-key" class="btn btn-sm" type="button">Compute key</button>
             </div>
             <pre id="seed-result" class="mono-block">—</pre>
-          </div>
-          <div class="row">
-            <button id="btn-do-connect" class="btn btn-primary" type="button">Connect</button>
-            <button id="btn-do-disconnect" class="btn btn-danger" type="button">Disconnect</button>
-            <button id="btn-auto-detect" class="btn" type="button">Auto Detect</button>
-          </div>
-          <pre id="connect-log" class="mono-block log-box"></pre>
+        </div>
         </div>
       </div>
     </div>
 
-    <div id="view-live" class="content content--hidden" data-view-panel="live" hidden>
-      <div class="view-body">
-        <div class="panel toolbar-panel">
-          <div class="row wrap">
+    <div id="view-live" class="content content--hidden view-page" data-view-panel="live" hidden>
+      <div class="page-toolbar">
+        <div class="toolbar-group">
+          <span class="toolbar-label">Session</span>
             <label>Rate (Hz)
               <select id="log-rate"><option value="5">5</option><option value="10" selected>10</option><option value="20">20</option></select>
             </label>
@@ -185,24 +188,25 @@
             <button id="btn-log-export" class="btn" type="button">Export CSV</button>
             <button id="btn-log-import" class="btn" type="button">Import CSV</button>
             <span id="log-status" class="status-ok">Idle</span>
-          </div>
-          <div id="log-session-meta" class="muted mono">—</div>
         </div>
+        <div class="toolbar-status" id="log-session-meta">—</div>
+      </div>
+      <div class="view-body">
         <div class="live-data-grid">
-          <div class="panel">
-            <strong>Channels</strong>
+          <div class="panel quiet-panel">
+            <div class="panel-header"><span class="panel-title">Channels</span></div>
             <div id="log-channels" class="channel-list"></div>
             <button id="btn-log-apply-ch" class="btn btn-sm full" type="button">Apply Channel Selection</button>
           </div>
           <div>
-            <div class="panel">
-              <strong>Live KPIs</strong>
+            <div class="panel quiet-panel">
+              <div class="panel-header"><span class="panel-title">Live values</span></div>
               <div id="log-kpis" class="kpi-inline"></div>
               <canvas id="log-spark" width="720" height="160" aria-label="sample sparkline"></canvas>
               <p class="muted" id="log-spark-hint">Chart stays empty until a live or imported sample exists.</p>
             </div>
-            <div class="panel">
-              <strong>Recent Samples</strong>
+            <div class="panel quiet-panel">
+              <div class="panel-header"><span class="panel-title">Recent samples</span></div>
               <table id="log-table" class="data-table"><thead id="log-thead"></thead><tbody id="log-tbody"></tbody></table>
             </div>
           </div>
@@ -210,18 +214,19 @@
       </div>
     </div>
 
-    <div id="view-diagnostics" class="content content--hidden" data-view-panel="diagnostics" hidden>
-      <div class="view-body dtc-panel">
-        <div class="dtc-toolbar">
-          <div class="row">
-            <button id="btn-read-dtcs" class="btn btn-primary" type="button">Read DTCs</button>
-            <button id="btn-read-freeze" class="btn" type="button">Read Freeze Frame</button>
-            <button id="btn-clear-dtcs" class="btn btn-danger" type="button">Clear DTCs</button>
-          </div>
-          <div id="dtc-status">Idle</div>
+    <div id="view-diagnostics" class="content content--hidden view-page" data-view-panel="diagnostics" hidden>
+      <div class="page-toolbar">
+        <div class="toolbar-group">
+          <span class="toolbar-label">DTCs</span>
+          <button id="btn-read-dtcs" class="btn btn-primary" type="button">Read DTCs</button>
+          <button id="btn-read-freeze" class="btn" type="button">Freeze frame</button>
+          <button id="btn-clear-dtcs" class="btn btn-danger" type="button">Clear DTCs</button>
         </div>
-        <div class="panel">
-          <strong>Codes</strong>
+        <div class="toolbar-status" id="dtc-status">Idle</div>
+      </div>
+      <div class="view-body dtc-panel">
+        <div class="panel quiet-panel">
+          <div class="panel-header"><span class="panel-title">Codes</span></div>
           <div id="dtc-summary">No read yet.</div>
           <table id="dtc-table" class="data-table">
             <thead><tr><th>Code</th><th>Type</th><th>Description</th></tr></thead>
@@ -232,60 +237,115 @@
       </div>
     </div>
 
-    <div id="view-tables" class="content content--hidden" data-view-panel="tables" hidden>
-      <div class="toolbar tuning-toolbar">
-        <button id="btn-load-bin" class="btn btn-primary" type="button">Load .BIN</button>
-        <button id="btn-load-xdf" class="btn" type="button">Load XDF / XML</button>
-        <button id="btn-load-a2l" class="btn" type="button">Load A2L</button>
-        <span id="tables-status" class="tool-status">Offline: Load a BIN, optional XDF/A2L, edit maps, Save. No ECU required.</span>
-        <button id="btn-identify-bin" class="btn" type="button">Identify BIN</button>
-        <button id="btn-compare-bins" class="btn" type="button">Compare Another BIN</button>
-        <button id="btn-map-from-log" class="btn" type="button">Map from Log</button>
-        <button id="btn-export-workspace" class="btn" type="button">Export Workspace</button>
-        <button id="btn-import-workspace" class="btn" type="button">Import Workspace</button>
-        <button id="btn-scan-cs" class="btn" type="button">Scan CS windows</button>
-        <button id="btn-validate-cs" class="btn" type="button">Validate checksums</button>
-        <button id="btn-correct-cs" class="btn" type="button">Correct checksums</button>
-        <button id="btn-save-patched" class="btn" type="button" disabled>Save Patched BIN</button>
-        <label>off <input id="hex-poke-off" placeholder="4000"></label>
-        <label>hex <input id="hex-poke-val" placeholder="AA BB"></label>
-        <button id="btn-hex-poke" class="btn" type="button">Poke bytes</button>
-        <label>* <input id="tbl-scale" placeholder="1.05"></label>
-        <button id="btn-tbl-scale" class="btn" type="button">Scale</button>
-        <label>+ <input id="tbl-offset" placeholder="1.0"></label>
-        <button id="btn-tbl-offset" class="btn" type="button">Offset</button>
-        <button id="btn-tbl-smooth" class="btn" type="button">Smooth</button>
-        <button id="btn-tbl-stft" class="btn" type="button">STFT preview</button>
+    <div id="view-tables" class="content content--hidden view-page" data-view-panel="tables" hidden>
+      <div class="page-toolbar">
+        <div class="toolbar-group">
+          <span class="toolbar-label">File</span>
+          <button id="btn-load-bin" class="btn btn-primary" type="button">Load BIN</button>
+          <button id="btn-load-xdf" class="btn" type="button">Load XDF</button>
+          <button id="btn-load-a2l" class="btn" type="button">Load A2L</button>
+          <button id="btn-save-patched" class="btn btn-primary" type="button" disabled>Save BIN</button>
+        </div>
+        <div class="toolbar-sep"></div>
+        <div class="toolbar-group">
+          <span class="toolbar-label">BIN</span>
+          <button id="btn-identify-bin" class="btn" type="button">Identify</button>
+          <button id="btn-compare-bins" class="btn" type="button">Compare</button>
+          <button id="btn-validate-cs" class="btn" type="button">Validate CS</button>
+          <button id="btn-correct-cs" class="btn" type="button">Correct CS</button>
+          <button id="btn-scan-cs" class="btn" type="button">Scan CS</button>
+        </div>
+        <div class="toolbar-sep"></div>
+        <div class="toolbar-group">
+          <span class="toolbar-label">Session</span>
+          <button id="btn-export-workspace" class="btn" type="button">Export</button>
+          <button id="btn-import-workspace" class="btn" type="button">Import</button>
+          <button id="btn-map-from-log" class="btn" type="button">Map from log</button>
+        </div>
+        <div class="toolbar-status" id="tables-status">Load a BIN to locate maps. No ECU required.</div>
+      </div>
+      <div class="bin-strip">
+        <span class="bin-chip" id="bin-chip">No BIN loaded</span>
+        <span class="bin-chip muted" id="bin-ident-chip">Family unresolved</span>
       </div>
       <div class="tables-layout">
-        <div class="tables-list-panel panel">
-          <input id="table-search" type="search" placeholder="Search tables…" class="table-search">
+        <aside class="tables-list-panel panel quiet-panel">
+          <div class="panel-header">
+            <span class="panel-title">Parameters</span>
+            <span class="count-pill" id="table-count">0</span>
+          </div>
+          <input id="table-search" type="search" placeholder="Search name, category…" class="table-search" autocomplete="off">
           <div class="table-filters">
             <button class="chip-filter active" data-filter="all" type="button">All</button>
-            <button class="chip-filter" data-filter="1d" type="button">1D</button>
+            <button class="chip-filter" data-filter="1d" type="button">Scalar</button>
             <button class="chip-filter" data-filter="2d" type="button">2D</button>
             <button class="chip-filter" data-filter="3d" type="button">3D</button>
           </div>
-          <div id="table-cats" class="table-filters"></div>
+          <label class="sr-only" for="table-cat-select">Category</label>
+          <select id="table-cat-select" class="table-cat-select">
+            <option value="all">All categories</option>
+          </select>
+          <div id="table-cats" class="table-filters table-cats" hidden></div>
           <div id="tables-list" class="tables-list"></div>
-        </div>
-        <div class="tables-editor-panel panel">
-          <div class="rw-tab-bar" id="editor-tabs">
-            <button class="editor-tab rw-tab active" data-tab="grid" type="button">Grid</button>
-            <button class="editor-tab rw-tab" data-tab="3d" type="button">Heatmap</button>
-            <button class="editor-tab rw-tab" data-tab="hex" type="button">Hex Dump</button>
+        </aside>
+        <section class="tables-editor-panel panel quiet-panel">
+          <div class="editor-chrome">
+            <div class="editor-heading">
+              <h2 id="editor-title">Select a parameter</h2>
+              <p id="editor-sub" class="muted">Load a BIN, then choose a table from the list.</p>
+            </div>
+            <div class="rw-tab-bar" id="editor-tabs">
+              <button class="editor-tab rw-tab active" data-tab="grid" type="button">Grid</button>
+              <button class="editor-tab rw-tab" data-tab="3d" type="button">Heatmap</button>
+              <button class="editor-tab rw-tab" data-tab="hex" type="button">Hex</button>
+            </div>
           </div>
           <div id="editor-content" class="table-visual-area"></div>
-        </div>
-        <div class="tables-side-panel panel">
-          <div id="side-meta"></div>
-          <div id="side-advice"></div>
-          <pre id="side-checksum" class="mono-block">Select a table for details.</pre>
-        </div>
+          <div class="editor-tools">
+            <div class="toolbar-group">
+              <span class="toolbar-label">Edit</span>
+              <label class="tool-field">× <input id="tbl-scale" placeholder="1.05" inputmode="decimal"></label>
+              <button id="btn-tbl-scale" class="btn" type="button">Scale</button>
+              <label class="tool-field">+ <input id="tbl-offset" placeholder="1.0" inputmode="decimal"></label>
+              <button id="btn-tbl-offset" class="btn" type="button">Offset</button>
+              <button id="btn-tbl-smooth" class="btn" type="button">Smooth</button>
+              <button id="btn-tbl-stft" class="btn" type="button">STFT preview</button>
+            </div>
+            <div class="toolbar-group">
+              <span class="toolbar-label">Hex</span>
+              <label class="tool-field">off <input id="hex-poke-off" placeholder="4000"></label>
+              <label class="tool-field">bytes <input id="hex-poke-val" placeholder="AA BB"></label>
+              <button id="btn-hex-poke" class="btn" type="button">Poke</button>
+            </div>
+          </div>
+        </section>
+        <aside class="tables-side-panel panel quiet-panel">
+          <div class="panel-header"><span class="panel-title">Details</span></div>
+          <div id="side-meta" class="side-meta"></div>
+          <div id="side-advice" class="side-advice muted"></div>
+          <div class="panel-header"><span class="panel-title">Checksum</span></div>
+          <pre id="side-checksum" class="mono-block">Validate or correct after edits.</pre>
+        </aside>
       </div>
     </div>
 
-    <div id="view-flash" class="content content--hidden" data-view-panel="flash" hidden>
+    <div id="view-flash" class="content content--hidden view-page" data-view-panel="flash" hidden>
+      <div class="page-toolbar">
+        <div class="toolbar-group">
+          <span class="toolbar-label">Prepare</span>
+          <button id="btn-check-voltage" class="btn" type="button">Battery</button>
+          <button id="btn-unlock-l1" class="btn" type="button">Unlock L1</button>
+          <button id="btn-unlock-l2" class="btn" type="button">Unlock L2</button>
+          <button id="btn-bosch-unlock" class="btn" type="button">Bosch UDS</button>
+        </div>
+        <div class="toolbar-sep"></div>
+        <div class="toolbar-group">
+          <span class="toolbar-label">Verify</span>
+          <button id="btn-compare-bin" class="btn" type="button">BIN vs ECU</button>
+          <button id="btn-verify-write" class="btn" type="button">Verify write</button>
+          <button id="btn-show-risk" class="btn btn-danger" type="button">Guided flash…</button>
+        </div>
+      </div>
       <div class="view-body">
         <div class="pipeline-steps" id="flash-steps">
           <div class="step" data-step="identify"><span class="step-num">1</span> Identify <span class="step-status" id="st-identify">pending</span></div>
@@ -294,15 +354,6 @@
           <div class="step" data-step="unlock"><span class="step-num">4</span> Unlock <span class="step-status" id="st-unlock">pending</span></div>
           <div class="step" data-step="write"><span class="step-num">5</span> Write <span class="step-status" id="st-write">pending</span></div>
           <div class="step" data-step="verify"><span class="step-num">6</span> Verify <span class="step-status" id="st-verify">pending</span></div>
-        </div>
-        <div class="row wrap">
-          <button id="btn-show-risk" class="btn btn-danger" type="button">Show risk confirmation</button>
-          <button id="btn-compare-bin" class="btn" type="button">Compare loaded BIN to ECU</button>
-          <button id="btn-verify-write" class="btn" type="button">Verify after write</button>
-          <button id="btn-check-voltage" class="btn" type="button">Check battery voltage</button>
-          <button id="btn-unlock-l1" class="btn" type="button">Unlock L1</button>
-          <button id="btn-unlock-l2" class="btn" type="button">Unlock L2</button>
-          <button id="btn-bosch-unlock" class="btn" type="button">Bosch UDS unlock</button>
         </div>
         <div class="progress-track"><div id="flash-bar" class="progress-fill"></div></div>
         <div>Progress: <span id="flash-progress">0%</span></div>
@@ -319,16 +370,21 @@
       </div>
     </div>
 
-    <div id="view-scripts" class="content content--hidden" data-view-panel="scripts" hidden>
+    <div id="view-scripts" class="content content--hidden view-page" data-view-panel="scripts" hidden>
+      <div class="page-toolbar">
+        <div class="toolbar-group">
+          <span class="toolbar-label">Bench</span>
+          <button id="btn-refresh-scripts" class="btn btn-primary" type="button">Refresh helpers</button>
+        </div>
+        <div class="toolbar-status">CLI helpers only — not an embedded interpreter.</div>
+      </div>
       <div class="view-body">
-        <p class="muted">Bench helpers, not an embedded interpreter. Live checksum / identify / map-from-log lives in the Rust backend.</p>
-        <button id="btn-refresh-scripts" class="btn" type="button">Refresh Script Helpers</button>
         <div id="custom-scripts-list" class="script-list"></div>
       </div>
     </div>
 
     <footer class="status-bar">
-      <div class="status-left" id="status-left">TuneItVerse 3.15.0</div>
+      <div class="status-left" id="status-left">TuneItVerse 3.15.1</div>
       <div class="status-center" id="status-center">No invented live values</div>
       <div class="status-right" id="status-right">Desktop app required</div>
     </footer>
