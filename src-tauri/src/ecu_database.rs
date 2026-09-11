@@ -132,8 +132,53 @@ fn tables_from_addrs(entry: &EcuDbEntry, addrs: &serde_json::Value, tables: &mut
                 category: Some((*cat).into()),
                 row_major: true,
                 msb: true,
+                ..Default::default()
             });
         }
+    }
+}
+
+#[derive(Serialize)]
+pub struct AutoTablesResult {
+    pub tables: Vec<TableDef>,
+    pub located: usize,
+    pub missing: usize,
+    pub pack: String,
+    pub note: String,
+}
+
+pub fn tables_for_bin(data: &[u8]) -> AutoTablesResult {
+    if crate::cs_guard::honda_blocks_p01_corrector(data) {
+        return AutoTablesResult {
+            tables: vec![],
+            located: 0,
+            missing: 0,
+            pack: String::new(),
+            note: "Honda OS string. P01 TableSeek pack is not applied.".into(),
+        };
+    }
+    if crate::cs_guard::looks_like_gm_p01(data) {
+        let (tables, located, missing) = crate::tableseek::locate_p01_tables(data);
+        return AutoTablesResult {
+            note: format!("P01/P59 TableSeek: {} located, {} not in this dump.", located, missing),
+            pack: "tableseek-p01-p59".into(),
+            tables,
+            located,
+            missing,
+        };
+    }
+    let size_tables = get_tables_for_bin_size(data.len());
+    let n = size_tables.len();
+    AutoTablesResult {
+        note: if n == 0 {
+            "No catalog pack for this size. Load an XDF/A2L, or confirm the dump has a GM P01 OS string.".into()
+        } else {
+            format!("{} catalog tables by BIN size (not P01 TableSeek).", n)
+        },
+        pack: "size-catalog".into(),
+        located: n,
+        missing: 0,
+        tables: size_tables,
     }
 }
 
@@ -152,35 +197,6 @@ pub fn get_tables_for_bin_size(size: usize) -> Vec<TableDef> {
         return tables;
     }
 
-    if size == 524288 || size == 131072 {
-        return vec![
-            TableDef {
-                id: "ve-main".into(),
-                name: "Main VE".into(),
-                description: "Volumetric efficiency main map - LS1 P01".into(),
-                rows: 16, cols: 16, addr: "0x4000".into(), data_type: "UBYTE".into(),
-                math: "x*0.5".into(), units: "%".into(), category: Some("Fuel".into()),
-                row_major: true, msb: true,
-            },
-            TableDef {
-                id: "spark-advance".into(),
-                name: "Spark Advance".into(),
-                description: "Base spark timing map".into(),
-                rows: 12, cols: 14, addr: "0x2000".into(), data_type: "UBYTE".into(),
-                math: "(x-40)/2".into(), units: "deg".into(), category: Some("Ignition".into()),
-                row_major: true, msb: true,
-            },
-            TableDef {
-                id: "idle-rpm".into(),
-                name: "Idle Target RPM".into(),
-                description: "Target idle speed vs temp".into(),
-                rows: 1, cols: 8, addr: "0x1A00".into(), data_type: "UWORD".into(),
-                math: "x".into(), units: "RPM".into(), category: Some("Idle".into()),
-                row_major: true, msb: true,
-            },
-        ];
-    }
-
     if size == 1048576 {
         return vec![
             TableDef {
@@ -189,7 +205,7 @@ pub fn get_tables_for_bin_size(size: usize) -> Vec<TableDef> {
                 description: "ME7 community start hint — confirm on your dump".into(),
                 rows: 16, cols: 16, addr: "0x1C000".into(), data_type: "UWORD".into(),
                 math: "x*0.1".into(), units: "deg".into(), category: Some("Ignition".into()),
-                row_major: true, msb: true,
+                row_major: true, msb: true, ..Default::default()
             },
             TableDef {
                 id: "fuel-ve".into(),
@@ -197,7 +213,7 @@ pub fn get_tables_for_bin_size(size: usize) -> Vec<TableDef> {
                 description: "ME7 community start hint — confirm on your dump".into(),
                 rows: 16, cols: 16, addr: "0x1A000".into(), data_type: "UWORD".into(),
                 math: "x*0.01".into(), units: "%".into(), category: Some("Fuel".into()),
-                row_major: true, msb: true,
+                row_major: true, msb: true, ..Default::default()
             },
         ];
     }
@@ -210,7 +226,7 @@ pub fn get_tables_for_bin_size(size: usize) -> Vec<TableDef> {
                 description: "Driver requested torque".into(),
                 rows: 16, cols: 16, addr: "0x80000".into(), data_type: "UWORD".into(),
                 math: "x*0.1".into(), units: "Nm".into(), category: Some("Torque".into()),
-                row_major: true, msb: true,
+                row_major: true, msb: true, ..Default::default()
             },
             TableDef {
                 id: "inj-quantity".into(),
@@ -218,7 +234,7 @@ pub fn get_tables_for_bin_size(size: usize) -> Vec<TableDef> {
                 description: "IQ main map".into(),
                 rows: 16, cols: 16, addr: "0x82000".into(), data_type: "UWORD".into(),
                 math: "x*0.01".into(), units: "mm3".into(), category: Some("Fuel".into()),
-                row_major: true, msb: true,
+                row_major: true, msb: true, ..Default::default()
             },
         ];
     }
@@ -237,5 +253,19 @@ mod tests {
         assert!(fams.iter().any(|f| f == "SIEMENS_SID803"));
         assert!(fams.iter().any(|f| f == "HONDA_KEIHIN"));
         assert!(get_ecu_by_bin_size(1048576).is_some());
+    }
+    #[test]
+    fn honda_512k_does_not_get_p01_pack() {
+        let mut img = vec![0u8; 524288];
+        img[0x40..0x48].copy_from_slice(b"37820-PR");
+        let r = tables_for_bin(&img);
+        assert!(r.tables.is_empty());
+        assert!(r.note.contains("Honda"));
+    }
+    #[test]
+    fn blank_512k_is_not_fake_ve_spark() {
+        let img = vec![0u8; 524288];
+        let r = tables_for_bin(&img);
+        assert!(!r.tables.iter().any(|t| t.id == "ve-main"));
     }
 }

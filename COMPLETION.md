@@ -1,3 +1,9 @@
+# TuneItVerse v3.15.0 — P01 TableSeek pack (~1598 Universal Patcher parameters)
+
+Loading a Holden P01 BIN used to show three stub maps. The real pack is `reference/tableseek-p01-p59.xml` (1598 TableSeek entries). v3.15.0 embeds that pack and locates tables by SearchStr (`@` = address bytes) in the loaded dump. Hits only — no invented addresses. Honda 512 KB dumps are not given the P01 pack. Tables UI: search + category chips.
+
+---
+
 # TuneItVerse v3.14.0 — live flash progress + P59/P01 corrector guard (2026-09-11)
 
 v3.13.0 wired catalog/checksum/voltage UI. This pass closes three operational holes that were still live on main:

@@ -23,13 +23,21 @@ pub struct TableDef {
     pub description: String,
     pub rows: usize,
     pub cols: usize,
-    /// Cal-relative address (hex string or decimal). Frontend/Rust add CAL_BASE.
+    /// Hex address. If `file_offset` is true, this is an index into the BIN file.
     pub addr: String,
     pub data_type: String, // UBYTE / UWORD / SWORD / SBYTE
     pub math: String,
     pub units: String,
     pub row_major: bool,
     pub msb: bool,
+    #[serde(default)]
+    pub row_headers: Option<String>,
+    #[serde(default)]
+    pub col_headers: Option<String>,
+    #[serde(default)]
+    pub decimals: u8,
+    #[serde(default)]
+    pub file_offset: bool,
 }
 
 /// Lightweight result for a single table's physical values (already math-applied).
@@ -111,6 +119,7 @@ pub fn parse_table_definitions(xml: &str) -> Vec<TableDef> {
                 units: t.units,
                 row_major: true,
                 msb: true,
+                ..Default::default()
             });
         }
     }
@@ -154,6 +163,7 @@ pub fn parse_table_definitions(xml: &str) -> Vec<TableDef> {
                             units: "".into(),
                             row_major: true,
                             msb: true,
+                            ..Default::default()
                         });
                     }
                     in_seek = false;
@@ -195,9 +205,8 @@ pub fn cal_base_for_bytes(len: usize) -> usize {
 /// Extract physical values for one table from the BIN bytes using *exact* P01 addressing.
 /// This is the core of "real byte extraction from loaded BINs using exact P01 offsets".
 pub fn extract_table(bin: &[u8], def: &TableDef) -> ExtractedTable {
-    let base = cal_base_for_bytes(bin.len());
     let addr = parse_addr(&def.addr);
-    let off = base + addr;
+    let off = table_file_offset(bin.len(), addr, def.file_offset);
     let rows = def.rows.max(1);
     let cols = def.cols.max(1);
     let is_word = def.data_type.to_uppercase().contains("WORD");
@@ -243,9 +252,8 @@ pub fn extract_table(bin: &[u8], def: &TableDef) -> ExtractedTable {
 /// Patch new physical values back into a copy of the BIN at the exact address.
 /// Returns the patched bytes (caller can then correct checksums).
 pub fn patch_table(mut bin: Vec<u8>, def: &TableDef, new_values: &[Vec<f64>]) -> Vec<u8> {
-    let base = cal_base_for_bytes(bin.len());
     let addr = parse_addr(&def.addr);
-    let mut off = base + addr;
+    let mut off = table_file_offset(bin.len(), addr, def.file_offset);
     let is_word = def.data_type.to_uppercase().contains("WORD");
     let _esz = if is_word { 2 } else { 1 };
 
@@ -274,18 +282,32 @@ pub fn patch_table(mut bin: Vec<u8>, def: &TableDef, new_values: &[Vec<f64>]) ->
     bin
 }
 
-fn parse_addr(a: &str) -> usize {
+pub fn parse_addr(a: &str) -> usize {
     let t = a.trim().trim_start_matches("0x").trim_start_matches("0X");
-    usize::from_str_radix(t, 16).unwrap_or(0x8000)
+    usize::from_str_radix(t, 16).unwrap_or(0)
+}
+
+/// TableSeek addresses are file offsets. Legacy catalog tables are cal-relative (P01 +0x20000).
+pub fn table_file_offset(bin_len: usize, addr: usize, file_offset: bool) -> usize {
+    if file_offset {
+        return addr;
+    }
+    let base = cal_base_for_bytes(bin_len);
+    if base.saturating_add(addr) < bin_len {
+        base + addr
+    } else {
+        addr
+    }
 }
 
 fn apply_math(raw: f64, expr: &str) -> f64 {
-    let e = expr.trim();
+    let e = expr.trim().replace('x', "X");
     if e == "X" || e.is_empty() { return raw; }
     if let Some(k) = e.strip_prefix("X*") { if let Ok(f) = k.parse::<f64>() { return raw * f; } }
     if let Some(k) = e.strip_prefix("X/") { if let Ok(f) = k.parse::<f64>() { return raw / f; } }
+    if let Some(k) = e.strip_prefix("X+") { if let Ok(f) = k.parse::<f64>() { return raw + f; } }
+    if let Some(k) = e.strip_prefix("X-") { if let Ok(f) = k.parse::<f64>() { return raw - f; } }
     if e.contains("(X-") && e.contains(")/") {
-        // (X-120)/2
         if let Some(rest) = e.strip_prefix("(X-") {
             if let Some(end) = rest.find(")/") {
                 let c = rest[..end].parse::<f64>().unwrap_or(0.0);
@@ -293,14 +315,24 @@ fn apply_math(raw: f64, expr: &str) -> f64 {
             }
         }
     }
-    raw // fallback (extend as needed)
+    if e.contains("(X+") && e.contains(")/") {
+        if let Some(rest) = e.strip_prefix("(X+") {
+            if let Some(end) = rest.find(")/") {
+                let c = rest[..end].parse::<f64>().unwrap_or(0.0);
+                if let Ok(s) = rest[end+2..].parse::<f64>() { return (raw + c) / s; }
+            }
+        }
+    }
+    raw
 }
 
 fn inverse_math(phys: f64, expr: &str) -> f64 {
-    let e = expr.trim();
+    let e = expr.trim().replace('x', "X");
     if e == "X" || e.is_empty() { return phys; }
-    if let Some(k) = e.strip_prefix("X*") { if let Ok(f) = k.parse::<f64>() { return phys / f; } }
+    if let Some(k) = e.strip_prefix("X*") { if let Ok(f) = k.parse::<f64>() { return if f != 0.0 { phys / f } else { phys }; } }
     if let Some(k) = e.strip_prefix("X/") { if let Ok(f) = k.parse::<f64>() { return phys * f; } }
+    if let Some(k) = e.strip_prefix("X+") { if let Ok(f) = k.parse::<f64>() { return phys - f; } }
+    if let Some(k) = e.strip_prefix("X-") { if let Ok(f) = k.parse::<f64>() { return phys + f; } }
     if e.contains("(X-") && e.contains(")/") {
         if let Some(rest) = e.strip_prefix("(X-") {
             if let Some(end) = rest.find(")/") {
@@ -325,17 +357,17 @@ pub fn extract_table_from_bin(bin_bytes: Vec<u8>, table: TableDef) -> Result<Ext
 
 #[tauri::command]
 pub fn patch_table_into_bin(req: PatchRequest) -> Result<PatchResult, String> {
-    let base = cal_base_for_bytes(req.bin_bytes.len());
     let addr = parse_addr(&req.table.addr);
+    let off = table_file_offset(req.bin_bytes.len(), addr, req.table.file_offset);
     let is_word = req.table.data_type.to_uppercase().contains("WORD");
     let esz = if is_word { 2 } else { 1 };
     let rows = req.new_values.len();
     let cols = req.new_values.first().map(|r| r.len()).unwrap_or(0);
-    let need = base + addr + rows * cols * esz;
+    let need = off + rows * cols * esz;
     if need > req.bin_bytes.len() {
         return Err(format!(
-            "Refuse patch: table '{}' needs offset 0x{:X}..0x{:X} but BIN is only {} bytes (addr {} + cal base 0x{:X}). Wrong definition or wrong image size.",
-            req.table.name, base + addr, need, req.bin_bytes.len(), req.table.addr, base
+            "Refuse patch: table '{}' needs offset 0x{:X}..0x{:X} but BIN is only {} bytes (addr {}).",
+            req.table.name, off, need, req.bin_bytes.len(), req.table.addr
         ));
     }
     let patched = patch_table(req.bin_bytes, &req.table, &req.new_values);

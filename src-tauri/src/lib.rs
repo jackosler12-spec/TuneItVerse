@@ -1,4 +1,4 @@
-// TuneItVerse lib.rs — Tauri entry + command surface (v3.13.0)
+// TuneItVerse lib.rs — Tauri entry + command surface (v3.14.0)
 #![allow(unused_imports, dead_code, non_snake_case)]
 
 mod a2l;
@@ -19,6 +19,7 @@ mod logging;
 mod pid_decode;
 mod security;
 mod table_tools;
+mod tableseek;
 mod uds;
 mod vpw;
 mod xdf;
@@ -331,7 +332,9 @@ fn compute_seed_key(seed_hex: String, family: Option<String>, level: Option<Stri
 #[tauri::command] fn validate_bin_checksums_summary_cmd(data: Vec<u8>) -> Result<String, String> { checksum::validate_bin_checksums_summary(&data) }
 #[tauri::command] fn validate_checksums_cmd(data: Vec<u8>) -> Result<String, String> { Ok(serde_json::to_string_pretty(&checksum::validate_checksums(&data)?).unwrap_or_else(|_| "{}".into())) }
 #[tauri::command] fn correct_bin_checksums(data: Vec<u8>) -> Result<Vec<u8>, String> { Ok(checksum::correct_checksums(&data)?.data) }
-#[tauri::command] fn auto_load_tables_for_bin(bin_bytes: Vec<u8>) -> Result<String, String> { Ok(serde_json::to_string(&ecu_database::get_tables_for_bin_size(bin_bytes.len())).unwrap_or_else(|_| "[]".into())) }
+#[tauri::command] fn auto_load_tables_for_bin(bin_bytes: Vec<u8>) -> Result<String, String> {
+    Ok(serde_json::to_string(&ecu_database::tables_for_bin(&bin_bytes)).unwrap_or_else(|_| "{}".into()))
+}
 #[tauri::command] fn get_tuning_advice(table_id: String, sample_value: f64, ecu_family: String) -> Result<String, String> {
     let log = crate::v29_tools::map_from_log_cmd().ok();
     Ok(format!(

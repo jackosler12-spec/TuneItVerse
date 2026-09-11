@@ -26,15 +26,13 @@ python3 python/ecu_scripting.py seedkey P01_0411 1234 1
 python3 python/ecu_scripting.py diff stock.bin tuned.bin
 ```
 
-## Current status (v3.14.0)
+## Current status (v3.15.0)
 
-See [COMPLETION.md](COMPLETION.md).
+See [COMPLETION.md](COMPLETION.md). Holden/GM P01 BINs auto-load the Universal Patcher TableSeek pack (~1598 parameters located in the dump). Offline BIN/XDF edit and save.
 
-Offline (no ECU): Load BIN, Load XDF/A2L, identify family, validate/correct checksums (P01 / EDC16 only), edit maps, Save BIN.
+Live: Mode 01 / VIN / DTCs on ELM ASCII for CAN/UDS; raw VPW only when you pick VPW. J2534 shows Connected when PassThru is open.
 
-Live: Mode 01 / VIN / DTCs on ELM ASCII for CAN/UDS; raw VPW only when you pick VPW. J2534 shows Connected when PassThru is open. Dashboard lists the embedded ECU catalog.
-
-Flash: identify → voltage gate → backup → unlock → write. Mid-transfer voltage abort on VPW chunks and J2534 UDS downloads. Live `flash-progress` events drive the UI bar. Honda and unverified P59 writes stay blocked.
+Flash: identify → voltage gate → backup → unlock → write. Honda and unverified P59 writes stay blocked.
 
 Build your own. No bullshit prices.
 

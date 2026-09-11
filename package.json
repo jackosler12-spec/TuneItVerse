@@ -1,8 +1,8 @@
 {
   "name": "tuneitverse",
   "private": true,
-  "version": "3.14.0",
-  "description": "TuneItVerse - open ECU tuning platform (Tauri + Rust). v3.14.0: live flash progress, P59/P01 checksum guard.",
+  "version": "3.15.0",
+  "description": "TuneItVerse - open ECU tuning platform. v3.15.0: P01 TableSeek pack (~1598 UP parameters).",
   "type": "module",
   "scripts": {
     "tauri": "tauri",

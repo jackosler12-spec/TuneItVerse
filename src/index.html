@@ -2,14 +2,14 @@
 <html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8">
-  <title>TuneItVerse v3.13.0</title>
+  <title>TuneItVerse v3.14.0</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-logo">
       <div class="sidebar-logo-mark">TV</div>
-      <div class="sidebar-logo-text">TuneItVerse <span class="version">v3.13.0</span></div>
+      <div class="sidebar-logo-text">TuneItVerse <span class="version">v3.14.0</span></div>
     </div>
     <nav class="sidebar-nav" id="sidebar-nav">
       <button type="button" class="nav-item active" data-view="dashboard">Dashboard</button>
@@ -259,12 +259,14 @@
       </div>
       <div class="tables-layout">
         <div class="tables-list-panel panel">
+          <input id="table-search" type="search" placeholder="Search tables…" class="table-search">
           <div class="table-filters">
             <button class="chip-filter active" data-filter="all" type="button">All</button>
             <button class="chip-filter" data-filter="1d" type="button">1D</button>
             <button class="chip-filter" data-filter="2d" type="button">2D</button>
             <button class="chip-filter" data-filter="3d" type="button">3D</button>
           </div>
+          <div id="table-cats" class="table-filters"></div>
           <div id="tables-list" class="tables-list"></div>
         </div>
         <div class="tables-editor-panel panel">
@@ -326,7 +328,7 @@
     </div>
 
     <footer class="status-bar">
-      <div class="status-left" id="status-left">TuneItVerse 3.13.0</div>
+      <div class="status-left" id="status-left">TuneItVerse 3.14.0</div>
       <div class="status-center" id="status-center">No invented live values</div>
       <div class="status-right" id="status-right">Desktop app required</div>
     </footer>

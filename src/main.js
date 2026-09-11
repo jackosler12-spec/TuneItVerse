@@ -704,10 +704,17 @@ async function ingestBinBytes(bytes, label) {
   enableSave(true);
   try {
     const raw = await invokeCmd('auto_load_tables_for_bin', { bin_bytes: binBytes(currentBin) });
-    const list = parseMaybe(raw);
-    currentTables = Array.isArray(list) ? list : [];
+    const parsed = parseMaybe(raw);
+    if (Array.isArray(parsed)) {
+      currentTables = parsed;
+      setTablesStatus('Loaded ' + (label || 'BIN') + ' (' + currentBin.length + ' bytes). Tables: ' + currentTables.length);
+    } else {
+      currentTables = (parsed && parsed.tables) || [];
+      const note = (parsed && parsed.note) ? parsed.note : '';
+      setTablesStatus('Loaded ' + (label || 'BIN') + ' (' + currentBin.length + ' bytes). ' + note);
+    }
+    rebuildCategoryChips();
     renderTableList();
-    setTablesStatus('Loaded ' + (label || 'BIN') + ' (' + currentBin.length + ' bytes). Catalog tables: ' + currentTables.length);
   } catch (e) {
     currentTables = [];
     renderTableList();
@@ -741,6 +748,7 @@ async function applyDefinitionText(text, source) {
     return;
   }
   currentTables = list;
+  rebuildCategoryChips();
   renderTableList();
   setTablesStatus((source || 'Definitions') + ' loaded: ' + list.length + ' tables. Select one to extract from the BIN.');
 }
@@ -775,21 +783,66 @@ async function loadA2l() {
   }
 }
 
+let tableFilter = 'all';
+let tableCat = 'all';
+let tableSearch = '';
+
+function rebuildCategoryChips() {
+  const host = document.getElementById('table-cats');
+  if (!host) return;
+  const cats = [];
+  currentTables.forEach((t) => {
+    const c = (t.category || '').trim();
+    if (c && cats.indexOf(c) < 0) cats.push(c);
+  });
+  cats.sort();
+  host.innerHTML = '<button class="chip-filter' + (tableCat === 'all' ? ' active' : '') + '" data-cat="all" type="button">All cats</button>' +
+    cats.slice(0, 48).map((c) => '<button class="chip-filter' + (tableCat === c ? ' active' : '') + '" data-cat="' + c.replace(/"/g, '') + '" type="button">' + c + '</button>').join('');
+  host.querySelectorAll('.chip-filter').forEach((ch) => {
+    ch.onclick = () => {
+      tableCat = ch.getAttribute('data-cat') || 'all';
+      rebuildCategoryChips();
+      renderTableList();
+    };
+  });
+}
+
+function tablePassesFilter(t) {
+  const q = tableSearch.trim().toLowerCase();
+  if (q && !(t.name || '').toLowerCase().includes(q) && !(t.id || '').toLowerCase().includes(q) && !(t.category || '').toLowerCase().includes(q)) return false;
+  if (tableCat !== 'all' && (t.category || '') !== tableCat) return false;
+  const r = t.rows || 1, c = t.cols || 1;
+  const is1d = r === 1 || c === 1;
+  const is3d = r > 1 && c > 1 && r * c > 64;
+  if (tableFilter === '1d') return is1d;
+  if (tableFilter === '2d') return !is1d && !is3d;
+  if (tableFilter === '3d') return is3d;
+  return true;
+}
+
 function renderTableList() {
   const list = document.getElementById('tables-list');
   if (!list) return;
   list.innerHTML = '';
   if (!currentTables.length) {
-    list.innerHTML = '<div class="muted" style="padding:12px;">No tables. Load a BIN with catalog maps, or an XDF/A2L.</div>';
+    list.innerHTML = '<div class="muted" style="padding:12px;">No tables located. Load a P01 BIN (GM OS string) or an XDF/A2L.</div>';
     return;
   }
+  let shown = 0;
   currentTables.forEach((t, idx) => {
+    if (!tablePassesFilter(t)) return;
+    shown += 1;
     const div = document.createElement('div');
     div.className = 'table-item';
-    div.innerHTML = '<strong>' + (t.name || t.id) + '</strong><br><span class="muted">' + (t.rows || 1) + '×' + (t.cols || 1) + ' @ ' + (t.addr || '?') + ' • ' + (t.units || '') + '</span>';
+    div.innerHTML = '<strong>' + (t.name || t.id) + '</strong><br><span class="muted">' +
+      (t.category ? t.category + ' · ' : '') + (t.rows || 1) + '×' + (t.cols || 1) + ' @ ' + (t.addr || '?') +
+      (t.units ? ' · ' + t.units : '') + '</span>';
     div.onclick = () => selectTable(idx);
     list.appendChild(div);
   });
+  if (!shown) {
+    list.innerHTML = '<div class="muted" style="padding:12px;">No tables match the filter.</div>';
+  }
 }
 
 async function selectTable(idx) {
@@ -840,24 +893,39 @@ function renderCurrentEditor() {
   }
   if (currentEditorTab === 'grid') {
     const { min, max } = tableMinMax(currentValues);
-    let html = '<table class="map-table"><tbody>';
-    currentValues.forEach((row, ri) => {
-      html += '<tr>';
-      row.forEach((v, ci) => {
-        const num = typeof v === 'number' ? v : parseFloat(v);
-        const bg = Number.isFinite(num) ? heatColor(num, min, max) : 'transparent';
-        html += '<td contenteditable="true" data-r="' + ri + '" data-c="' + ci + '" style="background:' + bg + '">' +
-          (typeof v === 'number' ? v.toFixed(1) : v) + '</td>';
+    const dec = (currentTable && currentTable.decimals != null) ? currentTable.decimals : 1;
+    const fmt = (v) => (typeof v === 'number' ? v.toFixed(dec) : v);
+    const colH = ((currentTable && currentTable.col_headers) || '').split(',').map((s) => s.trim()).filter(Boolean);
+    const rowH = ((currentTable && currentTable.row_headers) || '').split(',').map((s) => s.trim()).filter(Boolean);
+    const r0 = currentValues.length, c0 = (currentValues[0] || []).length;
+    if (r0 === 1 && c0 === 1) {
+      const v = currentValues[0][0];
+      el.innerHTML = '<div class="one-d-row"><div class="one-d-cell"><label>' + (currentTable && currentTable.units ? currentTable.units : 'value') + '</label>' +
+        '<input data-r="0" data-c="0" value="' + fmt(v) + '"></div></div>' +
+        '<div class="table-editor-footer"><button id="btn-apply-patch" class="btn btn-primary" type="button">Apply Patch + Auto Checksum</button></div>';
+    } else {
+      let html = '<table class="map-table"><tbody>';
+      if (colH.length) {
+        html += '<tr><th class="axis"></th>' + colH.map((h) => '<th class="axis">' + h + '</th>').join('') + '</tr>';
+      }
+      currentValues.forEach((row, ri) => {
+        html += '<tr>';
+        if (rowH.length) html += '<th class="axis">' + (rowH[ri] || '') + '</th>';
+        row.forEach((v, ci) => {
+          const num = typeof v === 'number' ? v : parseFloat(v);
+          const bg = Number.isFinite(num) ? heatColor(num, min, max) : 'transparent';
+          html += '<td contenteditable="true" data-r="' + ri + '" data-c="' + ci + '" style="background:' + bg + '">' + fmt(v) + '</td>';
+        });
+        html += '</tr>';
       });
-      html += '</tr>';
-    });
-    html += '</tbody></table><div class="table-editor-footer"><button id="btn-apply-patch" class="btn btn-primary" type="button">Apply Patch + Auto Checksum</button><span class="muted">min ' + min.toFixed(1) + ' → max ' + max.toFixed(1) + '</span></div>';
-    el.innerHTML = html;
+      html += '</tbody></table><div class="table-editor-footer"><button id="btn-apply-patch" class="btn btn-primary" type="button">Apply Patch + Auto Checksum</button><span class="muted">min ' + min.toFixed(dec) + ' → max ' + max.toFixed(dec) + '</span></div>';
+      el.innerHTML = html;
+    }
     document.getElementById('btn-apply-patch')?.addEventListener('click', applyCurrentPatch);
-    el.querySelectorAll('td[contenteditable]').forEach((td) => {
+    el.querySelectorAll('td[contenteditable], input[data-r]').forEach((td) => {
       td.onblur = () => {
         const r = +td.dataset.r, c = +td.dataset.c;
-        const num = parseFloat(td.textContent);
+        const num = parseFloat(td.tagName === 'INPUT' ? td.value : td.textContent);
         if (!isNaN(num) && currentValues[r]) currentValues[r][c] = num;
       };
     });
@@ -1142,11 +1210,17 @@ async function applyStft() {
 }
 
 function setupTablesUI() {
-  document.querySelectorAll('.table-filters .chip-filter').forEach((ch) => {
+  const search = document.getElementById('table-search');
+  if (search && !search.dataset.bound) {
+    search.dataset.bound = '1';
+    search.addEventListener('input', () => { tableSearch = search.value || ''; renderTableList(); });
+  }
+  document.querySelectorAll('.table-filters .chip-filter[data-filter]').forEach((ch) => {
     ch.onclick = () => {
-      document.querySelectorAll('.table-filters .chip-filter').forEach((c) => c.classList.remove('active'));
+      document.querySelectorAll('.table-filters .chip-filter[data-filter]').forEach((c) => c.classList.remove('active'));
       ch.classList.add('active');
-      filterTableList(ch.dataset.filter || 'all');
+      tableFilter = ch.dataset.filter || 'all';
+      renderTableList();
     };
   });
   const tabs = document.getElementById('editor-tabs');
@@ -1375,7 +1449,7 @@ function setupAll() {
   pollHealth();
   if (healthTimer) clearInterval(healthTimer);
   healthTimer = setInterval(pollHealth, 2500);
-  console.log('TuneItVerse UI v3.10.2');
+  console.log('TuneItVerse UI v3.11.0');
 }
 
 setupNav();

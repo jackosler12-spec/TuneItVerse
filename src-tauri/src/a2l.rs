@@ -114,6 +114,7 @@ pub fn parse_a2l(text: &str) -> Vec<TableDef> {
             units,
             row_major: true,
             msb: true,
+            ..Default::default()
         });
         if out.len() >= 256 { break; }
     }
