@@ -100,6 +100,29 @@ function tableKind(t) {
   return ['3D', 't3d'];
 }
 
+function humanTitle(t) {
+  if (!t) return 'Table';
+  const extra = (t.extra_name || '').trim();
+  if (extra) return extra;
+  let s = String(t.name || t.id || 'Table');
+  s = s.replace(/\*+[0-9A-Za-z-]*$/g, '');
+  s = s.replace(/_/g, ' ').replace(/\s+/g, ' ').trim();
+  const keep = { rpm: 'RPM', map: 'MAP', maf: 'MAF', ve: 'VE', ect: 'ECT', iat: 'IAT', tps: 'TPS', egr: 'EGR', vgt: 'VGT', dtc: 'DTC', stft: 'STFT', ltft: 'LTFT', ho: 'HO' };
+  return s.split(' ').filter(Boolean).map((w) => {
+    const k = w.toLowerCase();
+    if (keep[k]) return keep[k];
+    return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
+  }).join(' ');
+}
+
+function tableBlurb(t) {
+  if (!t) return '';
+  const extra = (t.extra_description || '').replace(/\s+/g, ' ').trim();
+  let d = (t.description || '').replace(/,\s*Units:\s*$/i, '').replace(/\s+/g, ' ').trim();
+  if (extra && d && extra !== d) return extra + '\n\n' + d;
+  return extra || d;
+}
+
 function setBinChip(label, ready) {
   const el = document.getElementById('bin-chip');
   if (!el) return;
@@ -327,6 +350,107 @@ function markCellRange(r0, c0, r1, c1, additive) {
   const ra = Math.min(r0, r1), rb = Math.max(r0, r1);
   const ca = Math.min(c0, c1), cb = Math.max(c0, c1);
   for (let r = ra; r <= rb; r++) for (let c = ca; c <= cb; c++) selCells.add(r + ',' + c);
+}
+
+let orbitCam = { yaw: 0.85, pitch: 0.52, zoom: 1 };
+
+function bindOrbitSurface(canvas, host, values, min, max) {
+  if (!canvas || !values || !values.length) return;
+  const rows = values.length, cols = values[0].length;
+  const dec = (currentTable && currentTable.decimals != null) ? currentTable.decimals : 1;
+  function size() {
+    const w = Math.max(320, host.clientWidth - 8);
+    const h = Math.max(260, Math.min(480, host.clientHeight - 40) || 360);
+    canvas.width = w;
+    canvas.height = h;
+  }
+  function project(xn, yn, zn, w, h) {
+    const cy = Math.cos(orbitCam.yaw), sy = Math.sin(orbitCam.yaw);
+    const cp = Math.cos(orbitCam.pitch), sp = Math.sin(orbitCam.pitch);
+    let x = xn * cy - zn * sy;
+    let z = xn * sy + zn * cy;
+    let y = yn * cp - z * sp;
+    z = yn * sp + z * cp;
+    const persp = 2.4 / (3.4 + z);
+    const s = Math.min(w, h) * 0.38 * orbitCam.zoom * persp;
+    return { x: w * 0.5 + x * s, y: h * 0.58 - y * s, z: z };
+  }
+  function draw() {
+    size();
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width, h = canvas.height;
+    ctx.fillStyle = '#0c1212';
+    ctx.fillRect(0, 0, w, h);
+    const span = (max - min) || 1;
+    const faces = [];
+    const nr = Math.max(1, rows - 1), nc = Math.max(1, cols - 1);
+    function pt(r, c) {
+      const xn = cols <= 1 ? 0 : (c / (cols - 1)) * 2 - 1;
+      const zn = rows <= 1 ? 0 : (r / (rows - 1)) * 2 - 1;
+      const yn = ((values[r][c] - min) / span) * 1.4;
+      return project(xn, yn, zn, w, h);
+    }
+    if (rows === 1 || cols === 1) {
+      ctx.beginPath();
+      ctx.strokeStyle = '#00c4b4';
+      ctx.lineWidth = 2;
+      const n = rows * cols;
+      for (let i = 0; i < n; i++) {
+        const r = rows === 1 ? 0 : i, c = cols === 1 ? 0 : i;
+        const p = pt(r, c);
+        if (i === 0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y);
+      }
+      ctx.stroke();
+      return;
+    }
+    for (let r = 0; r < rows - 1; r++) {
+      for (let c = 0; c < cols - 1; c++) {
+        const p00 = pt(r, c), p10 = pt(r, c + 1), p01 = pt(r + 1, c), p11 = pt(r + 1, c + 1);
+        const avg = (values[r][c] + values[r][c + 1] + values[r + 1][c] + values[r + 1][c + 1]) / 4;
+        faces.push({ z: (p00.z + p10.z + p01.z + p11.z) / 4, pts: [p00, p10, p11, p01], color: heatColor(avg, min, max) });
+      }
+    }
+    faces.sort((a, b) => a.z - b.z);
+    faces.forEach((f) => {
+      ctx.beginPath();
+      ctx.moveTo(f.pts[0].x, f.pts[0].y);
+      for (let i = 1; i < 4; i++) ctx.lineTo(f.pts[i].x, f.pts[i].y);
+      ctx.closePath();
+      ctx.fillStyle = f.color;
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(0,0,0,0.25)';
+      ctx.lineWidth = 0.5;
+      ctx.stroke();
+    });
+    ctx.fillStyle = '#7a9090';
+    ctx.font = '11px Segoe UI, sans-serif';
+    ctx.fillText('drag to rotate · wheel zoom', 10, h - 10);
+  }
+  draw();
+  let drag = null;
+  canvas.onmousedown = (e) => { drag = { x: e.clientX, y: e.clientY, yaw: orbitCam.yaw, pitch: orbitCam.pitch }; };
+  canvas.onmouseup = () => { drag = null; };
+  canvas.onmouseleave = () => { drag = null; };
+  canvas.onmousemove = (e) => {
+    const hover = document.getElementById('heat-hover');
+    if (drag) {
+      orbitCam.yaw = drag.yaw - (e.clientX - drag.x) * 0.01;
+      orbitCam.pitch = Math.max(0.12, Math.min(1.35, drag.pitch + (e.clientY - drag.y) * 0.01));
+      draw();
+      if (hover) hover.textContent = 'orbit';
+      return;
+    }
+    const rect = canvas.getBoundingClientRect();
+    const c = Math.min(cols - 1, Math.max(0, Math.floor((e.clientX - rect.left) / rect.width * cols)));
+    const r = Math.min(rows - 1, Math.max(0, Math.floor((e.clientY - rect.top) / rect.height * rows)));
+    const v = values[r] && values[r][c];
+    if (hover) hover.textContent = 'r' + r + ' c' + c + ' = ' + (typeof v === 'number' ? v.toFixed(dec) : v);
+  };
+  canvas.onwheel = (e) => {
+    e.preventDefault();
+    orbitCam.zoom = Math.max(0.45, Math.min(2.8, orbitCam.zoom * (e.deltaY > 0 ? 0.92 : 1.08)));
+    draw();
+  };
 }
 
 function paintSelection() {
@@ -1075,7 +1199,8 @@ function rebuildCategoryChips() {
 
 function tablePassesFilter(t) {
   const q = tableSearch.trim().toLowerCase();
-  if (q && !(t.name || '').toLowerCase().includes(q) && !(t.id || '').toLowerCase().includes(q) && !(t.category || '').toLowerCase().includes(q)) return false;
+  const blob = ((t.name || '') + ' ' + (t.id || '') + ' ' + (t.category || '') + ' ' + humanTitle(t) + ' ' + (t.description || '') + ' ' + (t.extra_name || '')).toLowerCase();
+  if (q && blob.indexOf(q) < 0) return false;
   if (tableCat !== 'all' && (t.category || '') !== tableCat) return false;
   const r = t.rows || 1, c = t.cols || 1;
   const is1d = r === 1 || c === 1;
@@ -1136,9 +1261,9 @@ function renderTableList() {
       const div = document.createElement('div');
       div.className = 'table-item';
       div.setAttribute('data-idx', String(idx));
-      div.title = (t.name || t.id) + ' @ ' + (t.addr || '?');
+      div.title = humanTitle(t) + ' @ ' + (t.addr || '?');
       div.innerHTML = '<span class="tbl-type ' + kind[1] + '">' + kind[0] + '</span>' +
-        '<span class="tbl-name">' + escapeHtml(t.name || t.id) + '</span>' +
+        '<span class="tbl-name">' + escapeHtml(humanTitle(t)) + '</span>' +
         '<span class="tbl-meta">' + (t.rows || 1) + '×' + (t.cols || 1) + '</span>';
       div.onclick = () => selectTable(idx);
       body.appendChild(div);
@@ -1165,11 +1290,13 @@ async function selectTable(idx) {
   }
   const kind = tableKind(currentTable);
   setEditorHeading(
-    currentTable.name || currentTable.id,
+    humanTitle(currentTable),
     (currentTable.category ? currentTable.category + ' · ' : '') + kind[0] + ' · ' +
-      (currentTable.rows || 1) + '×' + (currentTable.cols || 1) + ' @ ' + (currentTable.addr || '?') +
-      (currentTable.units ? ' · ' + currentTable.units : '')
+      (currentTable.rows || 1) + '×' + (currentTable.cols || 1) +
+      (currentTable.units ? ' · ' + currentTable.units : '') + ' @ ' + (currentTable.addr || '?')
   );
+  const descEl = document.getElementById('table-desc');
+  if (descEl) descEl.textContent = tableBlurb(currentTable) || 'No description in the definition pack for this parameter.';
   try {
     const extracted = await invokeCmd('extract_table_from_bin', { bin_bytes: binBytes(currentBin), table: currentTable });
     currentValues = extracted.values || extracted;
@@ -1252,28 +1379,9 @@ function renderCurrentEditor() {
     paintSelection();
   } else if (currentEditorTab === '3d') {
     const { min, max } = tableMinMax(currentValues);
-    el.innerHTML = '<canvas id="viz3d"></canvas><div class="heatmap-legend"><span>' + min.toFixed(1) + '</span><div class="heatmap-scale"></div><span>' + max.toFixed(1) + '</span><span id="heat-hover" class="muted">hover a cell</span></div>';
+    el.innerHTML = '<canvas id="viz3d"></canvas><div class="heatmap-legend"><span>' + min.toFixed(1) + '</span><div class="heatmap-scale"></div><span>' + max.toFixed(1) + '</span><span id="heat-hover" class="muted">drag to orbit · wheel zoom</span></div>';
     const canvas = document.getElementById('viz3d');
-    const ctx = canvas.getContext('2d');
-    const w = Math.max(320, el.clientWidth - 8);
-    const h = Math.max(220, Math.min(420, el.clientHeight - 48) || 320);
-    canvas.width = w;
-    canvas.height = h;
-    const rows = currentValues.length, cols = currentValues[0].length;
-    const cellW = w / cols, cellH = h / rows;
-    for (let r = 0; r < rows; r++) {
-      for (let c = 0; c < cols; c++) {
-        ctx.fillStyle = heatColor(currentValues[r][c], min, max);
-        ctx.fillRect(c * cellW, r * cellH, cellW + 1, cellH + 1);
-      }
-    }
-    canvas.onmousemove = (ev) => {
-      const rect = canvas.getBoundingClientRect();
-      const c = Math.min(cols - 1, Math.max(0, Math.floor((ev.clientX - rect.left) / rect.width * cols)));
-      const r = Math.min(rows - 1, Math.max(0, Math.floor((ev.clientY - rect.top) / rect.height * rows)));
-      const hover = document.getElementById('heat-hover');
-      if (hover) hover.textContent = 'r' + r + ' c' + c + ' = ' + (typeof currentValues[r][c] === 'number' ? currentValues[r][c].toFixed(2) : currentValues[r][c]);
-    };
+    bindOrbitSurface(canvas, el, currentValues, min, max);
   } else if (currentEditorTab === 'hex') {
     if (!currentBin) {
       el.innerHTML = '<div class="empty-state"><div class="empty-mark">HEX</div><h3>No BIN loaded</h3><p>Load a binary first to inspect bytes at the table address.</p></div>';
@@ -1307,7 +1415,8 @@ function updateSidePanel() {
   const meta = document.getElementById('side-meta');
   if (meta) {
     const rows = [
-      ['Name', currentTable.name || currentTable.id],
+      ['Title', humanTitle(currentTable)],
+      ['Pack name', currentTable.name || currentTable.id],
       ['Category', currentTable.category || '—'],
       ['Size', (currentTable.rows || '?') + ' × ' + (currentTable.cols || '?')],
       ['Address', currentTable.addr || '?'],
@@ -1319,11 +1428,11 @@ function updateSidePanel() {
       '<div class="detail-row"><div class="detail-k">' + escapeHtml(r[0]) + '</div><div class="detail-v">' + escapeHtml(r[1]) + '</div></div>'
     ).join('');
   }
-  const fam = identifiedFamily() || 'unresolved';
-  const sample = (currentValues && currentValues[0] && typeof currentValues[0][0] === 'number') ? currentValues[0][0] : 0;
-  invokeCmd('get_tuning_advice', { table_id: currentTable.id || '', sample_value: sample, ecu_family: fam })
-    .then((adv) => { const a = document.getElementById('side-advice'); if (a) a.textContent = adv; })
-    .catch(() => {});
+  const a = document.getElementById('side-advice');
+  if (a) {
+    const blurb = tableBlurb(currentTable);
+    a.textContent = blurb || 'No description in the TableSeek pack for this parameter. Do not guess a tune from the name alone.';
+  }
 }
 
 async function applyCurrentPatch() {

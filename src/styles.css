@@ -1650,7 +1650,26 @@ a {
   .connect-grid { grid-template-columns: 1fr; }
   .toolbar-status { max-width: 100%; white-space: normal; }
 }
-#viz3d { width: 100%; display: block; border-radius: var(--radius-md); background: #0c1212; }
+#viz3d { width: 100%; display: block; border-radius: var(--radius-md); background: #0c1212; cursor: grab; }
+#viz3d:active { cursor: grabbing; }
+.table-desc {
+  margin: 0;
+  padding: 8px 14px 10px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-subtle);
+  max-height: 72px;
+  overflow: auto;
+  flex-shrink: 0;
+}
+.side-desc {
+  padding: 12px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text);
+  white-space: pre-wrap;
+}
 html, body { overflow: hidden; }
 .main-wrapper { height: 100dvh; max-height: 100dvh; overflow: hidden; }
 .scroll-pane { overflow: auto; min-height: 0; }

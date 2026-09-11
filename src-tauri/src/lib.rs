@@ -1,4 +1,4 @@
-// TuneItVerse lib.rs — Tauri entry + command surface (v3.16.0)
+// TuneItVerse lib.rs — Tauri entry + command surface (v3.17.0)
 #![allow(unused_imports, dead_code, non_snake_case)]
 
 mod a2l;
@@ -339,10 +339,9 @@ fn compute_seed_key(seed_hex: String, family: Option<String>, level: Option<Stri
     Ok(serde_json::to_string(&ecu_database::tables_for_bin(&bin_bytes)).unwrap_or_else(|_| "{}".into()))
 }
 #[tauri::command] fn get_tuning_advice(table_id: String, sample_value: f64, ecu_family: String) -> Result<String, String> {
-    let log = crate::v29_tools::map_from_log_cmd().ok();
     Ok(format!(
-        "Advice for {} on {}: sample {:.1}. Use Map-from-log + STFT preview, then patch the BIN and correct checksums. Never flash without a verified backup.{}",
-        table_id, ecu_family, sample_value, log.map(|s| format!(" Log hint: {}", s)).unwrap_or_default()
+        "{} on {}. Sample cell {:.4}. Description lives on the Maps details pane from the TableSeek pack — this command does not invent a tune.",
+        table_id, ecu_family, sample_value
     ))
 }
 #[tauri::command]

@@ -1,3 +1,9 @@
+# TuneItVerse v3.17.0 — table descriptions + orbitable 3D maps
+
+Parameter titles use Universal Patcher ExtraTableName when present, otherwise a readable form of the pack name (`Volumetric_Efficiency_Crank` → `Volumetric Efficiency Crank`). Each map shows its TableSeek description under the editor and in **What this table does**. The 3D tab is an orbitable surface (drag rotate, wheel zoom), not a flat heatmap. 1×N tables draw as a 2D line. Descriptions come from the pack — no invented tune advice.
+
+---
+
 # TuneItVerse v3.16.0 — category tree + HP Tuners-style map editor
 
 Maps are grouped in collapsible category dropdowns (Fuel, Spark, Idle, …). The app shell no longer page-scrolls: list, grid, details, logs, and catalog each scroll in their own pane. Grid editing matches TunerPro / HP Tuners: drag-select, = / + / × on the selection, horizontal/vertical/plane interpolate, H/V/all smooth, copy/paste, undo, +/− increment. Apply Patch still writes the BIN.

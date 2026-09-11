@@ -2,14 +2,14 @@
 <html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8">
-  <title>TuneItVerse v3.16.0</title>
+  <title>TuneItVerse v3.17.0</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-logo">
       <div class="sidebar-logo-mark">TV</div>
-      <div class="sidebar-logo-text">TuneItVerse <span class="version">v3.16.0</span></div>
+      <div class="sidebar-logo-text">TuneItVerse <span class="version">v3.17.0</span></div>
     </div>
     <nav class="sidebar-nav" id="sidebar-nav">
       <button type="button" class="nav-item active" data-view="dashboard">Dashboard</button>
@@ -302,10 +302,11 @@
             </div>
             <div class="rw-tab-bar" id="editor-tabs">
               <button class="editor-tab rw-tab active" data-tab="grid" type="button">Grid</button>
-              <button class="editor-tab rw-tab" data-tab="3d" type="button">Heatmap</button>
+              <button class="editor-tab rw-tab" data-tab="3d" type="button">3D</button>
               <button class="editor-tab rw-tab" data-tab="hex" type="button">Hex</button>
             </div>
           </div>
+          <p id="table-desc" class="table-desc">Select a parameter to read what it controls.</p>
           <div id="editor-content" class="table-visual-area scroll-pane" tabindex="0"></div>
           <div class="editor-tools">
             <div class="toolbar-group">
@@ -349,9 +350,10 @@
         </section>
         <aside class="tables-side-panel panel quiet-panel">
           <div class="scroll-pane">
+            <div class="panel-header"><span class="panel-title">What this table does</span></div>
+            <div id="side-advice" class="side-desc">Pick a map to see its definition text.</div>
             <div class="panel-header"><span class="panel-title">Details</span></div>
             <div id="side-meta" class="side-meta"></div>
-            <div id="side-advice" class="side-advice muted"></div>
             <div class="panel-header"><span class="panel-title">Checksum</span></div>
             <pre id="side-checksum" class="mono-block">Validate or correct after edits.</pre>
           </div>
@@ -414,7 +416,7 @@
     </div>
 
     <footer class="status-bar">
-      <div class="status-left" id="status-left">TuneItVerse 3.16.0</div>
+      <div class="status-left" id="status-left">TuneItVerse 3.17.0</div>
       <div class="status-center" id="status-center">No invented live values</div>
       <div class="status-right" id="status-right">Desktop app required</div>
     </footer>

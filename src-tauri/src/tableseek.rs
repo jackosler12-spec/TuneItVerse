@@ -58,6 +58,10 @@ struct TableSeekXml {
     signed_offset: String,
     #[serde(rename = "ConditionalOffset", default)]
     conditional_offset: String,
+    #[serde(rename = "ExtraTableName", default)]
+    extra_name: String,
+    #[serde(rename = "ExtraDescription", default)]
+    extra_description: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -95,6 +99,8 @@ struct CompiledSeek {
     pat: Vec<PatTok>,
     jumps: Vec<Jump>,
     first_lit: Option<(usize, u8)>,
+    extra_name: String,
+    extra_description: String,
 }
 
 fn parse_usize(s: &str, default: usize) -> usize {
@@ -315,6 +321,8 @@ fn compile_seek(t: TableSeekXml, idx: usize) -> Option<CompiledSeek> {
         signed_offset: is_true(&t.signed_offset),
         conditional_offset: is_true(&t.conditional_offset),
         first_lit: first_literal(&pat),
+        extra_name: t.extra_name,
+        extra_description: t.extra_description,
         pat,
         jumps,
     })
@@ -363,6 +371,8 @@ fn seek_to_def(bin: &[u8], t: &CompiledSeek, index: &[Vec<usize>]) -> Option<Tab
         col_headers: if t.col_headers.trim().is_empty() { None } else { Some(t.col_headers.clone()) },
         decimals: t.decimals,
         file_offset: true,
+        extra_name: if t.extra_name.trim().is_empty() { None } else { Some(t.extra_name.clone()) },
+        extra_description: if t.extra_description.trim().is_empty() { None } else { Some(t.extra_description.clone()) },
     })
 }
 

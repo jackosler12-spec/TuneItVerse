@@ -39,6 +39,11 @@ pub struct TableDef {
     pub decimals: u8,
     #[serde(default)]
     pub file_offset: bool,
+    /// Friendlier label from Universal Patcher ExtraTableName, when present.
+    #[serde(default)]
+    pub extra_name: Option<String>,
+    #[serde(default)]
+    pub extra_description: Option<String>,
 }
 
 /// Lightweight result for a single table's physical values (already math-applied).
