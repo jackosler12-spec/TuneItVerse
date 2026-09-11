@@ -124,11 +124,61 @@ pub fn apply_stft_preview(req: &StftPreviewRequest) -> Result<TableMathResult, S
     })
 }
 
+pub fn fill(values: &[Vec<f64>], value: f64) -> Result<TableMathResult, String> {
+    let _ = dims(values)?;
+    let mut out = values.to_vec();
+    let mut n = 0;
+    for row in &mut out {
+        for cell in row {
+            if (*cell - value).abs() > 1e-12 { n += 1; }
+            *cell = value;
+        }
+    }
+    Ok(TableMathResult { values: out, cells_changed: n, message: format!("set = {}", value) })
+}
+
+pub fn interpolate_h(values: &[Vec<f64>]) -> Result<TableMathResult, String> {
+    let (rows, cols) = dims(values)?;
+    if cols < 2 { return Ok(TableMathResult { values: values.to_vec(), cells_changed: 0, message: "need 2+ columns".into() }); }
+    let mut out = values.to_vec();
+    let mut n = 0;
+    for r in 0..rows {
+        let v0 = values[r][0];
+        let v1 = values[r][cols - 1];
+        for c in 0..cols {
+            let next = v0 + (v1 - v0) * (c as f64) / ((cols - 1) as f64);
+            if (next - out[r][c]).abs() > 1e-12 { n += 1; }
+            out[r][c] = next;
+        }
+    }
+    Ok(TableMathResult { values: out, cells_changed: n, message: "interpolate horizontal".into() })
+}
+
+pub fn interpolate_v(values: &[Vec<f64>]) -> Result<TableMathResult, String> {
+    let (rows, cols) = dims(values)?;
+    if rows < 2 { return Ok(TableMathResult { values: values.to_vec(), cells_changed: 0, message: "need 2+ rows".into() }); }
+    let mut out = values.to_vec();
+    let mut n = 0;
+    for c in 0..cols {
+        let v0 = values[0][c];
+        let v1 = values[rows - 1][c];
+        for r in 0..rows {
+            let next = v0 + (v1 - v0) * (r as f64) / ((rows - 1) as f64);
+            if (next - out[r][c]).abs() > 1e-12 { n += 1; }
+            out[r][c] = next;
+        }
+    }
+    Ok(TableMathResult { values: out, cells_changed: n, message: "interpolate vertical".into() })
+}
+
 pub fn apply_op(req: TableMathRequest) -> Result<TableMathResult, String> {
     match req.op.to_ascii_lowercase().as_str() {
         "scale" | "multiply" | "mul" => scale(&req.values, req.factor.unwrap_or(1.0)),
         "add" | "offset" => add(&req.values, req.offset.or(req.factor).unwrap_or(0.0)),
+        "set" | "fill" | "equals" => fill(&req.values, req.offset.or(req.factor).unwrap_or(0.0)),
         "smooth" | "blur" => smooth(&req.values),
+        "interp_h" | "interpolate_h" => interpolate_h(&req.values),
+        "interp_v" | "interpolate_v" => interpolate_v(&req.values),
         other => Err(format!("unknown table op '{}'", other)),
     }
 }
@@ -164,5 +214,7 @@ mod tests {
         assert!((p.values[0][0] - 105.0).abs() < 1e-6);
         assert!((p.values[1][1] - 90.0).abs() < 1e-6);
         assert!((p.values[0][1] - 100.0).abs() < 1e-9);
+        let h = interpolate_h(&vec![vec![0.0, 50.0, 100.0]]).unwrap();
+        assert!((h.values[0][1] - 50.0).abs() < 1e-9);
     }
 }

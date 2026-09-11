@@ -119,6 +119,227 @@ function setEditorHeading(title, sub) {
   if (p) p.textContent = sub || '';
 }
 
+const CAT_ORDER = ['Fuel', 'Spark', 'Ignition', 'Airflow', 'Idle', 'Limiters', 'Torque', 'Boost', 'EGR', 'Transmission', 'Eng_Constants', 'CIC', 'Timing', 'VE'];
+let openCats = new Set();
+let forceCats = null;
+let selCells = new Set();
+let selAnchor = null;
+let undoStack = [];
+let clipGrid = null;
+let originalValues = null;
+
+function catKey(t) {
+  return ((t && t.category) || 'Uncategorised').trim() || 'Uncategorised';
+}
+
+function sortCatNames(names) {
+  return names.slice().sort((a, b) => {
+    const ia = CAT_ORDER.findIndex((c) => a.toLowerCase().indexOf(c.toLowerCase()) >= 0);
+    const ib = CAT_ORDER.findIndex((c) => b.toLowerCase().indexOf(c.toLowerCase()) >= 0);
+    const ra = ia < 0 ? 1000 : ia;
+    const rb = ib < 0 ? 1000 : ib;
+    if (ra !== rb) return ra - rb;
+    return a.localeCompare(b);
+  });
+}
+
+function allCellKeys() {
+  const out = [];
+  if (!currentValues) return out;
+  for (let r = 0; r < currentValues.length; r++) {
+    for (let c = 0; c < currentValues[r].length; c++) out.push(r + ',' + c);
+  }
+  return out;
+}
+
+function targetCells() {
+  if (selCells.size) return Array.from(selCells);
+  return allCellKeys();
+}
+
+function pushUndo() {
+  if (!currentValues) return;
+  undoStack.push(JSON.parse(JSON.stringify(currentValues)));
+  if (undoStack.length > 40) undoStack.shift();
+}
+
+function stepSize() {
+  const d = (currentTable && currentTable.decimals != null) ? currentTable.decimals : 1;
+  return Math.pow(10, -Math.min(4, Math.max(0, d)));
+}
+
+function applyToSelection(fn, msg) {
+  if (!currentValues) { alert('Select a table first'); return; }
+  pushUndo();
+  const keys = targetCells();
+  let n = 0;
+  keys.forEach((k) => {
+    const p = k.split(',');
+    const r = +p[0], c = +p[1];
+    if (!currentValues[r] || currentValues[r][c] == null) return;
+    const next = fn(currentValues[r][c], r, c);
+    if (typeof next === 'number' && isFinite(next) && next !== currentValues[r][c]) {
+      currentValues[r][c] = next;
+      n += 1;
+    }
+  });
+  syncGlobals();
+  renderCurrentEditor();
+  setTablesStatus((msg || 'Edited') + ' — ' + n + ' cells. Apply Patch to write BIN.');
+}
+
+function bboxOf(keys) {
+  let minR = 1e9, maxR = -1, minC = 1e9, maxC = -1;
+  keys.forEach((k) => {
+    const p = k.split(',');
+    const r = +p[0], c = +p[1];
+    minR = Math.min(minR, r); maxR = Math.max(maxR, r);
+    minC = Math.min(minC, c); maxC = Math.max(maxC, c);
+  });
+  return { minR, maxR, minC, maxC };
+}
+
+function interpSelection(mode) {
+  if (!currentValues) { alert('Select a table first'); return; }
+  const keys = targetCells();
+  if (keys.length < 2) { alert('Select at least two cells (or the whole table).'); return; }
+  pushUndo();
+  const { minR, maxR, minC, maxC } = bboxOf(keys);
+  const inSel = (r, c) => selCells.size === 0 || selCells.has(r + ',' + c);
+  let n = 0;
+  if (mode === 'h' || mode === 'plane') {
+    for (let r = minR; r <= maxR; r++) {
+      if (!currentValues[r]) continue;
+      const cols = [];
+      for (let c = minC; c <= maxC; c++) if (inSel(r, c)) cols.push(c);
+      if (cols.length < 2) continue;
+      const c0 = cols[0], c1 = cols[cols.length - 1];
+      const v0 = currentValues[r][c0], v1 = currentValues[r][c1];
+      const span = c1 - c0;
+      cols.forEach((c) => {
+        const next = v0 + (v1 - v0) * (c - c0) / span;
+        if (next !== currentValues[r][c]) n += 1;
+        currentValues[r][c] = next;
+      });
+    }
+  }
+  if (mode === 'v' || mode === 'plane') {
+    for (let c = minC; c <= maxC; c++) {
+      const rows = [];
+      for (let r = minR; r <= maxR; r++) if (currentValues[r] && inSel(r, c)) rows.push(r);
+      if (rows.length < 2) continue;
+      const r0 = rows[0], r1 = rows[rows.length - 1];
+      const v0 = currentValues[r0][c], v1 = currentValues[r1][c];
+      const span = r1 - r0;
+      rows.forEach((r) => {
+        const next = v0 + (v1 - v0) * (r - r0) / span;
+        if (next !== currentValues[r][c]) n += 1;
+        currentValues[r][c] = next;
+      });
+    }
+  }
+  syncGlobals();
+  renderCurrentEditor();
+  setTablesStatus('Interpolate ' + mode + ' — ' + n + ' cells. Apply Patch to write BIN.');
+}
+
+function smoothSelection(mode) {
+  if (!currentValues) { alert('Select a table first'); return; }
+  pushUndo();
+  const keys = targetCells();
+  const src = JSON.parse(JSON.stringify(currentValues));
+  let n = 0;
+  keys.forEach((k) => {
+    const p = k.split(',');
+    const r = +p[0], c = +p[1];
+    let sum = 0, count = 0;
+    const drs = (mode === 'h') ? [0] : [-1, 0, 1];
+    const dcs = (mode === 'v') ? [0] : [-1, 0, 1];
+    drs.forEach((dr) => dcs.forEach((dc) => {
+      if (mode !== 'all' && dr === 0 && dc === 0) return;
+      const rr = r + dr, cc = c + dc;
+      if (src[rr] && src[rr][cc] != null) { sum += src[rr][cc]; count += 1; }
+    }));
+    if (mode !== 'all' && src[r] && src[r][c] != null) { sum += src[r][c]; count += 1; }
+    if (!count) return;
+    const next = Math.round((sum / count) * 1000) / 1000;
+    if (next !== currentValues[r][c]) n += 1;
+    currentValues[r][c] = next;
+  });
+  syncGlobals();
+  renderCurrentEditor();
+  setTablesStatus('Smooth ' + mode + ' — ' + n + ' cells. Apply Patch to write BIN.');
+}
+
+function copySelection() {
+  if (!currentValues) return;
+  const keys = targetCells();
+  const { minR, maxR, minC, maxC } = bboxOf(keys);
+  clipGrid = [];
+  for (let r = minR; r <= maxR; r++) {
+    const row = [];
+    for (let c = minC; c <= maxC; c++) row.push(currentValues[r] && currentValues[r][c] != null ? currentValues[r][c] : 0);
+    clipGrid.push(row);
+  }
+  const tsv = clipGrid.map((row) => row.join('\t')).join('\n');
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(tsv).catch(() => {});
+  setTablesStatus('Copied ' + clipGrid.length + '×' + (clipGrid[0] || []).length);
+}
+
+function pasteSelection() {
+  if (!currentValues || !clipGrid || !clipGrid.length) { alert('Clipboard is empty — copy cells first'); return; }
+  pushUndo();
+  let startR = 0, startC = 0;
+  if (selCells.size) {
+    const b = bboxOf(Array.from(selCells));
+    startR = b.minR; startC = b.minC;
+  }
+  let n = 0;
+  for (let r = 0; r < clipGrid.length; r++) {
+    for (let c = 0; c < clipGrid[r].length; c++) {
+      const rr = startR + r, cc = startC + c;
+      if (!currentValues[rr] || currentValues[rr][cc] == null) continue;
+      currentValues[rr][cc] = clipGrid[r][c];
+      n += 1;
+    }
+  }
+  syncGlobals();
+  renderCurrentEditor();
+  setTablesStatus('Pasted ' + n + ' cells. Apply Patch to write BIN.');
+}
+
+function undoEdit() {
+  if (!undoStack.length) { setTablesStatus('Nothing to undo'); return; }
+  currentValues = undoStack.pop();
+  syncGlobals();
+  renderCurrentEditor();
+  setTablesStatus('Undo');
+}
+
+function readToolValue() {
+  const el = document.getElementById('tbl-value') || document.getElementById('tbl-scale') || document.getElementById('tbl-offset');
+  const v = parseFloat(el && el.value);
+  return v;
+}
+
+function markCellRange(r0, c0, r1, c1, additive) {
+  if (!additive) selCells = new Set();
+  const ra = Math.min(r0, r1), rb = Math.max(r0, r1);
+  const ca = Math.min(c0, c1), cb = Math.max(c0, c1);
+  for (let r = ra; r <= rb; r++) for (let c = ca; c <= cb; c++) selCells.add(r + ',' + c);
+}
+
+function paintSelection() {
+  document.querySelectorAll('.map-table td[data-r]').forEach((td) => {
+    td.classList.toggle('selected', selCells.has(td.dataset.r + ',' + td.dataset.c));
+    if (originalValues && originalValues[td.dataset.r] && currentValues) {
+      const r = +td.dataset.r, c = +td.dataset.c;
+      const o = originalValues[r] && originalValues[r][c];
+      td.classList.toggle('modified', typeof o === 'number' && typeof currentValues[r][c] === 'number' && Math.abs(o - currentValues[r][c]) > 1e-9);
+    }
+  });
+}
+
 let currentBin = null;
 let currentTables = [];
 let currentTable = null;
@@ -875,31 +1096,63 @@ function renderTableList() {
     if (countEl) countEl.textContent = '0';
     return;
   }
+  const groups = {};
   let shown = 0;
   currentTables.forEach((t, idx) => {
     if (!tablePassesFilter(t)) return;
     shown += 1;
-    const kind = tableKind(t);
-    const div = document.createElement('div');
-    div.className = 'table-item';
-    div.setAttribute('data-idx', String(idx));
-    div.title = (t.name || t.id) + ' · ' + (t.category || '') + ' @ ' + (t.addr || '?');
-    div.innerHTML = '<span class="tbl-type ' + kind[1] + '">' + kind[0] + '</span>' +
-      '<span class="tbl-name">' + escapeHtml(t.name || t.id) + '</span>' +
-      '<span class="tbl-meta">' + (t.rows || 1) + '×' + (t.cols || 1) + '</span>';
-    div.onclick = () => selectTable(idx);
-    list.appendChild(div);
+    const k = catKey(t);
+    if (!groups[k]) groups[k] = [];
+    groups[k].push({ t, idx });
   });
   if (countEl) {
     countEl.textContent = shown === currentTables.length ? String(shown) : shown + '/' + currentTables.length;
   }
   if (!shown) {
     list.innerHTML = '<div class="empty-state"><h3>No match</h3><p>Clear the search or pick another category.</p></div>';
+    return;
   }
+  const names = sortCatNames(Object.keys(groups));
+  const searching = !!(tableSearch && tableSearch.trim());
+  names.forEach((name) => {
+    const wrap = document.createElement('div');
+    const isOpen = forceCats === 'all' ? true
+      : forceCats === 'none' ? false
+      : searching ? true
+      : (openCats.size ? openCats.has(name) : names.indexOf(name) < 4);
+    wrap.className = 'map-group' + (isOpen ? ' open' : '');
+    wrap.innerHTML = '<button type="button" class="map-group-title"><span class="chev">▶</span>' +
+      escapeHtml(name) + '<span class="count-pill">' + groups[name].length + '</span></button><div class="map-group-body"></div>';
+    const title = wrap.querySelector('.map-group-title');
+    const body = wrap.querySelector('.map-group-body');
+    title.onclick = () => {
+      wrap.classList.toggle('open');
+      if (wrap.classList.contains('open')) openCats.add(name);
+      else openCats.delete(name);
+      forceCats = null;
+    };
+    groups[name].forEach(({ t, idx }) => {
+      const kind = tableKind(t);
+      const div = document.createElement('div');
+      div.className = 'table-item';
+      div.setAttribute('data-idx', String(idx));
+      div.title = (t.name || t.id) + ' @ ' + (t.addr || '?');
+      div.innerHTML = '<span class="tbl-type ' + kind[1] + '">' + kind[0] + '</span>' +
+        '<span class="tbl-name">' + escapeHtml(t.name || t.id) + '</span>' +
+        '<span class="tbl-meta">' + (t.rows || 1) + '×' + (t.cols || 1) + '</span>';
+      div.onclick = () => selectTable(idx);
+      body.appendChild(div);
+    });
+    list.appendChild(wrap);
+  });
 }
 
 async function selectTable(idx) {
   currentTable = currentTables[idx];
+  selCells = new Set();
+  selAnchor = null;
+  undoStack = [];
+  originalValues = null;
   syncGlobals();
   document.querySelectorAll('.table-item').forEach((el) => el.classList.toggle('active', +el.getAttribute('data-idx') === idx));
   const st = document.getElementById('tables-status');
@@ -921,6 +1174,7 @@ async function selectTable(idx) {
     const extracted = await invokeCmd('extract_table_from_bin', { bin_bytes: binBytes(currentBin), table: currentTable });
     currentValues = extracted.values || extracted;
     if (!Array.isArray(currentValues)) currentValues = null;
+    originalValues = currentValues ? JSON.parse(JSON.stringify(currentValues)) : null;
     renderCurrentEditor();
     updateSidePanel();
     if (st) st.textContent = 'Selected: ' + currentTable.name;
@@ -979,7 +1233,7 @@ function renderCurrentEditor() {
         });
         html += '</tr>';
       });
-      html += '</tbody></table><div class="table-editor-footer"><button id="btn-apply-patch" class="btn btn-primary" type="button">Apply Patch + Auto Checksum</button><span class="muted">min ' + min.toFixed(dec) + ' → max ' + max.toFixed(dec) + '</span></div>';
+      html += '</tbody></table><div class="table-editor-footer"><button id="btn-apply-patch" class="btn btn-primary" type="button">Apply Patch + Auto Checksum</button><span class="muted">min ' + min.toFixed(dec) + ' → max ' + max.toFixed(dec) + ' · drag to select · +/− · Ctrl+C/V/Z</span></div>';
       el.innerHTML = html;
     }
     document.getElementById('btn-apply-patch')?.addEventListener('click', applyCurrentPatch);
@@ -987,9 +1241,15 @@ function renderCurrentEditor() {
       td.onblur = () => {
         const r = +td.dataset.r, c = +td.dataset.c;
         const num = parseFloat(td.tagName === 'INPUT' ? td.value : td.textContent);
-        if (!isNaN(num) && currentValues[r]) currentValues[r][c] = num;
+        if (!isNaN(num) && currentValues[r]) {
+          if (originalValues && currentValues[r][c] !== num) pushUndo();
+          currentValues[r][c] = num;
+          paintSelection();
+        }
       };
     });
+    bindGridSelection(el);
+    paintSelection();
   } else if (currentEditorTab === '3d') {
     const { min, max } = tableMinMax(currentValues);
     el.innerHTML = '<canvas id="viz3d"></canvas><div class="heatmap-legend"><span>' + min.toFixed(1) + '</span><div class="heatmap-scale"></div><span>' + max.toFixed(1) + '</span><span id="heat-hover" class="muted">hover a cell</span></div>';
@@ -1245,26 +1505,31 @@ async function pokeHex() {
   } catch (e) { alert('Poke failed: ' + e); }
 }
 
-async function runMath(op) {
-  if (!currentValues) { alert('Select a table first'); return; }
-  const req = { values: currentValues, op };
-  if (op === 'scale') {
-    req.factor = parseFloat(document.getElementById('tbl-scale')?.value || '1');
-    if (!isFinite(req.factor)) { alert('Scale factor must be a number'); return; }
+function runMath(op) {
+  const v = readToolValue();
+  if (op === 'set') {
+    if (!isFinite(v)) { alert('Enter a value'); return; }
+    applyToSelection(() => v, 'Set = ' + v);
+    return;
   }
   if (op === 'add') {
-    req.offset = parseFloat(document.getElementById('tbl-offset')?.value || '0');
-    if (!isFinite(req.offset)) { alert('Offset must be a number'); return; }
+    if (!isFinite(v)) { alert('Enter a value to add'); return; }
+    applyToSelection((x) => x + v, 'Add ' + v);
+    return;
   }
-  try {
-    const res = parseMaybe(await invokeCmd('table_math_cmd', { req }));
-    if (!res || !res.values) throw new Error('no values');
-    currentValues = res.values;
-    syncGlobals();
-    renderCurrentEditor();
-    const st = document.getElementById('tables-status');
-    if (st) st.textContent = (res.message || op) + ' — ' + res.cells_changed + ' cells. Apply Patch to write BIN.';
-  } catch (e) { alert('Table math failed: ' + e); }
+  if (op === 'scale') {
+    if (!isFinite(v)) { alert('Enter a multiply factor'); return; }
+    applyToSelection((x) => x * v, 'Multiply × ' + v);
+    return;
+  }
+  if (op === 'inc') { applyToSelection((x) => x + stepSize(), 'Increment'); return; }
+  if (op === 'dec') { applyToSelection((x) => x - stepSize(), 'Decrement'); return; }
+  if (op === 'smooth') { smoothSelection('all'); return; }
+  if (op === 'smooth_h') { smoothSelection('h'); return; }
+  if (op === 'smooth_v') { smoothSelection('v'); return; }
+  if (op === 'interp') { interpSelection('plane'); return; }
+  if (op === 'interp_h') { interpSelection('h'); return; }
+  if (op === 'interp_v') { interpSelection('v'); return; }
 }
 
 async function applyStft() {
@@ -1283,11 +1548,57 @@ async function applyStft() {
   } catch (e) { alert('STFT preview failed: ' + e); }
 }
 
+function bindGridSelection(el) {
+  let dragging = false;
+  el.onmousedown = (e) => {
+    const td = e.target.closest('td[data-r]');
+    if (!td) return;
+    const r = +td.dataset.r, c = +td.dataset.c;
+    dragging = true;
+    if (e.shiftKey && selAnchor) markCellRange(selAnchor[0], selAnchor[1], r, c, e.ctrlKey);
+    else {
+      selAnchor = [r, c];
+      markCellRange(r, c, r, c, e.ctrlKey);
+    }
+    paintSelection();
+    e.preventDefault();
+  };
+  el.onmouseover = (e) => {
+    if (!dragging || !selAnchor) return;
+    const td = e.target.closest('td[data-r]');
+    if (!td) return;
+    markCellRange(selAnchor[0], selAnchor[1], +td.dataset.r, +td.dataset.c, false);
+    paintSelection();
+  };
+  window.addEventListener('mouseup', () => { dragging = false; }, { once: true });
+}
+
 function setupTablesUI() {
   const search = document.getElementById('table-search');
   if (search && !search.dataset.bound) {
     search.dataset.bound = '1';
     search.addEventListener('input', () => { tableSearch = search.value || ''; renderTableList(); });
+  }
+  const exp = document.getElementById('btn-cats-expand');
+  const col = document.getElementById('btn-cats-collapse');
+  if (exp) exp.onclick = () => { forceCats = 'all'; renderTableList(); };
+  if (col) col.onclick = () => { forceCats = 'none'; openCats = new Set(); renderTableList(); };
+  const editor = document.getElementById('editor-content');
+  if (editor && !editor.dataset.keysBound) {
+    editor.dataset.keysBound = '1';
+    editor.addEventListener('keydown', (e) => {
+      if (!currentValues) return;
+      if (e.key === '+' || e.key === '=') { e.preventDefault(); runMath('inc'); }
+      else if (e.key === '-' || e.key === '_') { e.preventDefault(); runMath('dec'); }
+      else if (e.ctrlKey && e.key.toLowerCase() === 'c') { e.preventDefault(); copySelection(); }
+      else if (e.ctrlKey && e.key.toLowerCase() === 'v') { e.preventDefault(); pasteSelection(); }
+      else if (e.ctrlKey && e.key.toLowerCase() === 'z') { e.preventDefault(); undoEdit(); }
+      else if (e.ctrlKey && e.key.toLowerCase() === 'a') {
+        e.preventDefault();
+        selCells = new Set(allCellKeys());
+        paintSelection();
+      }
+    });
   }
   document.querySelectorAll('.table-filters .chip-filter[data-filter]').forEach((ch) => {
     ch.onclick = () => {
@@ -1498,7 +1809,20 @@ function bindAppClicks() {
     'btn-hex-poke': pokeHex,
     'btn-tbl-scale': () => runMath('scale'),
     'btn-tbl-offset': () => runMath('add'),
+    'btn-tbl-set': () => runMath('set'),
+    'btn-tbl-add': () => runMath('add'),
+    'btn-tbl-mul': () => runMath('scale'),
+    'btn-tbl-inc': () => runMath('inc'),
+    'btn-tbl-dec': () => runMath('dec'),
     'btn-tbl-smooth': () => runMath('smooth'),
+    'btn-tbl-smooth-h': () => runMath('smooth_h'),
+    'btn-tbl-smooth-v': () => runMath('smooth_v'),
+    'btn-tbl-interp': () => runMath('interp'),
+    'btn-tbl-interp-h': () => runMath('interp_h'),
+    'btn-tbl-interp-v': () => runMath('interp_v'),
+    'btn-tbl-copy': copySelection,
+    'btn-tbl-paste': pasteSelection,
+    'btn-tbl-undo': undoEdit,
     'btn-tbl-stft': applyStft,
     'btn-compare-bin': compareBinToEcuUi,
     'btn-verify-write': verifyAfterWriteUi,

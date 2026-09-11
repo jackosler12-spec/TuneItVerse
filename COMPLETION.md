@@ -1,3 +1,9 @@
+# TuneItVerse v3.16.0 — category tree + HP Tuners-style map editor
+
+Maps are grouped in collapsible category dropdowns (Fuel, Spark, Idle, …). The app shell no longer page-scrolls: list, grid, details, logs, and catalog each scroll in their own pane. Grid editing matches TunerPro / HP Tuners: drag-select, = / + / × on the selection, horizontal/vertical/plane interpolate, H/V/all smooth, copy/paste, undo, +/− increment. Apply Patch still writes the BIN.
+
+---
+
 # TuneItVerse v3.15.1 — map workspace chrome
 
 The Maps page was a wrap of mixed file, checksum, hex-poke, and scale buttons with 48 category chips. v3.15.1 groups File / BIN / Session on a page toolbar, puts Edit and Hex poke under the grid, uses a category dropdown, and shows 1D/2D/3D list rows with empty states. Connect, Log, Diagnostics, Flash, and Scripts use the same toolbar + panel pattern.

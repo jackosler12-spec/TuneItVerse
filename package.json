@@ -1,8 +1,8 @@
 {
   "name": "tuneitverse",
   "private": true,
-  "version": "3.15.1",
-  "description": "TuneItVerse - open ECU tuning platform. v3.15.1: map editor and app-wide workspace chrome.",
+  "version": "3.16.0",
+  "description": "TuneItVerse - open ECU tuning platform. v3.16.0: category tree + HP Tuners-style map editor.",
   "type": "module",
   "scripts": {
     "tauri": "tauri",

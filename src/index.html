@@ -2,14 +2,14 @@
 <html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8">
-  <title>TuneItVerse v3.15.1</title>
+  <title>TuneItVerse v3.16.0</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-logo">
       <div class="sidebar-logo-mark">TV</div>
-      <div class="sidebar-logo-text">TuneItVerse <span class="version">v3.15.1</span></div>
+      <div class="sidebar-logo-text">TuneItVerse <span class="version">v3.16.0</span></div>
     </div>
     <nav class="sidebar-nav" id="sidebar-nav">
       <button type="button" class="nav-item active" data-view="dashboard">Dashboard</button>
@@ -42,7 +42,7 @@
     </header>
 
     <div id="view-dashboard" class="content view-page" data-view-panel="dashboard">
-      <div class="view-body">
+      <div class="view-body scroll-pane">
         <div class="dash-grid-bg"></div>
         <div class="workflow-cards">
           <div class="panel workflow-card" data-go="connect">
@@ -96,7 +96,7 @@
     <div id="view-connect" class="content content--hidden view-page" data-view-panel="connect" hidden>
       <div class="view-body">
         <div class="connect-grid">
-        <div class="panel connect-panel quiet-panel">
+        <div class="panel connect-panel quiet-panel scroll-pane">
           <div class="panel-header"><span class="panel-title">Adapter</span></div>
           <div class="form-group">
             <label>Serial Port</label>
@@ -145,7 +145,7 @@
           </div>
           <pre id="connect-log" class="mono-block log-box"></pre>
         </div>
-        <div class="panel quiet-panel">
+        <div class="panel quiet-panel scroll-pane">
           <div class="panel-header"><span class="panel-title">Offline seed → key</span></div>
           <p class="muted">Computes a key from a captured seed. Does not talk to the car. Unverified families are labelled and will not unlock.</p>
             <div class="row wrap">
@@ -195,7 +195,7 @@
         <div class="live-data-grid">
           <div class="panel quiet-panel">
             <div class="panel-header"><span class="panel-title">Channels</span></div>
-            <div id="log-channels" class="channel-list"></div>
+            <div id="log-channels" class="channel-list scroll-pane"></div>
             <button id="btn-log-apply-ch" class="btn btn-sm full" type="button">Apply Channel Selection</button>
           </div>
           <div>
@@ -207,7 +207,9 @@
             </div>
             <div class="panel quiet-panel">
               <div class="panel-header"><span class="panel-title">Recent samples</span></div>
+              <div class="scroll-pane table-scroll">
               <table id="log-table" class="data-table"><thead id="log-thead"></thead><tbody id="log-tbody"></tbody></table>
+              </div>
             </div>
           </div>
         </div>
@@ -225,7 +227,7 @@
         <div class="toolbar-status" id="dtc-status">Idle</div>
       </div>
       <div class="view-body dtc-panel">
-        <div class="panel quiet-panel">
+        <div class="panel quiet-panel scroll-pane">
           <div class="panel-header"><span class="panel-title">Codes</span></div>
           <div id="dtc-summary">No read yet.</div>
           <table id="dtc-table" class="data-table">
@@ -233,7 +235,7 @@
             <tbody id="dtc-tbody"></tbody>
           </table>
         </div>
-        <pre id="freeze-frame" class="mono-block">—</pre>
+        <pre id="freeze-frame" class="mono-block log-box">—</pre>
       </div>
     </div>
 
@@ -281,12 +283,16 @@
             <button class="chip-filter" data-filter="2d" type="button">2D</button>
             <button class="chip-filter" data-filter="3d" type="button">3D</button>
           </div>
+          <div class="table-filters">
+            <button id="btn-cats-expand" class="chip-filter" type="button">Expand</button>
+            <button id="btn-cats-collapse" class="chip-filter" type="button">Collapse</button>
+          </div>
           <label class="sr-only" for="table-cat-select">Category</label>
-          <select id="table-cat-select" class="table-cat-select">
+          <select id="table-cat-select" class="table-cat-select" hidden>
             <option value="all">All categories</option>
           </select>
           <div id="table-cats" class="table-filters table-cats" hidden></div>
-          <div id="tables-list" class="tables-list"></div>
+          <div id="tables-list" class="tables-list scroll-pane"></div>
         </aside>
         <section class="tables-editor-panel panel quiet-panel">
           <div class="editor-chrome">
@@ -300,17 +306,39 @@
               <button class="editor-tab rw-tab" data-tab="hex" type="button">Hex</button>
             </div>
           </div>
-          <div id="editor-content" class="table-visual-area"></div>
+          <div id="editor-content" class="table-visual-area scroll-pane" tabindex="0"></div>
           <div class="editor-tools">
             <div class="toolbar-group">
-              <span class="toolbar-label">Edit</span>
-              <label class="tool-field">× <input id="tbl-scale" placeholder="1.05" inputmode="decimal"></label>
-              <button id="btn-tbl-scale" class="btn" type="button">Scale</button>
-              <label class="tool-field">+ <input id="tbl-offset" placeholder="1.0" inputmode="decimal"></label>
-              <button id="btn-tbl-offset" class="btn" type="button">Offset</button>
-              <button id="btn-tbl-smooth" class="btn" type="button">Smooth</button>
-              <button id="btn-tbl-stft" class="btn" type="button">STFT preview</button>
+              <span class="toolbar-label">Modify</span>
+              <input id="tbl-value" class="tool-value" placeholder="value" inputmode="decimal" title="Value for = + ×">
+              <input id="tbl-scale" hidden>
+              <input id="tbl-offset" hidden>
+              <button id="btn-tbl-set" class="btn" type="button" title="Set selected cells">=</button>
+              <button id="btn-tbl-add" class="btn" type="button" title="Add to selected">+</button>
+              <button id="btn-tbl-mul" class="btn" type="button" title="Multiply selected">×</button>
+              <button id="btn-tbl-inc" class="btn" type="button" title="Increment (+)">▲</button>
+              <button id="btn-tbl-dec" class="btn" type="button" title="Decrement (-)">▼</button>
             </div>
+            <div class="toolbar-sep"></div>
+            <div class="toolbar-group">
+              <span class="toolbar-label">Smooth</span>
+              <button id="btn-tbl-smooth" class="btn" type="button">All</button>
+              <button id="btn-tbl-smooth-h" class="btn" type="button">H</button>
+              <button id="btn-tbl-smooth-v" class="btn" type="button">V</button>
+            </div>
+            <div class="toolbar-group">
+              <span class="toolbar-label">Interp</span>
+              <button id="btn-tbl-interp" class="btn" type="button">Plane</button>
+              <button id="btn-tbl-interp-h" class="btn" type="button">H</button>
+              <button id="btn-tbl-interp-v" class="btn" type="button">V</button>
+            </div>
+            <div class="toolbar-group">
+              <button id="btn-tbl-copy" class="btn" type="button">Copy</button>
+              <button id="btn-tbl-paste" class="btn" type="button">Paste</button>
+              <button id="btn-tbl-undo" class="btn" type="button">Undo</button>
+              <button id="btn-tbl-stft" class="btn" type="button">STFT</button>
+            </div>
+            <div class="toolbar-sep"></div>
             <div class="toolbar-group">
               <span class="toolbar-label">Hex</span>
               <label class="tool-field">off <input id="hex-poke-off" placeholder="4000"></label>
@@ -320,11 +348,13 @@
           </div>
         </section>
         <aside class="tables-side-panel panel quiet-panel">
-          <div class="panel-header"><span class="panel-title">Details</span></div>
-          <div id="side-meta" class="side-meta"></div>
-          <div id="side-advice" class="side-advice muted"></div>
-          <div class="panel-header"><span class="panel-title">Checksum</span></div>
-          <pre id="side-checksum" class="mono-block">Validate or correct after edits.</pre>
+          <div class="scroll-pane">
+            <div class="panel-header"><span class="panel-title">Details</span></div>
+            <div id="side-meta" class="side-meta"></div>
+            <div id="side-advice" class="side-advice muted"></div>
+            <div class="panel-header"><span class="panel-title">Checksum</span></div>
+            <pre id="side-checksum" class="mono-block">Validate or correct after edits.</pre>
+          </div>
         </aside>
       </div>
     </div>
@@ -346,7 +376,7 @@
           <button id="btn-show-risk" class="btn btn-danger" type="button">Guided flash…</button>
         </div>
       </div>
-      <div class="view-body">
+      <div class="view-body flash-body">
         <div class="pipeline-steps" id="flash-steps">
           <div class="step" data-step="identify"><span class="step-num">1</span> Identify <span class="step-status" id="st-identify">pending</span></div>
           <div class="step" data-step="voltage"><span class="step-num">2</span> Voltage <span class="step-status" id="st-voltage">pending</span></div>
@@ -366,7 +396,7 @@
           <label><input type="checkbox" id="risk-unverified"> accept unverified write (not recommended)</label>
           <button id="btn-run-flash" class="btn btn-danger" type="button" disabled>PROCEED WITH GUIDED FLASH</button>
         </div>
-        <pre id="flash-log" class="mono-block log-box"></pre>
+        <pre id="flash-log" class="mono-block log-box scroll-pane"></pre>
       </div>
     </div>
 
@@ -378,13 +408,13 @@
         </div>
         <div class="toolbar-status">CLI helpers only — not an embedded interpreter.</div>
       </div>
-      <div class="view-body">
+      <div class="view-body scroll-pane">
         <div id="custom-scripts-list" class="script-list"></div>
       </div>
     </div>
 
     <footer class="status-bar">
-      <div class="status-left" id="status-left">TuneItVerse 3.15.1</div>
+      <div class="status-left" id="status-left">TuneItVerse 3.16.0</div>
       <div class="status-center" id="status-center">No invented live values</div>
       <div class="status-right" id="status-right">Desktop app required</div>
     </footer>
