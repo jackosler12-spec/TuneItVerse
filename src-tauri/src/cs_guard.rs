@@ -39,8 +39,37 @@ pub fn looks_like_gm_p01(data: &[u8]) -> bool {
     false
 }
 
+/// P59 truck OS IDs that collide on 512 KB with P01 / Honda.
+/// Do not treat these as P01 additive targets — CS words live elsewhere.
+pub fn looks_like_gm_p59(data: &[u8]) -> bool {
+    let mut cur = String::new();
+    for &b in data {
+        if (0x20..=0x7E).contains(&b) {
+            cur.push(b as char);
+            if cur.len() > 36 {
+                cur = cur[cur.len() - 36..].to_string();
+            }
+            let up = cur.to_ascii_uppercase();
+            if up.contains("12586243") || up.contains("12602801") || up.contains("P59") {
+                return true;
+            }
+        } else {
+            cur.clear();
+        }
+    }
+    false
+}
+
 pub fn honda_blocks_p01_corrector(data: &[u8]) -> bool {
     is_p01_size(data.len()) && looks_like_honda(data) && !looks_like_gm_p01(data)
+}
+
+pub fn p59_blocks_p01_corrector(data: &[u8]) -> bool {
+    is_p01_size(data.len()) && looks_like_gm_p59(data) && !looks_like_gm_p01(data)
+}
+
+pub fn p01_corrector_blocked(data: &[u8]) -> bool {
+    honda_blocks_p01_corrector(data) || p59_blocks_p01_corrector(data)
 }
 
 pub fn scan_checksum_candidates(data: &[u8]) -> serde_json::Value {
@@ -80,7 +109,9 @@ pub fn scan_checksum_candidates(data: &[u8]) -> serde_json::Value {
         "candidates": hits,
         "honda_os": looks_like_honda(data),
         "gm_p01_os": looks_like_gm_p01(data),
+        "gm_p59_os": looks_like_gm_p59(data),
         "honda_blocks_p01": honda_blocks_p01_corrector(data),
+        "p59_blocks_p01": p59_blocks_p01_corrector(data),
         "note": "Report-only. A zero-sum window is not a corrector. Do not invent CS bytes."
     })
 }
@@ -98,6 +129,13 @@ mod tests {
         let mut img = vec![0u8; 64];
         img[10..18].copy_from_slice(b"37820-PR");
         assert!(looks_like_honda(&img));
+        assert!(!looks_like_gm_p01(&img));
+    }
+    #[test]
+    fn p59_string_detected() {
+        let mut img = vec![0u8; 64];
+        img[10..18].copy_from_slice(b"12586243");
+        assert!(looks_like_gm_p59(&img));
         assert!(!looks_like_gm_p01(&img));
     }
     #[test]
