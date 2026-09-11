@@ -1,8 +1,8 @@
 {
   "name": "tuneitverse",
   "private": true,
-  "version": "3.13.0",
-  "description": "TuneItVerse - open ECU tuning platform (Tauri + Rust). v3.13.0: wire catalog/checksum/voltage commands, last-port restore, session snapshot.",
+  "version": "3.14.0",
+  "description": "TuneItVerse - open ECU tuning platform (Tauri + Rust). v3.14.0: live flash progress, P59/P01 checksum guard.",
   "type": "module",
   "scripts": {
     "tauri": "tauri",

@@ -1,7 +1,7 @@
 [package]
 name = "TuneItVerse"
-version = "3.13.0"
-description = "ECU Tuning platform for JRTuners. v3.13.0: wired catalog/checksum/voltage commands, last-port restore, session snapshot."
+version = "3.14.0"
+description = "ECU Tuning platform for JRTuners. v3.14.0: live flash progress events, P59/P01 corrector guard."
 authors = ["JRTuners"]
 edition = "2021"
 
