@@ -1,4 +1,4 @@
-// flash.rs — Guided flash pipeline v3.12.0 (mid-transfer voltage on VPW + UDS)
+// flash.rs -- Guided flash pipeline v3.18.0 (live progress + P59 write block)
 use serde::{Serialize, Deserialize};
 use crate::checksum::ChecksumReport;
 use serialport::SerialPort;
@@ -86,7 +86,7 @@ pub fn orchestrate_guided_flash<F>(port: &mut Box<dyn SerialPort + Send>, reques
 where F: FnMut(FlashProgress),
 {
     let min_v = request.min_voltage_v.unwrap_or(DEFAULT_MIN_VOLTAGE_V);
-    let mut result = GuidedFlashResult { success: false, steps_completed: vec![], backup: None, checksum_report: None, flash_write_result: None, verification_crc: None, verified_live: false, voltage_at_start: None, recovery_prompt: None, logs: vec!["Guided flash: identifying image…".into()], error: None };
+    let mut result = GuidedFlashResult { success: false, steps_completed: vec![], backup: None, checksum_report: None, flash_write_result: None, verification_crc: None, verified_live: false, voltage_at_start: None, recovery_prompt: None, logs: vec!["Guided flash: identifying image...".into()], error: None };
     if !request.user_confirmed_risks { result.error = Some("Risks not confirmed".into()); return Ok(result); }
     if request.tuned_bin.is_empty() { result.error = Some("Empty tuned_bin".into()); return Ok(result); }
     let family = match crate::v29_tools::resolved_family(&request.tuned_bin) {
@@ -100,10 +100,7 @@ where F: FnMut(FlashProgress),
         && !request.ecu_family.eq_ignore_ascii_case(&family)
         && !request.ecu_family.eq_ignore_ascii_case("auto")
     {
-        result.logs.push(format!(
-            "UI family '{}' overridden by identify '{}'",
-            request.ecu_family, family
-        ));
+        result.logs.push(format!("UI family '{}' overridden by identify '{}'", request.ecu_family, family));
     }
     result.logs.push(format!("Guided flash starting for {}", family));
     match enforce_voltage_gate(port, min_v, &mut result.logs) {
@@ -113,6 +110,10 @@ where F: FnMut(FlashProgress),
     let mut image = request.tuned_bin.clone();
     if crate::cs_guard::honda_blocks_p01_corrector(&image) {
         result.error = Some("Honda OS string on this image. Refusing P01 additive and write.".into());
+        return Ok(result);
+    }
+    if crate::cs_guard::p59_blocks_p01_corrector(&image) {
+        result.error = Some("P59 OS string on this image. P01 additive and write stay blocked until measured P59 CS words and kernel exist.".into());
         return Ok(result);
     }
     if request.auto_correct_checksum {
@@ -136,7 +137,11 @@ where F: FnMut(FlashProgress),
     }
     let bosch_uds = fam.contains("EDC") || fam.contains("MED") || fam.contains("BOSCH")
         || fam.contains("DELPHI") || fam.contains("DCM") || fam.contains("SID");
-    let gm_vpw = fam.contains("P01") || fam.contains("GM") || fam.contains("P59");
+    if fam.contains("P59") {
+        result.error = Some("GM P59 write path is not enabled. No measured checksum words or kernel on this tree.".into());
+        return Ok(result);
+    }
+    let gm_vpw = fam.contains("P01") || (fam.contains("GM") && !fam.contains("P59"));
     if !bosch_uds && !gm_vpw {
         result.error = Some(format!("No verified write path for family {}", family));
         return Ok(result);
