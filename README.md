@@ -26,7 +26,9 @@ python3 python/ecu_scripting.py seedkey P01_0411 1234 1
 python3 python/ecu_scripting.py diff stock.bin tuned.bin
 ```
 
-## Current status (v3.18.0)
+Same commands run in-app on the Scripts page against the loaded BIN (`identify`, `checksum`, `correct`, `compare`, `seedkey`, `poke`, `tables`, `maplog`). No eval, no shell.
+
+## Current status (v3.19.0)
 
 See [COMPLETION.md](COMPLETION.md). Holden/GM P01 BINs auto-load the Universal Patcher TableSeek pack (1598 definitions; 1300+ typically located in a real dump). Offline BIN/XDF edit and save.
 

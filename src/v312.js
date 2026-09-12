@@ -1,4 +1,4 @@
-// TuneItVerse v3.18.0 overlay — catalog, checksums, flash helpers, last-port restore.
+// TuneItVerse v3.19.0 overlay — catalog, checksums, flash helpers, last-port restore.
 (function () {
   const PREF_KEY = 'tiv_conn';
 
@@ -143,7 +143,7 @@
     }
     try {
       const sl = document.getElementById('status-left');
-      if (sl) sl.textContent = 'TuneItVerse 3.18.0';
+      if (sl) sl.textContent = 'TuneItVerse 3.19.0';
     } catch (_) {}
   }
 
