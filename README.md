@@ -26,13 +26,13 @@ python3 python/ecu_scripting.py seedkey P01_0411 1234 1
 python3 python/ecu_scripting.py diff stock.bin tuned.bin
 ```
 
-## Current status (v3.17.0)
+## Current status (v3.18.0)
 
 See [COMPLETION.md](COMPLETION.md). Holden/GM P01 BINs auto-load the Universal Patcher TableSeek pack (1598 definitions; 1300+ typically located in a real dump). Offline BIN/XDF edit and save.
 
 Live: Mode 01 / VIN / DTCs on ELM ASCII for CAN/UDS; raw VPW only when you pick VPW. J2534 shows Connected when PassThru is open.
 
-Flash: identify → voltage gate → backup → unlock → write. Honda and unverified P59 writes stay blocked.
+Flash: identify → voltage gate → backup → unlock → write, with live `flash-progress` events. Honda and P59 writes stay blocked. P59 OS strings also block the P01 additive corrector.
 
 Build your own. No bullshit prices.
 
