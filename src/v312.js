@@ -1,4 +1,4 @@
-// TuneItVerse v3.17.0 overlay — catalog, checksums, flash helpers, last-port restore.
+// TuneItVerse v3.18.0 overlay — catalog, checksums, flash helpers, last-port restore.
 (function () {
   const PREF_KEY = 'tiv_conn';
 
@@ -83,7 +83,7 @@
   async function correctCs() {
     const bin = window.currentBin;
     if (!bin) { alert('Load a BIN first'); return; }
-    if (!confirm('Correct checksums on the loaded image? Honda / unknown sizes stay fail-closed.')) return;
+    if (!confirm('Correct checksums on the loaded image? Honda / P59 / unknown sizes stay fail-closed.')) return;
     const cs = document.getElementById('side-checksum');
     try {
       const probe = parseMaybe(await cmd('correct_bin_checksums_report', { data: Array.from(bin) }));
@@ -143,7 +143,7 @@
     }
     try {
       const sl = document.getElementById('status-left');
-      if (sl) sl.textContent = 'TuneItVerse 3.17.0';
+      if (sl) sl.textContent = 'TuneItVerse 3.18.0';
     } catch (_) {}
   }
 
