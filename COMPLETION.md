@@ -1,42 +1,18 @@
-# TuneItVerse v3.17.0 — table descriptions + orbitable 3D maps
+# TuneItVerse v3.18.0 — live flash progress + P59 fail-closed + CLI diff
 
-Parameter titles use Universal Patcher ExtraTableName when present, otherwise a readable form of the pack name (`Volumetric_Efficiency_Crank` → `Volumetric Efficiency Crank`). Each map shows its TableSeek description under the editor and in **What this table does**. The 3D tab is an orbitable surface (drag rotate, wheel zoom), not a flat heatmap. 1×N tables draw as a 2D line. Descriptions come from the pack — no invented tune advice.
+v3.17 documented `flash-progress` events and a bench `diff` command. The tree on main did not match that write-up:
 
----
-
-# TuneItVerse v3.16.0 — category tree + HP Tuners-style map editor
-
-Maps are grouped in collapsible category dropdowns (Fuel, Spark, Idle, …). The app shell no longer page-scrolls: list, grid, details, logs, and catalog each scroll in their own pane. Grid editing matches TunerPro / HP Tuners: drag-select, = / + / × on the selection, horizontal/vertical/plane interpolate, H/V/all smooth, copy/paste, undo, +/− increment. Apply Patch still writes the BIN.
-
----
-
-# TuneItVerse v3.15.1 — map workspace chrome
-
-The Maps page was a wrap of mixed file, checksum, hex-poke, and scale buttons with 48 category chips. v3.15.1 groups File / BIN / Session on a page toolbar, puts Edit and Hex poke under the grid, uses a category dropdown, and shows 1D/2D/3D list rows with empty states. Connect, Log, Diagnostics, Flash, and Scripts use the same toolbar + panel pattern.
-
----
-
-# TuneItVerse v3.15.0 — P01 TableSeek pack (~1598 Universal Patcher parameters)
-
-Loading a Holden P01 BIN used to show three stub maps. The real pack is `reference/tableseek-p01-p59.xml` (1598 TableSeek entries). v3.15.0 embeds that pack and locates tables with the same SearchStr rules as Universal Patcher: `*` is a wildcard, `@` bytes are the address, `+D12` follows a 32-bit pointer. Hits only — no invented addresses. Any 128/512 KB dump that is not Honda gets the pack (Holden OS IDs are not only `12225074`). On the reference LS1 `12225074` dump this locates 1300+ parameters; tables whose opcode sequence is absent from that OS are listed as missing. Honda 512 KB dumps are not given the P01 pack. Tables UI: search + category chips.
-
----
-
-# TuneItVerse v3.14.0 — live flash progress + P59/P01 corrector guard (2026-09-11)
-
-v3.13.0 wired catalog/checksum/voltage UI. This pass closes three operational holes that were still live on main:
-
-1. Guided flash discarded the progress callback (` |_| {} `), so the flash bar never moved during a write.
-2. A 512 KB image with a P59 OS (`12586243` / `12602801`) was treated as P01-additive-safe. Those CS words are not the P01 map. Correction and write now fail-closed for P59-only strings.
-3. Identify result was not published on `window.lastIdentify`, so the flash overlay could not pick the family the Tables view just resolved.
+1. `guided_flash_pipeline` still called `orchestrate_guided_flash(..., |_| {})`, so the flash bar only jumped after the invoke returned.
+2. Identify marked `GM_P59` as `correction_safe`. Checksum correct and guided write only blocked Honda, not P59 OS strings (`12586243` / `12602801`).
+3. `python/ecu_scripting.py` had no `diff` subcommand even though README / COMPLETION listed it.
 
 ## What this pass actually changed
 
-1. Version 3.14.0 across package, crate, Tauri window, installer, HTML, overlay, workspace export, and docs.
+1. Version 3.18.0 across package, crate, Tauri window, installer, HTML, overlay, workspace export, and docs.
 2. `guided_flash_pipeline` takes `AppHandle` and emits `flash-progress` `{percent, bytes_done, bytes_total}` on every VPW chunk and UDS download tick. UI listens and updates the bar live.
-3. `cs_guard::looks_like_gm_p59` + `p59_blocks_p01_corrector`. Validate is report-only. Correct and guided write refuse.
-4. Identify sets `gm_p59_os`, `correction_safe` only for measured P01 / EDC16 paths, and `window.lastIdentify`.
-5. BIN compare side panel lists diff ranges. CLI `python3 python/ecu_scripting.py diff a.bin b.bin`.
+3. Identify publishes `gm_p59_os`. `correction_safe` is only true for measured P01 (not P59) and EDC16 family. `resolved_family` refuses P59 write/compare.
+4. `checksum::validate` is report-only for P59. `correct_checksums` and guided flash refuse P59 OS strings and the `GM_P59` family write path.
+5. CLI `python3 python/ecu_scripting.py diff stock.bin tuned.bin` matches `compare_bins_cmd` ranges. Scripts view lists the command.
 
 ## Still needs your bench
 
@@ -49,3 +25,9 @@ v3.13.0 wired catalog/checksum/voltage UI. This pass closes three operational ho
 Never flash without a verified backup and stable power. Personal dumps only.
 
 Build your own. No bullshit prices.
+
+---
+
+# TuneItVerse v3.17.0 — table descriptions + orbitable 3D maps
+
+Parameter titles use Universal Patcher ExtraTableName when present, otherwise a readable form of the pack name (`Volumetric_Efficiency_Crank` → `Volumetric Efficiency Crank`). Each map shows its TableSeek description under the editor and in **What this table does**. The 3D tab is an orbitable surface (drag rotate, wheel zoom), not a flat heatmap. 1×N tables draw as a 2D line. Descriptions come from the pack — no invented tune advice.
