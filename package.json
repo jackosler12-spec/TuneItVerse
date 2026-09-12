@@ -1,8 +1,8 @@
 {
   "name": "tuneitverse",
   "private": true,
-  "version": "3.18.0",
-  "description": "TuneItVerse - open ECU tuning platform. v3.18.0: live flash-progress events, P59 write/corrector block, CLI BIN diff.",
+  "version": "3.19.0",
+  "description": "TuneItVerse - open ECU tuning platform. v3.19.0: embedded bench scripts, live flash-progress emit, map-from-log CSV.",
   "type": "module",
   "scripts": {
     "tauri": "tauri",
