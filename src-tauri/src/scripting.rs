@@ -56,7 +56,7 @@ fn parse_offset(tok: &str) -> Result<usize, String> {
 
 fn help_text() -> Value {
     json!({
-        "language": "TuneItVerse bench script v3.19",
+        "language": "TuneItVerse bench script v3.20",
         "commands": [
             "identify                 — family / OS / size / correction_safe",
             "checksum                 — validate known families (report-only for Honda/P59)",
