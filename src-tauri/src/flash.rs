@@ -1,4 +1,4 @@
-// flash.rs -- Guided flash pipeline v3.18.0 (live progress + P59 write block)
+// flash.rs -- Guided flash pipeline v3.20.0 (live progress emit + J2534 Vbatt sag abort)
 use serde::{Serialize, Deserialize};
 use crate::checksum::ChecksumReport;
 use serialport::SerialPort;
@@ -9,7 +9,13 @@ use std::time::Duration;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FlashWriteResult { pub bytes_written: u32, pub blocks_written: u32, pub crc32_written: u32 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FlashProgress { pub bytes_done: u32, pub bytes_total: u32, pub percent: u8 }
+pub struct FlashProgress {
+    pub bytes_done: u32,
+    pub bytes_total: u32,
+    pub percent: u8,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub voltage_warn: Option<f32>,
+}
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum BackupQuality { FullImage, PartialDidOnly, Failed }
@@ -161,11 +167,24 @@ where F: FnMut(FlashProgress),
             &image,
             true,
             |done, total| {
+                let mut voltage_warn = None;
+                if crate::j2534::is_device_open() {
+                    if let Ok(v) = crate::j2534::j2534_read_vbatt() {
+                        if v > 0.0 && v < min_v {
+                            return Err(format!("J2534 Vbatt sag mid-write: {:.2} V (min {:.2})", v, min_v));
+                        }
+                        if v > 0.0 && v < min_v + 0.4 {
+                            voltage_warn = Some(v);
+                        }
+                    }
+                }
                 on_progress(FlashProgress {
                     bytes_done: done,
                     bytes_total: total,
                     percent: ((done as u64 * 100) / total.max(1) as u64) as u8,
+                    voltage_warn,
                 });
+                Ok(())
             },
         );
         if let Err(e) = write {
@@ -190,7 +209,19 @@ where F: FnMut(FlashProgress),
             if i > 0 && i % 10 == 0 { if let Err(e) = enforce_voltage_gate(port, min_v, &mut result.logs) { result.error = Some(e); return Ok(result); } }
             if let Err(e) = send_frame(port, &build_mode36_chunk(chunk)) { result.error = Some(e); return Ok(result); }
             let done = ((i + 1) * chunk_size).min(total);
-            on_progress(FlashProgress { bytes_done: done as u32, bytes_total: total as u32, percent: ((done * 100) / total.max(1)) as u8 });
+            let mut voltage_warn = None;
+            if crate::j2534::is_device_open() {
+                if let Ok(v) = crate::j2534::j2534_read_vbatt() {
+                    if v > 0.0 && v < min_v {
+                        result.error = Some(format!("J2534 Vbatt sag mid-write: {:.2} V (min {:.2})", v, min_v));
+                        return Ok(result);
+                    }
+                    if v > 0.0 && v < min_v + 0.4 {
+                        voltage_warn = Some(v);
+                    }
+                }
+            }
+            on_progress(FlashProgress { bytes_done: done as u32, bytes_total: total as u32, percent: ((done * 100) / total.max(1)) as u8, voltage_warn });
             timing.sleep();
         }
         let _ = send_frame(port, &build_mode37_request());
