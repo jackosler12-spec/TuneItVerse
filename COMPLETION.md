@@ -1,14 +1,20 @@
-# TuneItVerse v3.19.0 — embedded bench scripts + real flash-progress emit
+# TuneItVerse v3.20.0 — wire the runtime that v3.19 documented
 
-v3.18 docs said `guided_flash_pipeline` emitted `flash-progress`. On main it still called `orchestrate_guided_flash(..., |_| {})`, so the bar only jumped when the invoke returned. Scripts was a CLI cheat-sheet.
+v3.19 added `scripting.rs` and claimed `guided_flash_pipeline` emitted `flash-progress`. On main those were not wired:
+
+1. `mod scripting` was missing. `run_bench_script` was never in the invoke handler. `list_script_helpers` in `lib.rs` still returned Python CLI strings. The Scripts page had no editor.
+2. `guided_flash_pipeline` still called `orchestrate_guided_flash(..., |_| {})`, so the bar only jumped when the invoke returned.
+3. `v29_tools::analyze_log` was private, so the script runtime could not compile even if it had been registered.
+4. UDS download progress could not abort on J2534 Vbatt sag.
 
 ## What this pass actually changed
 
-1. Version 3.19.0 across package, crate, Tauri window, installer, HTML, overlay, workspace export, and docs.
-2. `guided_flash_pipeline` takes `AppHandle` and emits `flash-progress` `{percent, bytes_done, bytes_total}` on every VPW chunk and UDS download tick. The Flash UI listens and moves the bar live. J2534 Vbatt sag mid-write is surfaced as `voltage_warn` (VPW path already abort-gates).
-3. New `src-tauri/src/scripting.rs` runtime: line commands `identify`, `checksum`, `correct`, `compare`, `seedkey`, `poke`, `tables`, `maplog`. No eval, no shell. Mutating commands return the working BIN so Save stays honest. Unit tests cover poke / help / fail-closed identify on blank 512 KB.
-4. Scripts view is an editor + run + example, not a dead helper list. Helpers click-insert into the editor.
+1. Version 3.20.0 across package, crate, Tauri window, installer, HTML, overlay, workspace export, and docs.
+2. `mod scripting` + `run_bench_script` / `list_script_helpers` registered. Scripts view is an editor + Run + click-to-insert helpers. Mutating commands (`poke`, `correct`) return the working BIN so Save stays honest.
+3. `guided_flash_pipeline` takes `AppHandle` and emits `flash-progress` `{percent, bytes_done, bytes_total, voltage_warn}` on every VPW chunk and UDS tick. The Flash UI listens and moves the bar live.
+4. UDS `download_image` progress callback can fail. J2534 Vbatt below the gate aborts mid-write; near-gate values surface as `voltage_warn`. VPW path still abort-gates every 10 chunks.
 5. `map_from_log_cmd` accepts optional CSV and imports it into the log buffer before the occupancy heatmap.
+6. `with_port` is `pub(crate)` so `v312` voltage helpers compile.
 
 ## Still needs your bench
 
@@ -17,28 +23,6 @@ v3.18 docs said `guided_flash_pipeline` emitted `flash-progress`. On main it sti
 3. PCM Hammer comparison on your 512 KB P01 OS (`12225074`).
 4. A vendor J2534 DLL on Windows so the registry walk returns a real FunctionLibrary path.
 5. A kernel-resident Mode 3C full-image dump. Windowed probes are not a full backup.
-
-Never flash without a verified backup and stable power. Personal dumps only.
-
-Build your own. No bullshit prices.
-
----
-
-# TuneItVerse v3.18.0 — live flash progress + P59 fail-closed + CLI diff
-
-v3.17 documented `flash-progress` events and a bench `diff` command. The tree on main did not match that write-up:
-
-1. `guided_flash_pipeline` still called `orchestrate_guided_flash(..., |_| {})`, so the flash bar only jumped after the invoke returned.
-2. Identify marked `GM_P59` as `correction_safe`. Checksum correct and guided write only blocked Honda, not P59 OS strings (`12586243` / `12602801`).
-3. `python/ecu_scripting.py` had no `diff` subcommand even though README / COMPLETION listed it.
-
-## What this pass actually changed
-
-1. Version 3.18.0 across package, crate, Tauri window, installer, HTML, overlay, workspace export, and docs.
-2. `guided_flash_pipeline` takes `AppHandle` and emits `flash-progress` `{percent, bytes_done, bytes_total}` on every VPW chunk and UDS download tick. UI listens and updates the bar live.
-3. Identify publishes `gm_p59_os`. `correction_safe` is only true for measured P01 (not P59) and EDC16 family. `resolved_family` refuses P59 write/compare.
-4. `checksum::validate` is report-only for P59. `correct_checksums` and guided flash refuse P59 OS strings and the `GM_P59` family write path.
-5. CLI `python3 python/ecu_scripting.py diff stock.bin tuned.bin` matches `compare_bins_cmd` ranges. Scripts view lists the command.
 
 Never flash without a verified backup and stable power. Personal dumps only.
 
