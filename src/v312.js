@@ -1,4 +1,4 @@
-// TuneItVerse v3.20.0 overlay — catalog, checksums, flash helpers, last-port restore.
+// TuneItVerse v3.21.0 overlay — catalog, checksums, flash helpers, scripts, last-port restore.
 (function () {
   const PREF_KEY = 'tiv_conn';
 
@@ -122,11 +122,65 @@
     el.addEventListener('click', function (ev) { ev.preventDefault(); Promise.resolve(fn()).catch(function (e) { console.error(id, e); }); });
   }
 
+  function listenFlashProgress() {
+    try {
+      const ev = window.__TAURI__ && window.__TAURI__.event;
+      if (!ev || typeof ev.listen !== 'function') return;
+      ev.listen('flash-progress', function (event) {
+        const p = event && event.payload ? event.payload : event;
+        if (!p) return;
+        const pct = typeof p.percent === 'number' ? p.percent : 0;
+        const bar = document.getElementById('flash-bar');
+        if (bar) bar.style.width = pct + '%';
+        const prog = document.getElementById('flash-progress');
+        if (prog) {
+          const warn = p.voltage_warn != null ? '  Vbatt ' + Number(p.voltage_warn).toFixed(2) + ' V' : '';
+          prog.textContent = pct + '%  ' + (p.bytes_done || 0) + '/' + (p.bytes_total || 0) + warn;
+        }
+      });
+    } catch (_) {}
+  }
+
+  function ensureScriptEditor() {
+    const view = document.getElementById('view-scripts');
+    if (!view || document.getElementById('script-source')) return;
+    const body = view.querySelector('.view-body') || view;
+    const wrap = document.createElement('div');
+    wrap.innerHTML = '<textarea id="script-source" class="mono-block" rows="10">identify\nchecksum\nhelp\n</textarea><p><button id="btn-run-script" class="btn btn-primary" type="button">Run</button></p><pre id="script-output" class="mono-block">Load a BIN on Maps, then Run.</pre>';
+    body.insertBefore(wrap, body.firstChild);
+  }
+
+  async function runBenchScript() {
+    const src = document.getElementById('script-source');
+    const out = document.getElementById('script-output');
+    const source = src ? src.value : 'help';
+    if (out) out.textContent = 'Running…';
+    try {
+      const bin = window.currentBin;
+      const raw = await cmd('run_bench_script', {
+        source: source,
+        working_bin: bin ? Array.from(bin) : null,
+        compare_bin: window.compareBin ? Array.from(window.compareBin) : null
+      });
+      const res = parseMaybe(raw) || {};
+      if (out) out.textContent = JSON.stringify(res, null, 2);
+      if (res.mutated && Array.isArray(res.bin) && res.bin.length) {
+        window.currentBin = new Uint8Array(res.bin);
+        const save = document.getElementById('btn-save-patched');
+        if (save) save.disabled = false;
+      }
+    } catch (e) {
+      if (out) out.textContent = String(e);
+    }
+  }
+
   function boot() {
     restorePrefs();
     setTimeout(restorePrefs, 400);
     loadCatalog();
     refreshDashLive();
+    listenFlashProgress();
+    ensureScriptEditor();
     bind('btn-validate-cs', validateCs);
     bind('btn-correct-cs', correctCs);
     bind('btn-check-voltage', function () { return flashCmd('read_battery_voltage_cmd', {}, 'Voltage'); });
@@ -136,6 +190,7 @@
       const fam = (window.lastIdentify && window.lastIdentify.family) || document.getElementById('seed-family')?.value || 'EDC16C41';
       return flashCmd('bosch_uds_unlock', { family: fam, level: 'programming' }, 'Bosch UDS unlock');
     });
+    bind('btn-run-script', runBenchScript);
     const connectBtn = document.getElementById('btn-do-connect');
     if (connectBtn && !connectBtn.dataset.v313pref) {
       connectBtn.dataset.v313pref = '1';
@@ -143,7 +198,7 @@
     }
     try {
       const sl = document.getElementById('status-left');
-      if (sl) sl.textContent = 'TuneItVerse 3.20.0';
+      if (sl) sl.textContent = 'TuneItVerse 3.21.0';
     } catch (_) {}
   }
 

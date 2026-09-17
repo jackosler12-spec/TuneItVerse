@@ -1,7 +1,7 @@
 [package]
 name = "TuneItVerse"
-version = "3.20.0"
-description = "ECU Tuning platform for JRTuners. v3.20.0: scripts runtime wired, live flash-progress events, mid-write J2534 Vbatt abort."
+version = "3.21.0"
+description = "ECU Tuning platform for JRTuners. v3.21.0: scripts runtime actually registered, live flash-progress events, mid-write J2534 Vbatt abort."
 authors = ["JRTuners"]
 edition = "2021"
 
