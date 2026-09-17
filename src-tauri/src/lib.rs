@@ -54,3 +54,7 @@ where F: FnOnce(&mut Box<dyn SerialPort + Send>) -> Result<R, String>,
         None => Err("Not connected. Call connect_ecu first.".into()),
     }
 }
+
+include!("commands_p1.rs");
+include!("commands_p2.rs");
+include!("commands_p3.rs");
