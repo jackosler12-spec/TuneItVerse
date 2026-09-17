@@ -1,8 +1,8 @@
 {
   "name": "tuneitverse",
   "private": true,
-  "version": "3.20.0",
-  "description": "TuneItVerse - open ECU tuning platform. v3.20.0: scripts runtime wired, live flash-progress events, mid-write J2534 Vbatt abort.",
+  "version": "3.21.0",
+  "description": "TuneItVerse - open ECU tuning platform. v3.21.0: scripts runtime actually registered, live flash-progress events, mid-write J2534 Vbatt abort.",
   "type": "module",
   "scripts": {
     "tauri": "tauri",
