@@ -60,10 +60,14 @@ const ME7_JSON: &str = include_str!("../../reference/ecu_database/me7_common.jso
 const DELPHI_JSON: &str = include_str!("../../reference/ecu_database/delphi_dcm.json");
 const SID803_JSON: &str = include_str!("../../reference/ecu_database/siemens_sid803.json");
 const HONDA_JSON: &str = include_str!("../../reference/ecu_database/honda_keihin.json");
+const EDC15_JSON: &str = include_str!("../../reference/ecu_database/edc15_common.json");
+const ME9_JSON: &str = include_str!("../../reference/ecu_database/me9_common.json");
+const SIMOS18_JSON: &str = include_str!("../../reference/ecu_database/simos18.json");
+const TRIONIC8_JSON: &str = include_str!("../../reference/ecu_database/trionic8.json");
 
 pub fn load_ecu_database() -> Vec<EcuDbEntry> {
     let mut db = Vec::new();
-    for raw in [P01_JSON, EDC16_JSON, P59_JSON, MED17_JSON, EDC17_JSON, ME7_JSON, DELPHI_JSON, SID803_JSON, HONDA_JSON] {
+    for raw in [P01_JSON, EDC16_JSON, P59_JSON, MED17_JSON, EDC17_JSON, ME7_JSON, DELPHI_JSON, SID803_JSON, HONDA_JSON, EDC15_JSON, ME9_JSON, SIMOS18_JSON, TRIONIC8_JSON] {
         if let Ok(entry) = serde_json::from_str::<EcuDbEntry>(raw) {
             db.push(entry);
         }
@@ -157,9 +161,6 @@ pub fn tables_for_bin(data: &[u8]) -> AutoTablesResult {
             note: "Honda OS string. P01 TableSeek pack is not applied.".into(),
         };
     }
-    // Holden/GM P01 is 128 KB cal or 512 KB full. OS ID is not always 12225074 —
-    // run TableSeek on any P01-sized dump that is not Honda, plus any dump that
-    // already has a GM P01 OS string.
     let p01_sized = crate::checksum_sizes::is_p01_size(data.len());
     if p01_sized || crate::cs_guard::looks_like_gm_p01(data) {
         let (tables, located, missing) = crate::tableseek::locate_p01_tables(data);
@@ -256,7 +257,13 @@ mod tests {
         assert!(fams.iter().any(|f| f == "DELPHI_DCM"));
         assert!(fams.iter().any(|f| f == "SIEMENS_SID803"));
         assert!(fams.iter().any(|f| f == "HONDA_KEIHIN"));
+        assert!(fams.iter().any(|f| f == "EDC15_COMMON"));
+        assert!(fams.iter().any(|f| f == "ME9_COMMON"));
+        assert!(fams.iter().any(|f| f == "SIMOS18"));
+        assert!(fams.iter().any(|f| f == "TRIONIC8"));
         assert!(get_ecu_by_bin_size(1048576).is_some());
+        assert!(get_ecu_by_family("SIMOS18").is_some());
+        assert_eq!(get_ecu_by_family("SIMOS18").unwrap().bin_size_bytes, 4_194_304);
     }
     #[test]
     fn honda_512k_does_not_get_p01_pack() {
