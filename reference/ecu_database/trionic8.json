@@ -1,0 +1,31 @@
+{
+  "ecu_family": "TRIONIC8",
+  "display_name": "Saab / GM Trionic 8",
+  "part_numbers_or_os_ids": ["T8", "TRIONIC8", "55353238"],
+  "vehicles": ["Saab 9-3", "Saab 9-5 Trionic 8"],
+  "hardware": "Trionic 8",
+  "protocol": "CAN / GMLAN",
+  "bin_size_bytes": 2097152,
+  "flash_memory_map": {
+    "typical": "2 MB — confirm OS string; size collides with Bosch 2 MB families"
+  },
+  "checksum": {
+    "type": "report-only",
+    "description": "No measured T8 corrector shipped.",
+    "reference_files": [],
+    "routine": null
+  },
+  "security_access": {
+    "type": "GM/Saab seed/key — measured table required",
+    "reference": "seed_tables.json",
+    "levels": ["Level 1", "Level 2"]
+  },
+  "maps_and_xdf": {
+    "has_xdf": false,
+    "xdf_file": null,
+    "description": "Use a personal XDF. Catalog does not invent T8 addresses.",
+    "refined_map_addrs": null
+  },
+  "communication_kernels": [],
+  "notes": "Identify by OS string. Writes blocked."
+}

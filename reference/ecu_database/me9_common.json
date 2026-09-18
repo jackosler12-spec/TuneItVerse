@@ -1,0 +1,34 @@
+{
+  "ecu_family": "ME9_COMMON",
+  "display_name": "Bosch ME9 / ME9.1 gasoline",
+  "part_numbers_or_os_ids": ["ME9", "ME9.1", "ME9.2"],
+  "vehicles": ["VW/Audi 2.0T early", "Holden/Opel ME9 applications"],
+  "hardware": "Bosch ME9",
+  "protocol": "CAN / KWP",
+  "bin_size_bytes": 2097152,
+  "flash_memory_map": {
+    "typical": "2 MB flash — size collides with EDC16/EDC17/MED17"
+  },
+  "checksum": {
+    "type": "report-only",
+    "description": "No measured ME9 corrector shipped. Identify by OS string before any tool claims a family.",
+    "reference_files": [],
+    "routine": null
+  },
+  "security_access": {
+    "type": "Bosch seed/key — measured table required",
+    "reference": "seed_tables.json",
+    "levels": ["Diagnostic", "Programming"]
+  },
+  "maps_and_xdf": {
+    "has_xdf": false,
+    "xdf_file": null,
+    "description": "Start hints only: ignition, VE, boost if turbo.",
+    "refined_map_addrs": {
+      "ignition_timing": "0x1C000",
+      "fuel_ve": "0x1A000"
+    }
+  },
+  "communication_kernels": [],
+  "notes": "Size collides with other 2 MB Bosch families. OS string wins. Write path stays fail-closed."
+}
