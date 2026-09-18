@@ -1,6 +1,6 @@
 {
-  "version": "1.16",
-  "updated": "2026-09-07",
+  "version": "1.17",
+  "updated": "2026-09-18",
   "description": "Master index of TuneItVerse ECU database entries.",
   "families": [
     {"id": "P01_0411", "file": "p01_0411.json", "display_name": "Holden LS1 / GM P01 0411 PCM", "bin_size_bytes": 524288, "primary_protocol": "VPW", "status": "full"},
@@ -11,7 +11,11 @@
     {"id": "ME7_COMMON", "file": "me7_common.json", "display_name": "Bosch ME7 (VW/Audi 1.8T community)", "bin_size_bytes": 1048576, "primary_protocol": "KWP", "status": "starter catalog + map hints — loader wired"},
     {"id": "DELPHI_DCM", "file": "delphi_dcm.json", "display_name": "Delphi DCM (common-rail diesel)", "bin_size_bytes": 2097152, "primary_protocol": "CAN/UDS", "status": "starter catalog + diesel map hints — loader wired"},
     {"id": "SIEMENS_SID803", "file": "siemens_sid803.json", "display_name": "Siemens / Continental SID803", "bin_size_bytes": 1572864, "primary_protocol": "CAN/UDS", "status": "starter catalog — report-only checksum"},
-    {"id": "HONDA_KEIHIN", "file": "honda_keihin.json", "display_name": "Honda Keihin K-series", "bin_size_bytes": 524288, "primary_protocol": "KWP", "status": "starter catalog — size collides with P01, identify by OS string"}
+    {"id": "HONDA_KEIHIN", "file": "honda_keihin.json", "display_name": "Honda Keihin K-series", "bin_size_bytes": 524288, "primary_protocol": "KWP", "status": "starter catalog — size collides with P01, identify by OS string"},
+    {"id": "EDC15_COMMON", "file": "edc15_common.json", "display_name": "Bosch EDC15", "bin_size_bytes": 1048576, "primary_protocol": "KWP", "status": "catalog — report-only checksum"},
+    {"id": "ME9_COMMON", "file": "me9_common.json", "display_name": "Bosch ME9", "bin_size_bytes": 2097152, "primary_protocol": "CAN/KWP", "status": "catalog — size collides with 2MB Bosch"},
+    {"id": "SIMOS18", "file": "simos18.json", "display_name": "Continental Simos 18", "bin_size_bytes": 4194304, "primary_protocol": "CAN/UDS", "status": "catalog — unique 4MB size"},
+    {"id": "TRIONIC8", "file": "trionic8.json", "display_name": "Saab / GM Trionic 8", "bin_size_bytes": 2097152, "primary_protocol": "CAN", "status": "catalog — identify by OS string"}
   ],
-  "notes": "Add new family JSON + entry here + update loader in ecu_database.rs. Personal dumps only. v3.10.0: Honda/P01 collision still enforced; flash/compare refuse unresolved 512KB; EDC17/MED17 starters are not unlock keys."
+  "notes": "Add new family JSON + entry here + update loader in ecu_database.rs. Personal dumps only. Honda/P01 collision still enforced; flash/compare refuse unresolved 512KB; EDC17/MED17 starters are not unlock keys."
 }
