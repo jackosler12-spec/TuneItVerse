@@ -1,25 +1,26 @@
-# TuneItVerse v3.21.0 — actually wire the runtime that v3.20 documented
+# TuneItVerse v3.22.0 — compile the maplog path and ship the catalog that v3.21 still lacked
 
-v3.20 docs claimed `scripting.rs` and live `flash-progress` were on main. They were not:
+v3.21 registered the script runtime but left holes that break a real build and a real tuner workflow:
 
-1. `mod scripting` was missing. `run_bench_script` was never in the invoke handler. `list_script_helpers` in `lib.rs` still returned Python CLI strings. The Scripts page had no editor.
-2. `guided_flash_pipeline` still called `orchestrate_guided_flash(..., |_| {})`, so the bar only jumped when the invoke returned.
-3. `v29_tools::analyze_log` was private, so the script runtime could not compile even if it had been registered.
-4. `with_port` and `compute_seed_key` were crate-root private, so `v312` / `scripting` could not call them.
-5. Version strings were split across 3.17.0 (HTML) and 3.20.0 (crate / installer).
+1. `scripting.rs` calls `v29_tools::analyze_log`, and that function was still private. `cargo test --lib` cannot compile.
+2. `map_from_log_cmd` ignored CSV. The Maps button only worked if a live session was already in the log buffer.
+3. HTML / workspace export still said 3.17.0. Scripts view was a stub; the editor was injected only if JS ran.
+4. No place to drop *your* measured seed/key pairs. EDC17/MED17 stayed starter-algebra-only.
+5. Catalog stopped at nine families. 4 MB Simos dumps identified as unknown.
 
 ## What this pass actually changed
 
-1. Version 3.21.0 across package, crate, Tauri window, installer, HTML, overlay, workspace export, and docs.
-2. `mod scripting` + `run_bench_script` / `list_script_helpers` registered. Scripts view is an editor + Run + click-to-insert helpers. Mutating commands (`poke`, `correct`) return the working BIN so Save stays honest.
-3. `guided_flash_pipeline` takes `AppHandle` and emits `flash-progress` `{percent, bytes_done, bytes_total, voltage_warn}` on every VPW chunk and UDS tick. The Flash UI listens and moves the bar live.
-4. `analyze_log` is `pub(crate)`. `map_from_log_cmd` accepts optional CSV and imports it into the log buffer before the occupancy heatmap.
-5. `with_port` and `compute_seed_key` are `pub(crate)` so voltage helpers and `seedkey` scripts compile.
+1. Version 3.22.0 across package, crate, Tauri window, installer, HTML, overlay, workspace export, and docs.
+2. `analyze_log` is `pub(crate)`. `map_from_log_cmd` accepts optional CSV and imports it before the occupancy heatmap.
+3. `seed_tables.rs` embeds `reference/ecu_database/seed_tables.json`. Empty by default. A matching pair is treated as measured and can unlock; everything else stays fail-closed.
+4. Catalog + loader: EDC15_COMMON, ME9_COMMON, SIMOS18 (4 MB), TRIONIC8. Writes stay blocked until you add a measured corrector.
+5. Scripts page ships a textarea + Run + click-to-insert helpers. Compare stores the second image for `compare` scripts and prints diff ranges.
+6. BIN compare now includes identify + SHA for both sides.
 
 ## Still needs your bench
 
-1. Measured P59 checksum words and kernel. Do not invent them. Writes stay blocked.
-2. EDC17 / MED17 / ME7 / SID803 / Honda seed tables from **your** dumps. Starter algebra is not a measured key.
+1. Measured P59 checksum words and kernel. Writes stay blocked.
+2. EDC17 / MED17 / ME7 / SID803 / Honda / Simos / T8 seed tables from **your** dumps. Put pairs in `seed_tables.json`. Starter algebra is not a measured key.
 3. PCM Hammer comparison on your 512 KB P01 OS (`12225074`).
 4. A vendor J2534 DLL on Windows so the registry walk returns a real FunctionLibrary path.
 5. A kernel-resident Mode 3C full-image dump. Windowed probes are not a full backup.
