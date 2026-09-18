@@ -1,0 +1,5 @@
+{
+  "version": "3.22.0",
+  "notes": "Add measured seed/key pairs from YOUR dumps only. Format: family, seed_hex, key_hex, optional level. Empty by default so unlock stays fail-closed.",
+  "pairs": []
+}

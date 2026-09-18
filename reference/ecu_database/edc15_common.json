@@ -1,0 +1,36 @@
+{
+  "ecu_family": "EDC15_COMMON",
+  "display_name": "Bosch EDC15 (PD / VE diesel community)",
+  "part_numbers_or_os_ids": ["EDC15", "EDC15P+", "EDC15C"],
+  "vehicles": ["VW/Audi PD TDI", "early common-rail Bosch diesel"],
+  "hardware": "Bosch EDC15",
+  "protocol": "KWP / CAN",
+  "bin_size_bytes": 1048576,
+  "flash_memory_map": {
+    "typical": "1 MB flash — confirm on your dump"
+  },
+  "checksum": {
+    "type": "report-only",
+    "description": "No measured multipoint corrector in this tree. Validate on the bench before any write.",
+    "reference_files": [],
+    "routine": null,
+    "notes": "Do not invent correction words."
+  },
+  "security_access": {
+    "type": "Bosch seed/key — measured table required",
+    "reference": "Drop pairs in seed_tables.json from a personal dump",
+    "levels": ["Diagnostic", "Programming"]
+  },
+  "maps_and_xdf": {
+    "has_xdf": false,
+    "xdf_file": null,
+    "description": "Community start: IQ, boost, duration, smoke. Confirm addresses on your file.",
+    "refined_map_addrs": {
+      "injection_quantity": "0x1A000",
+      "boost_setpoint": "0x1C000",
+      "smoke_limiter": "0x1E000"
+    }
+  },
+  "communication_kernels": [],
+  "notes": "Catalog + identify only. Writes stay blocked until a measured corrector and seed table exist."
+}

@@ -1,0 +1,31 @@
+{
+  "ecu_family": "SIMOS18",
+  "display_name": "Continental Simos 18 (EA888 Gen3)",
+  "part_numbers_or_os_ids": ["SIMOS18", "SIMOS18.1", "SIMOS18.10"],
+  "vehicles": ["VW/Audi/Skoda EA888 Gen3"],
+  "hardware": "Continental Simos 18",
+  "protocol": "CAN / UDS",
+  "bin_size_bytes": 4194304,
+  "flash_memory_map": {
+    "typical": "4 MB — unique size in this catalog"
+  },
+  "checksum": {
+    "type": "report-only",
+    "description": "No measured Simos 18 corrector in-tree. Do not patch CS words from guesswork.",
+    "reference_files": [],
+    "routine": null
+  },
+  "security_access": {
+    "type": "UDS SecurityAccess — measured table required",
+    "reference": "seed_tables.json",
+    "levels": ["Diagnostic", "Programming"]
+  },
+  "maps_and_xdf": {
+    "has_xdf": false,
+    "xdf_file": null,
+    "description": "Load an A2L/XDF from your own file. No invented map pack.",
+    "refined_map_addrs": null
+  },
+  "communication_kernels": [],
+  "notes": "Identify by 4 MB size + OS string. Flash/corrector blocked until you add measured routines."
+}
