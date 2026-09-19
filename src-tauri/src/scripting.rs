@@ -5,7 +5,7 @@
 //!   checksum
 //!   correct
 //!   compare
-//!   seedkey FAMILY SEEDHEX LEVEL
+//!   seedkey FAMILY SEEDHEX LEVEL [ALGO]
 //!   poke OFFSET HEXBYTES
 //!   tables
 //!   maplog
@@ -56,13 +56,13 @@ fn parse_offset(tok: &str) -> Result<usize, String> {
 
 fn help_text() -> Value {
     json!({
-        "language": "TuneItVerse bench script v3.20",
+        "language": "TuneItVerse bench script v3.23",
         "commands": [
             "identify                 — family / OS / size / correction_safe",
             "checksum                 — validate known families (report-only for Honda/P59)",
             "correct                  — apply measured corrector; fail-closed otherwise",
             "compare                  — diff working BIN vs compare image (set via UI)",
-            "seedkey FAMILY HEX LVL   — offline seed→key (verified algos only)",
+            "seedkey FAMILY HEX LVL [ALGO] — measured table, optional GM 2-byte algo, then LFSR/Bosch",
             "poke OFFSET HEX          — write bytes at offset (0x4000 AA BB)",
             "tables                   — locate TableSeek / catalog maps",
             "maplog                   — occupancy heatmap from imported / live log",
@@ -118,7 +118,16 @@ fn run_line(state: &mut ScriptState, line: &str) -> Result<Value, String> {
             let family = parts.next().unwrap_or("P01_0411").to_string();
             let seed = parts.next().unwrap_or("");
             let level = parts.next().unwrap_or("1").to_string();
-            crate::compute_seed_key(seed.to_string(), Some(family), Some(level))
+            let algo = parts.next().and_then(|s| {
+                let s = s.trim();
+                if s.is_empty() { return None; }
+                if let Some(h) = s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")) {
+                    u32::from_str_radix(h, 16).ok()
+                } else {
+                    s.parse::<u32>().ok()
+                }
+            });
+            crate::compute_seed_key(seed.to_string(), Some(family), Some(level), algo)
                 .and_then(|s| serde_json::from_str(&s).map_err(|e| e.to_string()))
         }
         "poke" => {
@@ -224,7 +233,7 @@ pub fn list_script_helpers() -> Result<String, String> {
         {
             "id": "seedkey",
             "name": "Seed/key bench",
-            "description": "Verified algos only (P01 LFSR, EDC16C41 4-byte).",
+            "description": "Measured table, then optional GM 2-byte algo, then P01 LFSR / EDC16C41.",
             "command": "seedkey P01_0411 1234 1",
             "cli": "python3 python/ecu_scripting.py seedkey P01_0411 1234 1"
         },

@@ -1,7 +1,7 @@
 [package]
 name = "TuneItVerse"
-version = "3.22.0"
-description = "ECU Tuning platform for JRTuners. v3.22.0: analyze_log public, seed tables, EDC15/ME9/Simos18/T8 catalog."
+version = "3.23.0"
+description = "ECU Tuning platform for JRTuners. v3.23.0: GM 2-byte key tables (2byte-keys.txt), seed lookup, catalog honesty."
 authors = ["JRTuners"]
 edition = "2021"
 
