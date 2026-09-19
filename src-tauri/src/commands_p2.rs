@@ -17,6 +17,8 @@ fn list_ecu_catalog() -> Result<String, String> {
             "vehicles": e.vehicles,
             "checksum": e.checksum.r#type,
             "security": e.security_access.r#type,
+            "write_allowed": matches!(e.ecu_family.as_str(), "P01_0411" | "EDC16C41"),
+            "status": if matches!(e.ecu_family.as_str(), "P01_0411" | "EDC16C41") { "write path live" } else { "identify/report — write blocked until measured corrector" },
         }))
         .collect();
     Ok(json!(rows).to_string())
@@ -114,7 +116,7 @@ fn log_capture_sample() -> Result<String, String> {
 #[tauri::command] fn log_import_csv(csv: String) -> Result<String, String> { Ok(serde_json::to_string(&logging::import_csv(&csv)?).unwrap_or_else(|_| "{}".into())) }
 
 #[tauri::command]
-pub(crate) fn compute_seed_key(seed_hex: String, family: Option<String>, level: Option<String>) -> Result<String, String> {
+pub(crate) fn compute_seed_key(seed_hex: String, family: Option<String>, level: Option<String>, algo: Option<u32>) -> Result<String, String> {
     let cleaned: String = seed_hex.chars().filter(|c| c.is_ascii_hexdigit()).collect();
     if cleaned.is_empty() || cleaned.len() % 2 != 0 { return Err("seed_hex must be an even-length hex string".into()); }
     let mut seed = Vec::new();
@@ -128,12 +130,54 @@ pub(crate) fn compute_seed_key(seed_hex: String, family: Option<String>, level: 
     let fam = family.unwrap_or_else(|| "P01_0411".into());
     let fam_up = fam.to_ascii_uppercase();
     let lvl = level.unwrap_or_else(|| "1".into());
+
+    if let Some(key) = crate::seed_tables::lookup(&fam, &seed, Some(&lvl)) {
+        return Ok(json!({
+            "family": fam, "level": lvl, "algo": "measured_table", "verified": true,
+            "note": "Measured pair from seed_tables.json.",
+            "seed_hex": cleaned.to_ascii_uppercase(),
+            "key_hex": key.iter().map(|b| format!("{:02X}", b)).collect::<String>(),
+            "key_len": key.len(), "gm_table_count": crate::gm_keys::table_count()
+        }).to_string());
+    }
+
+    if let Some(a) = algo {
+        if seed.len() < 2 { return Err("GM 2-byte seed must be at least 2 bytes".into()); }
+        let seed_u = u16::from_be_bytes([seed[0], seed[1]]);
+        let key_u = crate::gm_keys::gm_2byte_key(a as u16, seed_u);
+        let [kh, kl] = key_u.to_be_bytes();
+        return Ok(json!({
+            "family": fam, "level": lvl, "algo": format!("gm_2byte_{:03X}", a),
+            "verified": true,
+            "note": "Public 2-byte table algorithm (2byte-keys.txt). Not the licensed 5-byte GM library.",
+            "seed_hex": cleaned.to_ascii_uppercase(),
+            "key_hex": format!("{:02X}{:02X}", kh, kl),
+            "key_len": 2, "gm_algo": a, "gm_table_count": crate::gm_keys::table_count()
+        }).to_string());
+    }
+
     if fam_up.contains("P01") || fam_up.contains("P59") || fam_up.contains("GM") {
         if seed.len() < 2 { return Err("P01/P59 seed must be at least 2 bytes".into()); }
         let (kh, kl) = if lvl == "2" { security::p01_key_l2(seed[0], seed[1]) } else { security::p01_key_l1(seed[0], seed[1]) };
         let key = vec![kh, kl];
-        return Ok(json!({"family":fam,"level":lvl,"algo":"p01_lfsr16","verified":true,"note":"GM P01/P59 LFSR.","seed_hex":cleaned.to_ascii_uppercase(),"key_hex":key.iter().map(|b| format!("{:02X}", b)).collect::<String>(),"key_len":key.len()}).to_string());
+        return Ok(json!({
+            "family":fam,"level":lvl,"algo":"p01_lfsr16","verified":true,
+            "note":"GM P01/P59 LFSR. Pass algo (0-1023) to use the 2-byte table set instead.",
+            "seed_hex":cleaned.to_ascii_uppercase(),
+            "key_hex":key.iter().map(|b| format!("{:02X}", b)).collect::<String>(),
+            "key_len":key.len(), "gm_table_count": crate::gm_keys::table_count()
+        }).to_string());
     }
     let r = security::bosch_key_result(&seed, &fam);
     Ok(json!({"family":fam,"level":lvl,"algo":r.algo,"verified":r.verified,"note":r.note,"seed_hex":cleaned.to_ascii_uppercase(),"key_hex":r.key.iter().map(|b| format!("{:02X}", b)).collect::<String>(),"key_len":r.key.len()}).to_string())
+}
+
+#[tauri::command]
+fn gm_key_table_info() -> Result<String, String> {
+    Ok(json!({
+        "tables": crate::gm_keys::table_count(),
+        "algo_min": 0,
+        "algo_max": 1023,
+        "note": "2-byte GM algorithms only. 5-byte keys need a licensed library we do not ship."
+    }).to_string())
 }
