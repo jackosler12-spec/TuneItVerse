@@ -1,4 +1,4 @@
-// TuneItVerse v3.21.0 overlay — catalog, checksums, flash helpers, scripts, last-port restore.
+// TuneItVerse v3.24.0 overlay — catalog write flags, checksums, flash helpers, scripts.
 (function () {
   const PREF_KEY = 'tiv_conn';
 
@@ -45,13 +45,14 @@
     try {
       const rows = parseMaybe(await cmd('list_ecu_catalog')) || [];
       const list = Array.isArray(rows) ? rows : [];
-      if (!list.length) { body.innerHTML = '<tr><td colspan="6">Catalog empty.</td></tr>'; return; }
+      if (!list.length) { body.innerHTML = '<tr><td colspan="7">Catalog empty.</td></tr>'; return; }
       body.innerHTML = list.map((e) =>
         '<tr><td>' + (e.ecu_family || '') + '</td><td>' + (e.hardware || '') + '</td><td>' + (e.protocol || '') +
-        '</td><td>' + (e.bin_size_bytes || '') + '</td><td>' + (e.checksum || '') + '</td><td>' + (e.security || '') + '</td></tr>'
+        '</td><td>' + (e.bin_size_bytes || '') + '</td><td>' + (e.checksum || '') + '</td><td>' + (e.security || '') +
+        '</td><td>' + (e.write_allowed ? 'LIVE' : 'blocked') + '</td></tr>'
       ).join('');
     } catch (e) {
-      body.innerHTML = '<tr><td colspan="6">' + e + '</td></tr>';
+      body.innerHTML = '<tr><td colspan="7">' + e + '</td></tr>';
     }
   }
 
@@ -197,8 +198,16 @@
       connectBtn.addEventListener('click', function () { savePrefs(); });
     }
     try {
-      const sl = document.getElementById('status-left');
-      if (sl) sl.textContent = 'TuneItVerse 3.21.0';
+      cmd('app_info').then(function (raw) {
+        const info = parseMaybe(raw) || {};
+        const sl = document.getElementById('status-left');
+        if (sl && info.version) sl.textContent = 'TuneItVerse ' + info.version;
+        const badge = document.querySelector('.sidebar-logo-text .version');
+        if (badge && info.version) badge.textContent = 'v' + info.version;
+      }).catch(function () {
+        const sl = document.getElementById('status-left');
+        if (sl) sl.textContent = 'TuneItVerse 3.24.0';
+      });
     } catch (_) {}
   }
 
