@@ -28,13 +28,15 @@ python3 python/ecu_scripting.py diff stock.bin tuned.bin
 
 Same commands run in-app on the Scripts page against the loaded BIN (`identify`, `checksum`, `correct`, `compare`, `seedkey`, `poke`, `tables`, `maplog`). No eval, no shell.
 
-## Current status (v3.22.0)
+## Current status (v3.23.0)
 
-See [COMPLETION.md](COMPLETION.md). Catalog now includes EDC15, ME9, Simos 18, Trionic 8 (identify/report-only). Holden/GM P01 BINs auto-load the Universal Patcher TableSeek pack (1598 definitions; 1300+ typically located in a real dump). Offline BIN/XDF edit and save.
+See [COMPLETION.md](COMPLETION.md). Catalog includes P01, P59, EDC16C41, EDC15/17, ME7/9, MED17, Delphi DCM, SID803, Honda Keihin, Simos 18, Trionic 8. Holden/GM P01 BINs auto-load the Universal Patcher TableSeek pack. Offline BIN/XDF/A2L edit and save.
+
+GM 2-byte security-access tables (`reference/2byte-keys.txt`) run offline: seed + algo index → key. Measured pairs in `seed_tables.json` win when present. Licensed 5-byte GM keys are not included.
 
 Live: Mode 01 / VIN / DTCs on ELM ASCII for CAN/UDS; raw VPW only when you pick VPW. J2534 shows Connected when PassThru is open.
 
-Flash: identify → voltage gate → backup → unlock → write, with live `flash-progress` events. Honda and P59 writes stay blocked. P59 OS strings also block the P01 additive corrector.
+Flash: identify → voltage gate → backup → unlock → write, with live `flash-progress` events. Honda and P59 writes stay blocked. Only P01_0411 and EDC16C41 advertise a live write path.
 
 Build your own. No bullshit prices.
 
