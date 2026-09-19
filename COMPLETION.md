@@ -1,18 +1,21 @@
-# TuneItVerse v3.23.0 — GM 2-byte tables live, catalog honesty, seed lookup first
+# TuneItVerse v3.24.0 — P59 checksum guard, catalog write column, seed algo field
 
-v3.22 shipped the catalog families and the maplog compile fix. What a tuner still could not do without another paid tool:
+v3.23 shipped GM 2-byte tables. What was still broken or dishonest in the running app:
 
-1. Compute a GM 2-byte key from a captured seed using the public algorithm-index tables (`reference/2byte-keys.txt`, 1280 rows, algo 0–1023).
-2. Prefer a measured pair from `seed_tables.json` over starter algebra.
-3. See which catalog families actually have a write path.
+1. HTML / overlay still said 3.17.0 / 3.21.0 while the crate was 3.23.0.
+2. Catalog JSON already had `write_allowed`, but the dashboard table never showed it.
+3. Connect page was missing the GM algo field and several catalog families.
+4. P59 OS on a 512 KB image could still hit the P01 additive corrector in `checksum.rs`.
+5. Identify marked P59 as `correction_safe`.
 
 ## What this pass changed
 
-1. Version 3.23.0 across package, crate, Tauri window, installer, HTML, overlay, workspace export, and docs. The sidebar no longer claims 3.17.0.
-2. `gm_keys.rs` embeds and runs the Universal Patcher 2-byte opcode machine against `2byte-keys.txt`. Unit vectors: algo 0 seed `1234` → `3EF7`; algo 1 is a byte swap.
-3. `compute_seed_key` order: measured `seed_tables.json` pair → optional GM algo index → P01/P59 LFSR → Bosch dispatcher (EDC16C41 measured, everything else fail-closed).
-4. Connect page: algo field + EDC15 / ME9 / Simos18 / T8 / GM_2BYTE family entries.
-5. Dashboard catalog `write_allowed` flag. Only P01_0411 and EDC16C41 advertise a live write path. Honda and P59 stay blocked.
+1. Version 3.24.0 across package, crate, Tauri window, installer, HTML, overlay, workspace export, and docs. UI now prefers `app_info.version` at boot.
+2. `checksum.rs` treats P59 the same as Honda: report-only validate, fail-closed correct. Unit test included.
+3. Identify publishes `write_allowed`, `gm_p59_os`, and refuses P59 correction.
+4. Dashboard catalog has a Write column (`LIVE` vs `blocked`). Only P01_0411 and EDC16C41 stay live.
+5. Seed UI: algo 0–1023 plus EDC15 / ME9 / Simos18 / T8 / GM_2BYTE. `compute_seed_key` requires algo for GM_2BYTE.
+6. Map-from-log occupancy rings the hottest cell on the current grid when a log exists. Hint only — not auto-write.
 
 ## Still needs your bench
 
