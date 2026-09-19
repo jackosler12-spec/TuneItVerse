@@ -1,8 +1,8 @@
 {
   "name": "tuneitverse",
   "private": true,
-  "version": "3.23.0",
-  "description": "TuneItVerse - open ECU tuning platform. v3.23.0: GM 2-byte key tables from 2byte-keys.txt, measured seed lookup first, honest catalog writes.",
+  "version": "3.24.0",
+  "description": "TuneItVerse - open ECU tuning platform. v3.24.0: P59 checksum guard, catalog write column, seed algo field, UI version from app_info.",
   "type": "module",
   "scripts": {
     "tauri": "tauri",

@@ -1,12 +1,13 @@
-//! v3.23.0 command extras: app_info, battery voltage, checksum report, session snapshot.
+//! v3.24.0 command extras: app_info, battery voltage, checksum report, session snapshot.
 use serde_json::json;
 
 #[tauri::command]
 pub fn app_info() -> Result<String, String> {
     Ok(json!({
         "name": "TuneItVerse",
-        "version": "3.23.0",
+        "version": "3.24.0",
         "families": crate::ecu_database::list_supported_ecu_families(),
+        "write_families": ["P01_0411", "EDC16C41"],
         "protocols": ["auto","vpw","can","kwp","consult","uds"],
         "honest": true,
         "note": "Offline BIN/XDF works without an ECU. Live I/O needs an adapter. Honda and P59 writes stay blocked."
@@ -59,7 +60,8 @@ pub fn session_snapshot() -> Result<String, String> {
         (None, None, String::new())
     };
     Ok(json!({
-        "version": "3.23.0",
+        "version": "3.24.0",
+        "write_families": ["P01_0411", "EDC16C41"],
         "health": health,
         "protocol": proto,
         "last_os_id": os,
