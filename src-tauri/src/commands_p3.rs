@@ -9,9 +9,26 @@
     with_port(|port| dtc::clear_dtcs(port, 0).map(|r| serde_json::to_string(&r).unwrap_or_else(|_| "{\"success\":true}".into())))
         .or_else(|_| Ok(json!({"success":false,"message":"DTC clear refused offline. Connect an adapter."}).to_string()))
 }
-#[tauri::command] fn validate_bin_checksums_summary_cmd(data: Vec<u8>) -> Result<String, String> { checksum::validate_bin_checksums_summary(&data) }
-#[tauri::command] fn validate_checksums_cmd(data: Vec<u8>) -> Result<String, String> { Ok(serde_json::to_string_pretty(&checksum::validate_checksums(&data)?).unwrap_or_else(|_| "{}".into())) }
-#[tauri::command] fn correct_bin_checksums(data: Vec<u8>) -> Result<Vec<u8>, String> { Ok(checksum::correct_checksums(&data)?.data) }
+#[tauri::command] fn validate_bin_checksums_summary_cmd(data: Vec<u8>) -> Result<String, String> {
+    if crate::cs_guard::p01_corrector_blocked(&data) {
+        let fam = if crate::cs_guard::p59_blocks_p01_corrector(&data) { "GM_P59" } else { "HONDA_KEIHIN" };
+        return Ok(format!("Checksum validation for {} ({} bytes) using report-only: P01 additive blocked\n", fam, data.len()));
+    }
+    checksum::validate_bin_checksums_summary(&data)
+}
+#[tauri::command] fn validate_checksums_cmd(data: Vec<u8>) -> Result<String, String> {
+    if crate::cs_guard::p01_corrector_blocked(&data) {
+        let fam = if crate::cs_guard::p59_blocks_p01_corrector(&data) { "GM_P59" } else { "HONDA_KEIHIN" };
+        return Ok(json!({"ecu_family":fam,"all_valid":false,"method_used":"report-only: P01 additive blocked","regions":[]}).to_string());
+    }
+    Ok(serde_json::to_string_pretty(&checksum::validate_checksums(&data)?).unwrap_or_else(|_| "{}".into()))
+}
+#[tauri::command] fn correct_bin_checksums(data: Vec<u8>) -> Result<Vec<u8>, String> {
+    if crate::cs_guard::p01_corrector_blocked(&data) {
+        return Err("Honda or P59 OS on this image. P01 additive correction is blocked.".into());
+    }
+    Ok(checksum::correct_checksums(&data)?.data)
+}
 #[tauri::command] fn auto_load_tables_for_bin(bin_bytes: Vec<u8>) -> Result<String, String> {
     Ok(serde_json::to_string(&ecu_database::tables_for_bin(&bin_bytes)).unwrap_or_else(|_| "{}".into()))
 }

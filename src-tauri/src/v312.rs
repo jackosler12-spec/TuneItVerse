@@ -35,6 +35,10 @@ pub fn read_battery_voltage_cmd() -> Result<String, String> {
 
 #[tauri::command]
 pub fn correct_bin_checksums_report(data: Vec<u8>) -> Result<String, String> {
+    if crate::cs_guard::p01_corrector_blocked(&data) {
+        let fam = if crate::cs_guard::p59_blocks_p01_corrector(&data) { "GM_P59" } else { "HONDA_KEIHIN" };
+        return Ok(json!({"success": false, "error": format!("{} OS string. P01 additive correction is blocked.", fam)}).to_string());
+    }
     match crate::checksum::correct_checksums(&data) {
         Ok(c) => Ok(json!({"success": true, "report": c.report, "bytes": c.data.len()}).to_string()),
         Err(e) => Ok(json!({"success": false, "error": e}).to_string()),
