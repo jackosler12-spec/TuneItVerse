@@ -1,7 +1,7 @@
 {
   "ecu_family": "GM_P59",
   "display_name": "GM P59 PCM (Truck/SUV 2003-2007)",
-  "part_numbers_or_os_ids": ["12225074", "12586243", "12602801", "P59 variants"],
+  "part_numbers_or_os_ids": ["12586243", "12602801", "P59"],
   "vehicles": ["Chevrolet Silverado", "GMC Sierra", "Chevrolet Tahoe", "GM Truck LS swaps"],
   "hardware": "P59 (E67/E38 variants)",
   "protocol": "J1850 VPW / CAN (some)",

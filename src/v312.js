@@ -1,4 +1,4 @@
-// TuneItVerse v3.24.0 overlay — catalog write flags, checksums, flash helpers, scripts.
+// TuneItVerse v3.25.0 overlay — catalog write flags, checksums, flash helpers, scripts.
 (function () {
   const PREF_KEY = 'tiv_conn';
 
@@ -206,7 +206,7 @@
         if (badge && info.version) badge.textContent = 'v' + info.version;
       }).catch(function () {
         const sl = document.getElementById('status-left');
-        if (sl) sl.textContent = 'TuneItVerse 3.24.0';
+        if (sl) sl.textContent = 'TuneItVerse 3.25.0';
       });
     } catch (_) {}
   }

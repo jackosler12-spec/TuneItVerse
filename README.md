@@ -28,7 +28,7 @@ python3 python/ecu_scripting.py diff stock.bin tuned.bin
 
 Same commands run in-app on the Scripts page against the loaded BIN (`identify`, `checksum`, `correct`, `compare`, `seedkey`, `poke`, `tables`, `maplog`). No eval, no shell.
 
-## Current status (v3.24.0)
+## Current status (v3.25.0)
 
 See [COMPLETION.md](COMPLETION.md). Catalog includes P01, P59, EDC16C41, EDC15/17, ME7/9, MED17, Delphi DCM, SID803, Honda Keihin, Simos 18, Trionic 8. Holden/GM P01 BINs auto-load the Universal Patcher TableSeek pack. Offline BIN/XDF/A2L edit and save. Dashboard shows which families have a live write path. P59 checksum correction stays blocked.
 

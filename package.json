@@ -1,8 +1,8 @@
 {
   "name": "tuneitverse",
   "private": true,
-  "version": "3.24.0",
-  "description": "TuneItVerse - open ECU tuning platform. v3.24.0: P59 checksum guard, catalog write column, seed algo field, UI version from app_info.",
+  "version": "3.25.0",
+  "description": "TuneItVerse - open ECU tuning platform. v3.25.0: P59 fail-closed checksum and identify, UDS flash progress abort, version sync.",
   "type": "module",
   "scripts": {
     "tauri": "tauri",
