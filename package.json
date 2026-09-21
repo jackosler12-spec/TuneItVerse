@@ -1,8 +1,8 @@
 {
   "name": "tuneitverse",
   "private": true,
-  "version": "3.25.0",
-  "description": "TuneItVerse - open ECU tuning platform. v3.25.0: P59 fail-closed checksum and identify, UDS flash progress abort, version sync.",
+  "version": "3.26.0",
+  "description": "TuneItVerse - open ECU tuning platform. v3.26.0: wire identify write_allowed/gm_p59_os, P59 CS fail-closed, UI version sync, continuous VPW voltage gate.",
   "type": "module",
   "scripts": {
     "tauri": "tauri",

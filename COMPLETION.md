@@ -1,22 +1,25 @@
-# TuneItVerse v3.25.0 — P59 fail-closed checksum/identify, UDS progress abort
+# TuneItVerse v3.26.0 — identify write flags, P59 CS fail-closed, version sync
 
-v3.24 documented P59 checksum blocking and identify flags that were not actually
-wired in `checksum.rs` / `identify_bin`. HTML still said 3.17.0. UDS
-`download_image` ignored progress-callback errors, so J2534 Vbatt sag could
-not abort a Bosch write.
+v3.25 claimed `identify_bin` published `write_allowed` / `gm_p59_os` and that
+`GM_P59` was never `correction_safe`. The code still treated P59 like P01
+additive and left the HTML chrome on 3.17.0. VPW flash only re-checked voltage
+every ten chunks.
 
 ## What this pass changed
 
-1. Version 3.25.0 across package, crate, Tauri window, installer, HTML, overlay,
-   workspace export, and docs.
-2. `checksum.rs` treats P59 the same as Honda: report-only validate, fail-closed
+1. Version 3.26.0 across package, crate, Cargo.lock, Tauri window, installer,
+   HTML title/sidebar/status, overlay, workspace export, and docs.
+2. `identify_bin` now publishes `gm_p59_os` and `write_allowed`. P59 OS strings
+   resolve to `GM_P59`. `correction_safe` is only true for P01 (no Honda/P59
+   markers) and size-matched EDC16C41.
+3. `resolved_family` refuses Honda and P59 the same way flash already did.
+4. `checksum.rs` treats P59 like Honda: report-only validate, fail-closed
    correct. Unit test included.
-3. Identify publishes `write_allowed`, `gm_p59_os`, and refuses P59 correction
-   and write. `GM_P59` is never `correction_safe`.
-4. `resolved_family` refuses P59 OS strings the same way it refuses Honda.
-5. UDS `download_image` now propagates progress-callback `Err`, so mid-write
-   J2534 Vbatt sag actually aborts.
-6. P59 catalog OS list no longer includes Holden P01 `12225074` (that ID is P01).
+5. Guided VPW write re-checks PID 0x42 / J2534 Vbatt on every chunk, not every
+   tenth. Bosch UDS path already aborted on J2534 sag.
+6. Offline seed UI accepts an optional GM 2-byte algo index (0-1023).
+7. Catalog table has a Write column. Log channel list includes the extra Mode 01
+   PIDs the capture path already decoded (O2 B1S2, baro, fuel level/status).
 
 ## Still needs your bench
 
