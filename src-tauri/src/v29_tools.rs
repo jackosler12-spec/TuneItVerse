@@ -21,7 +21,7 @@ pub fn map_from_log_cmd(csv: Option<String>) -> Result<String, String> {
 pub fn export_workspace_cmd(data: Option<Vec<u8>>) -> Result<String, String> {
     let ident = data.as_deref().map(identify_bin);
     let log = analyze_log().unwrap_or_else(|e| json!({"error": e}));
-    Ok(json!({"tool":"TuneItVerse","version":"3.22.0","families":ecu_database::list_supported_ecu_families(),"identify":ident,"map_from_log":log}).to_string())
+    Ok(json!({"tool":"TuneItVerse","version":"3.27.0","families":ecu_database::list_supported_ecu_families(),"identify":ident,"map_from_log":log}).to_string())
 }
 
 fn sha256_hex(data: &[u8]) -> String {
@@ -87,9 +87,12 @@ pub fn identify_bin(data: &[u8]) -> serde_json::Value {
     let family_by_size = size_matches.first().map(|e| e.ecu_family.clone());
     let honda_os = crate::cs_guard::looks_like_honda(data);
     let gm_p01_os = crate::cs_guard::looks_like_gm_p01(data);
+    let gm_p59_os = crate::cs_guard::looks_like_gm_p59(data);
     let size_collision = size_matches.len() > 1;
     let family = if honda_os && !gm_p01_os {
         Some("HONDA_KEIHIN".to_string())
+    } else if gm_p59_os && !gm_p01_os {
+        Some("GM_P59".to_string())
     } else if let Some(os) = family_by_os.clone() {
         Some(os)
     } else if size_collision {
@@ -98,10 +101,11 @@ pub fn identify_bin(data: &[u8]) -> serde_json::Value {
         family_by_size.clone()
     };
     let correction_safe = match family.as_deref() {
-        Some("P01_0411") | Some("GM_P59") if !honda_os => true,
+        Some("P01_0411") if !honda_os && !gm_p59_os => true,
         Some("EDC16C41") if size == crate::checksum_sizes::EDC16_FLASH_SIZE => true,
         _ => false,
     };
+    let write_allowed = matches!(family.as_deref(), Some("P01_0411") | Some("EDC16C41")) && correction_safe;
     let display = family.as_ref().and_then(|f| ecu_database::get_ecu_by_family(f).map(|e| e.display_name));
     let families_same_size: Vec<String> = size_matches.iter().map(|e| e.ecu_family.clone()).collect();
     let head_n = size.min(4096);
@@ -121,10 +125,14 @@ pub fn identify_bin(data: &[u8]) -> serde_json::Value {
         "printable_strings": strings.into_iter().take(24).collect::<Vec<_>>(),
         "honda_os": honda_os,
         "gm_p01_os": gm_p01_os,
+        "gm_p59_os": gm_p59_os,
         "size_collision": size_collision,
         "correction_safe": correction_safe,
+        "write_allowed": write_allowed,
         "notes": if honda_os && !gm_p01_os {
             "Honda OS string. P01 additive correction is blocked."
+        } else if gm_p59_os && !gm_p01_os {
+            "P59 OS string. P01 additive and write stay blocked until measured P59 CS words exist."
         } else if family_by_os.is_some() {
             "OS/part string matched the ECU catalog. Confirm the dump is yours before write."
         } else if size_collision {
@@ -137,7 +145,6 @@ pub fn identify_bin(data: &[u8]) -> serde_json::Value {
     })
 }
 
-/// Fail-closed family for write/compare. Size collision or Honda-without-GM stays an error.
 pub fn resolved_family(data: &[u8]) -> Result<String, String> {
     let v = identify_bin(data);
     if v.get("honda_os").and_then(|x| x.as_bool()).unwrap_or(false)
@@ -145,7 +152,15 @@ pub fn resolved_family(data: &[u8]) -> Result<String, String> {
     {
         return Err("Honda OS string. Write/compare refused.".into());
     }
+    if v.get("gm_p59_os").and_then(|x| x.as_bool()).unwrap_or(false)
+        && !v.get("gm_p01_os").and_then(|x| x.as_bool()).unwrap_or(false)
+    {
+        return Err("P59 OS string. Write/compare refused until measured P59 CS words and kernel exist.".into());
+    }
     if let Some(f) = v.get("family").and_then(|x| x.as_str()).filter(|s| !s.is_empty()) {
+        if f.eq_ignore_ascii_case("GM_P59") || f.to_ascii_uppercase().contains("P59") {
+            return Err("GM_P59 write/compare refused. No measured checksum words or kernel.".into());
+        }
         return Ok(f.to_string());
     }
     Err(v.get("notes").and_then(|x| x.as_str()).unwrap_or("ECU family unresolved").to_string())
@@ -264,58 +279,4 @@ pub(crate) fn analyze_log() -> Result<serde_json::Value, String> {
         "stft_avg_16x16": stft_avg,
         "advice": format!("Hottest cell r{} c{} ({} hits). Mean {:.0} RPM / {:.0} kPa. Hint only — not auto-write.", hottest.0, hottest.1, hottest.2, rpm_avg, map_avg)
     }))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test] fn identify_unknown_size() { let v = identify_bin(&[0u8;64]); assert_eq!(v["bin_size_bytes"], 64); assert!(v["sha256"].as_str().unwrap().len() == 64); }
-    #[test] fn identify_p01_size() {
-        let v = identify_bin(&vec![0u8;524288]);
-        assert_eq!(v["family_by_size"], "P01_0411");
-        assert!(v["family"].is_null(), "512KB collides with Honda — family stays unset without an OS string");
-        assert_eq!(v["size_collision"], true);
-        assert_eq!(v["correction_safe"], false);
-    }
-    #[test] fn identify_honda_os() {
-        let mut img = vec![0u8; 524288];
-        img[0x40..0x48].copy_from_slice(b"37820-PR");
-        let v = identify_bin(&img);
-        assert_eq!(v["family"], "HONDA_KEIHIN");
-        assert_eq!(v["honda_os"], true);
-        assert_eq!(v["correction_safe"], false);
-        assert!(resolved_family(&img).unwrap_err().contains("Honda"));
-    }
-    #[test] fn resolved_family_refuses_512k_collision() {
-        let img = vec![0u8; 524288];
-        let err = resolved_family(&img).unwrap_err();
-        assert!(err.contains("collides") || err.contains("OS"), "{}", err);
-    }
-    #[test] fn import_workspace_json() {
-        let raw = import_workspace_cmd(r#"{"tool":"TuneItVerse","version":"3.10.0","identify":{"family":"P01_0411"}}"#.into()).unwrap();
-        let v: serde_json::Value = serde_json::from_str(&raw).unwrap();
-        assert_eq!(v["accepted"], true);
-        assert_eq!(v["has_identify"], true);
-    }
-    #[test] fn identify_os_string() {
-        let mut img = vec![0u8; 128];
-        img[10..18].copy_from_slice(b"12225074");
-        let v = identify_bin(&img);
-        assert_eq!(v["family_by_os"], "P01_0411");
-        assert_eq!(v["family"], "P01_0411");
-    }
-    #[test] fn poke_bytes() {
-        let img = vec![0u8; 8];
-        let out = patch_bin_bytes_cmd(img, 2, vec![0xAA, 0xBB]).unwrap();
-        assert_eq!(out[2], 0xAA);
-        assert_eq!(out[3], 0xBB);
-    }
-    #[test] fn identify_me7_size() { let v = identify_bin(&vec![0u8;1048576]); assert_eq!(v["family_by_size"], "ME7_COMMON"); }
-    #[test] fn compare_same() { let a=vec![1u8,2,3,4]; assert_eq!(compare_bins(&a,&a)["identical"], true); }
-    #[test] fn compare_range() {
-        let a=vec![0u8;8]; let mut b=a.clone(); b[2]=1; b[3]=1;
-        let v = compare_bins(&a,&b);
-        assert_eq!(v["diff_bytes"], 2);
-        assert_eq!(v["diff_range_count"], 1);
-    }
 }

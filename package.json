@@ -1,8 +1,8 @@
 {
   "name": "tuneitverse",
   "private": true,
-  "version": "3.26.0",
-  "description": "TuneItVerse - open ECU tuning platform. v3.26.0: wire identify write_allowed/gm_p59_os, P59 CS fail-closed, UI version sync, continuous VPW voltage gate.",
+  "version": "3.27.0",
+  "description": "TuneItVerse - open ECU tuning platform. v3.27.0: identify publishes write_allowed/gm_p59_os, P59 write refused, UI version sync, extra Mode 01 log PIDs.",
   "type": "module",
   "scripts": {
     "tauri": "tauri",
