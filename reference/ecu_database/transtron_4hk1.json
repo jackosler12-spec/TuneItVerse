@@ -1,0 +1,37 @@
+{
+  "ecu_family": "TRANSTRON_4HK1",
+  "display_name": "Transtron / Isuzu 4HK1 (FRR class)",
+  "part_numbers_or_os_ids": ["4HK1", "TRANSTRON", "FRR", "NQR", "NPR"],
+  "vehicles": ["Isuzu FRR 4HK1 5.2L diesel", "Related Isuzu N-series / F-series with Transtron diesel ECU — confirm hardware"],
+  "hardware": "Transtron diesel ECU (Isuzu commercial)",
+  "protocol": "CAN @ 500kbps + UDS (confirm on vehicle; some markets use KWP)",
+  "bin_size_bytes": 2097152,
+  "flash_memory_map": {
+    "full_flash": "Size varies by generation — 2MB used as catalog default until a personal dump is measured",
+    "cal_region": "Unknown until dump"
+  },
+  "checksum": {
+    "type": "unknown_pending_dump",
+    "description": "No write path. Identify and catalog only until a personal FRR dump is measured and a checksum routine is proven.",
+    "reference_files": [],
+    "routine": "report-only"
+  },
+  "security_access": {
+    "type": "UDS 0x27 (unverified)",
+    "reference": "Do not use Bosch EDC16 keys. Capture seed/key pairs from this ECU into seed_tables.json.",
+    "levels": ["Diagnostic", "Programming"]
+  },
+  "maps_and_xdf": {
+    "has_xdf": false,
+    "description": "Diesel maps expected: driver wish, IQ, rail, boost, EGR, torque limiter. Addresses are placeholders until a dump exists.",
+    "refined_map_addrs": {
+      "driver_wish": "0x80000",
+      "injection_quantity": "0x82000",
+      "rail_pressure": "0x86000",
+      "boost_setpoint": "0xC0000",
+      "egr_map": "0xD0000",
+      "torque_limiter": "0xD8000"
+    }
+  },
+  "notes": "Catalog family for the Isuzu FRR 4HK1. Write stays blocked. Personal dump required before checksum or unlock work. Personal dumps only."
+}
