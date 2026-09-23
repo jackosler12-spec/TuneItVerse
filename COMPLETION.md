@@ -1,3 +1,13 @@
+# TuneItVerse — software-first product (2026-09-23)
+
+VerseLink Apex PCB / KiCad work is parked. The product that ships is TuneItVerse on adapters you already own (OBDLink MX+, ELM327, J2534, FTDI). See PRODUCT.md.
+
+Added `TRANSTRON_4HK1` as a catalog-only family for the Isuzu FRR 4HK1. No write path until a personal dump and checksum exist.
+
+Official adapter list: `reference/adapters/supported_adapters.json`.
+
+---
+
 # TuneItVerse v3.27.0 — identify write flags actually published
 
 v3.26 docs claimed `identify_bin` published `write_allowed` / `gm_p59_os` and
@@ -29,6 +39,7 @@ that P59 was never `correction_safe`. The HTML chrome was still 3.17.0 and
 5. A kernel-resident Mode 3C full-image dump. Windowed probes are not a full
    backup.
 6. Licensed GM 5-byte keys. We do not ship that library.
+7. Isuzu FRR Transtron dump + protocol notes before any 4HK1 write work.
 
 Never flash without a verified backup and stable power. Personal dumps only.
 
