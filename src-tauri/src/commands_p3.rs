@@ -1,3 +1,9 @@
+#[tauri::command]
+pub(crate) fn compare_p01_gm_seed(seed_hex: String, algo: Option<u32>, scan: Option<bool>) -> Result<String, String> {
+    let a = algo.map(|v| v as u16);
+    let r = crate::p01_gm_compare::compare(&seed_hex, a, scan.unwrap_or(false))?;
+    Ok(serde_json::to_string(&r).unwrap_or_else(|_| "{}".into()))
+}
 #[tauri::command] fn read_dtcs_cmd() -> Result<String, String> {
     with_port(|port| dtc::read_dtcs(port).map(|r| serde_json::to_string(&r).unwrap_or_else(|_| "{}".into())))
         .or_else(|_| Ok(json!({"stored":[],"pending":[],"permanent":[],"total":0}).to_string()))
@@ -114,7 +120,7 @@ pub fn run() {
             list_supported_protocols, list_supported_ecus, list_ecu_catalog, get_ecu_info, read_properties, read_ecu_data,
             get_logging_templates, log_get_status, log_start, log_stop, log_set_channels, log_apply_template,
             log_capture_sample, log_get_samples, log_clear, log_export_csv, log_import_csv,
-            compute_seed_key, gm_key_table_info, read_dtcs_cmd, read_freeze_frame_cmd, clear_dtcs_cmd,
+            compute_seed_key, gm_key_table_info, compare_p01_gm_seed, read_dtcs_cmd, read_freeze_frame_cmd, clear_dtcs_cmd,
             validate_bin_checksums_summary_cmd, validate_checksums_cmd, correct_bin_checksums,
             xdf::parse_xdf_definitions, xdf::extract_table_from_bin, xdf::patch_table_into_bin,
             a2l::parse_a2l_definitions, a2l::parse_a2l_summary,
