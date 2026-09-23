@@ -1,11 +1,11 @@
 [Setup]
 AppName=TuneItVerse
-AppVersion=3.27.0
+AppVersion=3.28.0
 AppPublisher=JRTuners
 DefaultDirName={userappdata}\TuneItVerse
 DefaultGroupName=TuneItVerse
 DisableProgramGroupPage=yes
-OutputDir=..\..\
+OutputDir=..\..
 OutputBaseFilename=TuneItVerse-Setup
 Compression=lzma2/max
 SolidCompression=yes
