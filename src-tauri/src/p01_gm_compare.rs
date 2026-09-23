@@ -146,7 +146,7 @@ mod tests {
     fn seed_ffff_gm_is_ffff() {
         let r = compare("FFFF", Some(0), false).unwrap();
         assert_eq!(r.gm_key, Some(0xFFFF));
-        assert_eq!(r.lfsr_l1, 0); // P01 treats 0x0000 only as zero; FFFF still runs LFSR
+        assert_ne!(r.lfsr_l1, 0);
     }
 
     #[test]
@@ -154,12 +154,11 @@ mod tests {
         let r = compare("0000", Some(1), false).unwrap();
         assert_eq!(r.lfsr_l1, 0);
         assert_eq!(r.lfsr_l2, 0);
-        assert_eq!(r.gm_key, Some(0x3412)); // algo 1 is byte-swap of 0000 -> 0000? wait 0x0000 swap is 0000
+        assert_eq!(r.gm_key, Some(0x0000));
     }
 
     #[test]
-    fn scan_finds_algo1_byteswap_when_lfsr_equals_swap() {
-        // Not asserting a specific collision; just that scan completes and counts are consistent.
+    fn scan_completes_and_counts_match_list() {
         let r = compare("ABCD", None, true).unwrap();
         assert!(r.scanned);
         assert_eq!(r.scan_l1_algos.len(), r.scan_l1_count.min(LIST_CAP));
