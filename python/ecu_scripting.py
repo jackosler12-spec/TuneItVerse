@@ -9,6 +9,7 @@ Usage:
   python3 python/ecu_scripting.py checksum path/to/dump.bin
   python3 python/ecu_scripting.py identify path/to/dump.bin
   python3 python/ecu_scripting.py seedkey P01_0411 1234 1
+  python3 python/ecu_scripting.py p01cmp 1234
 """
 
 from __future__ import annotations
@@ -143,9 +144,22 @@ def seedkey(family: str, seed_hex: str, level: str) -> dict:
     return {"family": family, "algo": "unsupported-in-cli", "seed_hex": cleaned.upper(), "key_hex": None}
 
 
+def p01cmp(seed_hex: str) -> dict:
+    cleaned = "".join(c for c in seed_hex if c in "0123456789abcdefABCDEF")
+    if len(cleaned) < 4:
+        raise SystemExit("p01cmp needs at least 4 hex digits")
+    seed = int(cleaned[:4], 16)
+    return {
+        "seed_hex": f"{seed:04X}",
+        "lfsr_l1_hex": f"{p01_key(seed, 1):04X}",
+        "lfsr_l2_hex": f"{p01_key(seed, 2):04X}",
+        "note": "CLI prints LFSR only. Full GM 2-byte index scan is in-app: p01cmp SEED scan",
+    }
+
+
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description="TuneItVerse bench helper")
-    parser.add_argument("command", choices=["checksum", "identify", "seedkey"])
+    parser.add_argument("command", choices=["checksum", "identify", "seedkey", "p01cmp"])
     parser.add_argument("bin_path", nargs="?")
     parser.add_argument("seed_hex", nargs="?")
     parser.add_argument("level", nargs="?", default="1")
@@ -154,6 +168,10 @@ def main(argv: list[str]) -> int:
         family = args.bin_path or "P01_0411"
         seed = args.seed_hex or ""
         print(seedkey(family, seed, args.level))
+        return 0
+    if args.command == "p01cmp":
+        seed = args.bin_path or args.seed_hex or ""
+        print(p01cmp(seed))
         return 0
     if not args.bin_path:
         raise SystemExit("bin_path required")
