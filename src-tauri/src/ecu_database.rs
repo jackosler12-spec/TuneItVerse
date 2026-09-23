@@ -64,10 +64,11 @@ const EDC15_JSON: &str = include_str!("../../reference/ecu_database/edc15_common
 const ME9_JSON: &str = include_str!("../../reference/ecu_database/me9_common.json");
 const SIMOS18_JSON: &str = include_str!("../../reference/ecu_database/simos18.json");
 const TRIONIC8_JSON: &str = include_str!("../../reference/ecu_database/trionic8.json");
+const TRANSTRON_JSON: &str = include_str!("../../reference/ecu_database/transtron_4hk1.json");
 
 pub fn load_ecu_database() -> Vec<EcuDbEntry> {
     let mut db = Vec::new();
-    for raw in [P01_JSON, EDC16_JSON, P59_JSON, MED17_JSON, EDC17_JSON, ME7_JSON, DELPHI_JSON, SID803_JSON, HONDA_JSON, EDC15_JSON, ME9_JSON, SIMOS18_JSON, TRIONIC8_JSON] {
+    for raw in [P01_JSON, EDC16_JSON, P59_JSON, MED17_JSON, EDC17_JSON, ME7_JSON, DELPHI_JSON, SID803_JSON, HONDA_JSON, EDC15_JSON, ME9_JSON, SIMOS18_JSON, TRIONIC8_JSON, TRANSTRON_JSON] {
         if let Ok(entry) = serde_json::from_str::<EcuDbEntry>(raw) {
             db.push(entry);
         }
@@ -261,9 +262,11 @@ mod tests {
         assert!(fams.iter().any(|f| f == "ME9_COMMON"));
         assert!(fams.iter().any(|f| f == "SIMOS18"));
         assert!(fams.iter().any(|f| f == "TRIONIC8"));
+        assert!(fams.iter().any(|f| f == "TRANSTRON_4HK1"));
         assert!(get_ecu_by_bin_size(1048576).is_some());
         assert!(get_ecu_by_family("SIMOS18").is_some());
         assert_eq!(get_ecu_by_family("SIMOS18").unwrap().bin_size_bytes, 4_194_304);
+        assert!(get_ecu_by_family("TRANSTRON_4HK1").is_some());
     }
     #[test]
     fn honda_512k_does_not_get_p01_pack() {
