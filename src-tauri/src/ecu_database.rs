@@ -196,7 +196,7 @@ pub fn get_tables_for_bin_size(size: usize) -> Vec<TableDef> {
             continue;
         }
         if let Some(ref addrs) = entry.maps_and_xdf.refined_map_addrs {
-            tables_from_addrs(&entry, addrs, &mut tables, &seen);
+            tables_from_addrs(&entry, addrs, &mut tables, &mut seen);
         }
     }
     if !tables.is_empty() {
