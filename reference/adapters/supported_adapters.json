@@ -1,0 +1,47 @@
+{
+  "version": "1.0",
+  "updated": "2026-09-23",
+  "policy": "TuneItVerse ships against adapters you already own. Custom VerseLink hardware is parked.",
+  "adapters": [
+    {
+      "id": "obdlink_mx_plus",
+      "name": "OBDLink MX+",
+      "status": "primary",
+      "interfaces": ["Bluetooth", "ELM-compatible serial"],
+      "protocols": ["CAN", "ISO-TP", "KWP", "VPW"],
+      "notes": "Daily driver for live data, VIN, DTCs, and guided work when the protocol path is ELM ASCII."
+    },
+    {
+      "id": "elm327",
+      "name": "ELM327-class USB/BT",
+      "status": "supported",
+      "interfaces": ["USB", "Bluetooth"],
+      "protocols": ["CAN", "ISO-TP", "KWP"],
+      "notes": "Good for diagnostics. Not a substitute for a real J2534 device on locked programming sessions."
+    },
+    {
+      "id": "j2534",
+      "name": "J2534 pass-thru",
+      "status": "supported",
+      "interfaces": ["Vendor DLL on Windows"],
+      "protocols": ["CAN", "ISO-TP", "VPW", "programming"],
+      "notes": "Connected only when PassThru opens a real FunctionLibrary path."
+    },
+    {
+      "id": "ftdi_serial",
+      "name": "FTDI USB-serial",
+      "status": "supported",
+      "interfaces": ["USB-serial"],
+      "protocols": ["K-line", "legacy serial"],
+      "notes": "Bench and legacy paths."
+    },
+    {
+      "id": "verselink_apex",
+      "name": "VerseLink Apex",
+      "status": "parked",
+      "interfaces": [],
+      "protocols": [],
+      "notes": "Custom JRTuners hardware. PCB/KiCad work stopped 2026-09-23. Not required to use TuneItVerse."
+    }
+  ]
+}
