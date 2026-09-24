@@ -1,8 +1,8 @@
 {
   "name": "tuneitverse",
   "private": true,
-  "version": "3.28.0",
-  "description": "TuneItVerse - open ECU tuning platform. v3.28.0: software-first adapters, Transtron 4HK1 catalog, STFT+LTFT map-from-log, version chrome sync.",
+  "version": "3.29.0",
+  "description": "TuneItVerse - open ECU tuning platform. v3.29.0: fail-closed write families, mid-flash voltage every 5 chunks, STFT+LTFT map-from-log, version chrome sync.",
   "type": "module",
   "scripts": {
     "tauri": "tauri",
