@@ -1,4 +1,4 @@
-// flash.rs -- Guided flash pipeline v3.20.0 (live progress emit + J2534 Vbatt sag abort)
+// flash.rs -- Guided flash pipeline v3.29.0 (fail-closed write families + 5-chunk voltage)
 use serde::{Serialize, Deserialize};
 use crate::checksum::ChecksumReport;
 use serialport::SerialPort;
@@ -108,6 +108,13 @@ where F: FnMut(FlashProgress),
     {
         result.logs.push(format!("UI family '{}' overridden by identify '{}'", request.ecu_family, family));
     }
+    if !crate::ecu_database::write_path_live(&family) {
+        result.error = Some(format!(
+            "No live write path for {}. Identify/report only until a measured corrector and kernel exist.",
+            family
+        ));
+        return Ok(result);
+    }
     result.logs.push(format!("Guided flash starting for {}", family));
     match enforce_voltage_gate(port, min_v, &mut result.logs) {
         Ok(v) => { result.voltage_at_start = Some(v); result.steps_completed.push(format!("Voltage {:.2} V", v)); }
@@ -206,7 +213,7 @@ where F: FnMut(FlashProgress),
         let timing = AdaptiveTiming::for_vpw(); timing.sleep();
         let chunk_size = 128; let total = image.len();
         for (i, chunk) in image.chunks(chunk_size).enumerate() {
-            if i > 0 && i % 10 == 0 { if let Err(e) = enforce_voltage_gate(port, min_v, &mut result.logs) { result.error = Some(e); return Ok(result); } }
+            if i > 0 && i % 5 == 0 { if let Err(e) = enforce_voltage_gate(port, min_v, &mut result.logs) { result.error = Some(e); return Ok(result); } }
             if let Err(e) = send_frame(port, &build_mode36_chunk(chunk)) { result.error = Some(e); return Ok(result); }
             let done = ((i + 1) * chunk_size).min(total);
             let mut voltage_warn = None;
@@ -248,5 +255,12 @@ mod tests {
     #[test] fn unidentified_512k_is_not_p01() {
         let img = vec![0u8; 524288];
         assert!(crate::v29_tools::resolved_family(&img).is_err());
+    }
+    #[test] fn write_path_is_fail_closed() {
+        assert!(crate::ecu_database::write_path_live("P01_0411"));
+        assert!(crate::ecu_database::write_path_live("EDC16C41"));
+        assert!(!crate::ecu_database::write_path_live("EDC17_COMMON"));
+        assert!(!crate::ecu_database::write_path_live("MED17_COMMON"));
+        assert!(!crate::ecu_database::write_path_live("TRANSTRON_4HK1"));
     }
 }

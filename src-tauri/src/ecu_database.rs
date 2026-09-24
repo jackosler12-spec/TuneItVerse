@@ -94,6 +94,15 @@ pub fn list_supported_ecu_families() -> Vec<String> {
     load_ecu_database().into_iter().map(|e| e.ecu_family).collect()
 }
 
+/// Live write is advertised only for families with a measured corrector + kernel path.
+pub fn write_path_live(family: &str) -> bool {
+    matches!(family.to_ascii_uppercase().as_str(), "P01_0411" | "EDC16C41")
+}
+
+pub fn write_families() -> &'static [&'static str] {
+    &["P01_0411", "EDC16C41"]
+}
+
 pub fn get_ecu_by_bin_size(size: usize) -> Option<EcuDbEntry> {
     load_ecu_database()
         .into_iter()
@@ -267,6 +276,11 @@ mod tests {
         assert!(get_ecu_by_family("SIMOS18").is_some());
         assert_eq!(get_ecu_by_family("SIMOS18").unwrap().bin_size_bytes, 4_194_304);
         assert!(get_ecu_by_family("TRANSTRON_4HK1").is_some());
+        assert!(write_path_live("P01_0411"));
+        assert!(write_path_live("edc16c41"));
+        assert!(!write_path_live("EDC17_COMMON"));
+        assert!(!write_path_live("GM_P59"));
+        assert!(!write_path_live("HONDA_KEIHIN"));
     }
     #[test]
     fn honda_512k_does_not_get_p01_pack() {
