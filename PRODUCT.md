@@ -1,6 +1,6 @@
 # TuneItVerse Product Direction
 
-**Updated:** 2026-09-23  
+**Updated:** 2026-09-24  
 **Status:** Software-first. VerseLink Apex PCB work is parked.
 
 ## Decision
@@ -11,7 +11,7 @@ VerseLink Apex remains a future hardware option only if a third party builds it 
 
 ## What ships today
 
-TuneItVerse v3.28+ on Windows:
+TuneItVerse v3.29+ on Windows:
 
 - Identify / checksum / patch personal BIN dumps
 - Guided flash with fail-closed voltage gate, honest backup quality, live verify
