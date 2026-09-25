@@ -1,6 +1,6 @@
 {
-  "version": "1.18",
-  "updated": "2026-09-23",
+  "version": "1.19",
+  "updated": "2026-09-25",
   "description": "Master index of TuneItVerse ECU database entries.",
   "families": [
     {"id": "P01_0411", "file": "p01_0411.json", "display_name": "Holden LS1 / GM P01 0411 PCM", "bin_size_bytes": 524288, "primary_protocol": "VPW", "status": "full"},
@@ -16,7 +16,10 @@
     {"id": "ME9_COMMON", "file": "me9_common.json", "display_name": "Bosch ME9", "bin_size_bytes": 2097152, "primary_protocol": "CAN/KWP", "status": "catalog — size collides with 2MB Bosch"},
     {"id": "SIMOS18", "file": "simos18.json", "display_name": "Continental Simos 18", "bin_size_bytes": 4194304, "primary_protocol": "CAN/UDS", "status": "catalog — unique 4MB size"},
     {"id": "TRIONIC8", "file": "trionic8.json", "display_name": "Saab / GM Trionic 8", "bin_size_bytes": 2097152, "primary_protocol": "CAN", "status": "catalog — identify by OS string"},
-    {"id": "TRANSTRON_4HK1", "file": "transtron_4hk1.json", "display_name": "Transtron / Isuzu 4HK1 (FRR class)", "bin_size_bytes": 2097152, "primary_protocol": "CAN/UDS", "status": "catalog only — no write until personal dump"}
+    {"id": "TRANSTRON_4HK1", "file": "transtron_4hk1.json", "display_name": "Transtron / Isuzu 4HK1 (FRR class)", "bin_size_bytes": 2097152, "primary_protocol": "CAN/UDS", "status": "catalog only — no write until personal dump"},
+    {"id": "MED9_COMMON", "file": "med9_common.json", "display_name": "Bosch MED9", "bin_size_bytes": 2097152, "primary_protocol": "CAN/UDS", "status": "catalog only"},
+    {"id": "EDC16C31", "file": "edc16c31.json", "display_name": "Bosch EDC16C31/C34", "bin_size_bytes": 2097152, "primary_protocol": "CAN/KWP", "status": "catalog only — not the EDC16C41 write path"},
+    {"id": "GM_E38", "file": "gm_e38.json", "display_name": "GM E38 ECM", "bin_size_bytes": 1048576, "primary_protocol": "CAN/GMLAN", "status": "catalog only — not P01"}
   ],
   "notes": "Add new family JSON + entry here + update loader in ecu_database.rs. Personal dumps only. Honda/P01 collision still enforced; flash/compare refuse unresolved 512KB; EDC17/MED17 starters are not unlock keys. Transtron 4HK1 is catalog-only."
 }

@@ -1,0 +1,36 @@
+{
+  "ecu_family": "MED9_COMMON",
+  "display_name": "Bosch MED9 (Ford / Volvo / Jaguar gasoline turbo community)",
+  "part_numbers_or_os_ids": ["MED9.1", "MED9.5", "7M5A-12A650", "8M5A-12A650"],
+  "vehicles": ["Ford Focus ST / RS Mk2", "Volvo T5 MED9", "Jaguar / Land Rover AJV6 MED9 variants"],
+  "hardware": "Bosch MED9.x (Tricore, typically 2MB flash)",
+  "protocol": "CAN / UDS (ISO-TP)",
+  "bin_size_bytes": 2097152,
+  "flash_memory_map": {
+    "full_flash": "2MB typical. Confirm against your personal dump.",
+    "note": "Size collides with EDC16/EDC17/MED17. Identify by OS string, never by size alone."
+  },
+  "checksum": {
+    "type": "bosch_med9_multipoint_report_only",
+    "description": "MED9 uses multipoint block checksums. No measured corrector ships until a personal dump + verified words land.",
+    "reference_files": [],
+    "routine": "Report-only. write_path_live stays false."
+  },
+  "security_access": {
+    "type": "UDS 0x27 seed/key",
+    "reference": "security.rs Bosch dispatcher + seed_tables.json measured pairs",
+    "levels": ["0x01 diagnostic", "0x11 programming"]
+  },
+  "maps_and_xdf": {
+    "has_xdf": false,
+    "xdf_file": null,
+    "description": "Community start hints only: requested torque, ignition, boost, KRKTE-style fuel factor.",
+    "refined_map_addrs": {
+      "ignition_timing": "0x8C000",
+      "fuel_ve": "0x88000",
+      "boost_target": "0x94000",
+      "driver_wish": "0x80000"
+    }
+  },
+  "notes": "Catalog / identify only. Personal dumps only. Do not flash with this entry."
+}

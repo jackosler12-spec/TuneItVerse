@@ -1,0 +1,35 @@
+{
+  "ecu_family": "GM_E38",
+  "display_name": "GM E38 ECM (LS2/LS3/LS7 / VE Commodore community)",
+  "part_numbers_or_os_ids": ["E38", "12612384", "12612389", "12617338"],
+  "vehicles": ["Holden Commodore VE LS2/LS3", "GM LS2/LS3/LS7 truck and car ECMs"],
+  "hardware": "GM E38 (controller family after P01/P59)",
+  "protocol": "CAN / GMLAN",
+  "bin_size_bytes": 1048576,
+  "flash_memory_map": {
+    "full_flash": "1MB dumps common. Confirm against your personal read.",
+    "note": "Size collides with ME7_COMMON. Identify by OS string, never by size alone."
+  },
+  "checksum": {
+    "type": "gm_e38_report_only",
+    "description": "E38 checksum layout is not the P01 additive 64KB scheme. P01 corrector is blocked on this family.",
+    "reference_files": [],
+    "routine": "Report-only until measured correction words from a personal dump land."
+  },
+  "security_access": {
+    "type": "GM seed/key (CAN)",
+    "reference": "gm_keys.rs 2-byte tables are not a substitute for licensed 5-byte E38 keys",
+    "levels": ["diagnostic", "programming"]
+  },
+  "maps_and_xdf": {
+    "has_xdf": false,
+    "xdf_file": null,
+    "description": "Community start hints only: spark, VE, torque.",
+    "refined_map_addrs": {
+      "ignition_timing": "0x40000",
+      "fuel_ve": "0x36000",
+      "driver_wish": "0x2C000"
+    }
+  },
+  "notes": "Catalog / identify only. Do not treat an E38 dump as a P01 0411 image."
+}

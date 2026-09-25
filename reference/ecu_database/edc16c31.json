@@ -1,0 +1,38 @@
+{
+  "ecu_family": "EDC16C31",
+  "display_name": "Bosch EDC16C31 (PSA / Ford / Volvo diesel community)",
+  "part_numbers_or_os_ids": ["EDC16C31", "EDC16C34", "4M5Q-12A650", "5WS400"],
+  "vehicles": ["PSA 2.0 HDi", "Ford Transit / Mondeo TDCi EDC16", "Volvo D5 EDC16 variants"],
+  "hardware": "Bosch EDC16C31 / C34 (2MB flash common)",
+  "protocol": "CAN / KWP2000",
+  "bin_size_bytes": 2097152,
+  "flash_memory_map": {
+    "full_flash": "2MB typical. Size collides with EDC16C41 / EDC17 / MED17.",
+    "note": "Identify by OS / software string. EDC16C41 write path is NOT reused here."
+  },
+  "checksum": {
+    "type": "bosch_edc16_multipoint_report_only",
+    "description": "Same family shape as EDC16C41 but correction words are not verified for C31/C34 in this tree. Report-only.",
+    "reference_files": [],
+    "routine": "Do not call the EDC16C41 corrector on a C31 dump unless you measured it."
+  },
+  "security_access": {
+    "type": "KWP/UDS 0x27 seed/key",
+    "reference": "security.rs Bosch dispatcher + seed_tables.json",
+    "levels": ["diagnostic", "programming"]
+  },
+  "maps_and_xdf": {
+    "has_xdf": false,
+    "xdf_file": null,
+    "description": "Diesel start hints: driver wish, IQ, rail, boost, EGR, smoke.",
+    "refined_map_addrs": {
+      "driver_wish": "0x80000",
+      "injection_quantity": "0x82000",
+      "rail_pressure": "0x86000",
+      "boost_setpoint": "0x8A000",
+      "egr_map": "0x8E000",
+      "smoke_limiter": "0x90000"
+    }
+  },
+  "notes": "Catalog only. The live write path stays on EDC16C41 Nissan Patrol measured images."
+}

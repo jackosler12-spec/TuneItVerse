@@ -1,6 +1,6 @@
 # TuneItVerse Product Direction
 
-**Updated:** 2026-09-24  
+**Updated:** 2026-09-25  
 **Status:** Software-first. VerseLink Apex PCB work is parked.
 
 ## Decision
@@ -11,7 +11,7 @@ VerseLink Apex remains a future hardware option only if a third party builds it 
 
 ## What ships today
 
-TuneItVerse v3.29+ on Windows:
+TuneItVerse v3.30+ on Windows:
 
 - Identify / checksum / patch personal BIN dumps
 - Guided flash with fail-closed voltage gate, honest backup quality, live verify
@@ -21,6 +21,8 @@ TuneItVerse v3.29+ on Windows:
 - Offline seed/key for GM 2-byte tables and dump-derived `seed_tables.json` pairs
 - Map-from-log occupancy + STFT/LTFT VE cell *preview* (never silent write)
 - Official adapter list in the Connect page
+- Runtime ECU pack import + TunerPro-style XDF export
+- Honest capabilities matrix on the dashboard
 
 ## Official adapters (now)
 
@@ -42,6 +44,9 @@ See `reference/adapters/supported_adapters.json`.
 | EDC16C41 | Nissan Patrol GU ZD30CRD | Live path |
 | GM_P59 | Truck/SUV PCM | Identify only until measured checksum words exist |
 | TRANSTRON_4HK1 | Isuzu FRR 4HK1 | Catalog only until a personal dump + protocol notes land |
+| MED9_COMMON | Ford / Volvo / Jaguar MED9 | Identify only |
+| EDC16C31 | PSA / Ford / Volvo EDC16 C31/C34 | Identify only — not the C41 write path |
+| GM_E38 | VE Commodore / LS2-LS7 ECM | Identify only — not P01 |
 
 Everything else in the catalog is identify / map-hint only. No fake write flags.
 
