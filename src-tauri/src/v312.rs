@@ -1,13 +1,16 @@
-//! v3.29.0 command extras: app_info, battery voltage, checksum report, session snapshot.
+//! v3.30.0 command extras: app_info, voltage, checksum report, session, packs, capabilities.
 use serde_json::json;
+
+const VERSION: &str = "3.30.0";
 
 #[tauri::command]
 pub fn app_info() -> Result<String, String> {
     Ok(json!({
         "name": "TuneItVerse",
-        "version": "3.29.0",
+        "version": VERSION,
         "families": crate::ecu_database::list_supported_ecu_families(),
         "write_families": crate::ecu_database::write_families(),
+        "runtime_packs": crate::ecu_database::runtime_pack_count(),
         "protocols": ["auto","vpw","can","kwp","consult","uds"],
         "honest": true,
         "note": "Offline BIN/XDF works without an ECU. Live I/O needs an adapter you already own. Honda and P59 writes stay blocked. VerseLink PCB is parked."
@@ -64,7 +67,7 @@ pub fn session_snapshot() -> Result<String, String> {
         (None, None, String::new())
     };
     Ok(json!({
-        "version": "3.29.0",
+        "version": VERSION,
         "write_families": crate::ecu_database::write_families(),
         "health": health,
         "protocol": proto,
@@ -72,6 +75,7 @@ pub fn session_snapshot() -> Result<String, String> {
         "last_family": family,
         "families": crate::ecu_database::list_supported_ecu_families(),
         "j2534_open": crate::j2534::is_device_open(),
+        "runtime_packs": crate::ecu_database::runtime_pack_count(),
     }).to_string())
 }
 
@@ -80,4 +84,49 @@ const ADAPTERS_JSON: &str = include_str!("../../reference/adapters/supported_ada
 #[tauri::command]
 pub fn list_supported_adapters() -> Result<String, String> {
     Ok(ADAPTERS_JSON.to_string())
+}
+
+#[tauri::command]
+pub fn import_ecu_pack_cmd(json_text: String) -> Result<String, String> {
+    let entry = crate::ecu_database::import_ecu_pack_json(&json_text)?;
+    Ok(json!({
+        "ok": true,
+        "ecu_family": entry.ecu_family,
+        "display_name": entry.display_name,
+        "write_allowed": crate::ecu_database::write_path_live(&entry.ecu_family),
+        "runtime_packs": crate::ecu_database::runtime_pack_count(),
+        "note": "Runtime pack merged for this session. Write stays fail-closed unless the family is already in write_path_live."
+    }).to_string())
+}
+
+#[tauri::command]
+pub fn capabilities_matrix() -> Result<String, String> {
+    Ok(json!({
+        "version": VERSION,
+        "offline": [
+            {"id":"identify","status":"live","note":"OS string + size + catalog"},
+            {"id":"checksum_p01","status":"live","note":"P01 additive; Honda/P59 blocked"},
+            {"id":"checksum_edc16c41","status":"live","note":"Measured multipoint on 2MB EDC16C41"},
+            {"id":"tableseek_p01","status":"live","note":"Universal Patcher pack on GM P01 dumps"},
+            {"id":"xdf_a2l","status":"live","note":"Import + extract + patch + export XDF"},
+            {"id":"map_from_log","status":"live","note":"Occupancy + STFT/LTFT blend preview"},
+            {"id":"seedkey_gm_2byte","status":"live","note":"Public 2-byte tables. No 5-byte library."},
+            {"id":"seedkey_edc16c41","status":"live","note":"4-byte algorithm with unit vectors"},
+            {"id":"scripting","status":"live","note":"Deterministic bench language, no eval"}
+        ],
+        "hardware": [
+            {"id":"elm_mode01","status":"adapter","note":"Live PIDs when ELM/STN answers"},
+            {"id":"dtc","status":"adapter","note":"Mode 03/07/0A + freeze frame"},
+            {"id":"j2534","status":"adapter","note":"Needs a vendor DLL on Windows"},
+            {"id":"guided_flash","status":"limited","note":"P01_0411 and EDC16C41 only"}
+        ],
+        "blocked": [
+            {"id":"honda_write","status":"blocked","note":"Keihin write stays closed"},
+            {"id":"p59_write","status":"blocked","note":"Needs measured CS words + kernel"},
+            {"id":"gm_5byte","status":"blocked","note":"Licensed library not shipped"},
+            {"id":"verselink_pcb","status":"parked","note":"Software-first. Buy or reuse an adapter."}
+        ],
+        "write_families": crate::ecu_database::write_families(),
+        "families": crate::ecu_database::list_supported_ecu_families()
+    }).to_string())
 }
