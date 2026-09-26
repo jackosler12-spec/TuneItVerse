@@ -1,11 +1,11 @@
-//! v3.29.0 command extras: app_info, battery voltage, checksum report, session snapshot.
+//! command extras: app_info, battery voltage, checksum report, session snapshot.
 use serde_json::json;
 
 #[tauri::command]
 pub fn app_info() -> Result<String, String> {
     Ok(json!({
         "name": "TuneItVerse",
-        "version": "3.29.0",
+        "version": crate::APP_VERSION,
         "families": crate::ecu_database::list_supported_ecu_families(),
         "write_families": crate::ecu_database::write_families(),
         "protocols": ["auto","vpw","can","kwp","consult","uds"],
@@ -64,7 +64,7 @@ pub fn session_snapshot() -> Result<String, String> {
         (None, None, String::new())
     };
     Ok(json!({
-        "version": "3.29.0",
+        "version": crate::APP_VERSION,
         "write_families": crate::ecu_database::write_families(),
         "health": health,
         "protocol": proto,
