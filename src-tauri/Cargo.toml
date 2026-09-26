@@ -1,7 +1,7 @@
 [package]
 name = "TuneItVerse"
-version = "3.29.0"
-description = "ECU Tuning platform for JRTuners. v3.29.0: fail-closed write families, mid-flash voltage every 5 chunks, STFT+LTFT trim grid."
+version = "3.30.0"
+description = "ECU Tuning platform for JRTuners. v3.30.0: UDS mid-write voltage abort, catalog write flags, adapter list."
 authors = ["JRTuners"]
 edition = "2021"
 
