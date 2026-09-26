@@ -17,8 +17,8 @@ fn list_ecu_catalog() -> Result<String, String> {
             "vehicles": e.vehicles,
             "checksum": e.checksum.r#type,
             "security": e.security_access.r#type,
-            "write_allowed": matches!(e.ecu_family.as_str(), "P01_0411" | "EDC16C41"),
-            "status": if matches!(e.ecu_family.as_str(), "P01_0411" | "EDC16C41") { "write path live" } else { "identify/report — write blocked until measured corrector" },
+            "write_allowed": crate::ecu_database::write_path_live(&e.ecu_family),
+            "status": if crate::ecu_database::write_path_live(&e.ecu_family) { "write path live" } else { "identify/report — write blocked until measured corrector" },
         }))
         .collect();
     Ok(json!(rows).to_string())
