@@ -1,25 +1,25 @@
-# TuneItVerse v3.29.0 — fail-closed write + honest chrome
+# TuneItVerse v3.30.0 — UDS voltage abort + honest chrome
 
-v3.28 claimed version chrome was synced and map-from-log blended LTFT.
-HTML was still 3.17 / overlay fallback 3.25. Guided VPW voltage still
-rechecked every 10 chunks. `orchestrate_guided_flash` would attempt a
-write for any family whose name contained EDC/MED/BOSCH/DELPHI/SID/P01/GM.
+v3.29 documented mid-flash voltage and a catalog Write column. The HTML
+thead was still six columns, static chrome was still 3.17, workspace
+export said 3.27, and `uds::download_image` took `FnMut(u32, u32)` so
+the Result-returning sag-abort closure in `flash.rs` could not compile
+or abort a UDS write.
 
 ## What this pass changed
 
-1. Version **3.29.0** across package, crate, Cargo.lock, Tauri window,
-   installer, HTML title/sidebar/status, overlay fallback, workspace
-   export, and docs.
-2. Single source of truth: `ecu_database::write_path_live`. Catalog,
-   identify `write_allowed`, and guided flash all use it.
-3. Guided flash refuses every family except **P01_0411** and **EDC16C41**.
-4. VPW mid-write voltage gate now re-checks PID 0x42 every 5 chunks.
-5. Map-from-log trim grid blends STFT + LTFT when both channels exist
-   (`trim_blend` counters in the report). Preview still never writes.
-6. Connect page lists official adapters from
-   `reference/adapters/supported_adapters.json`.
-7. Dashboard catalog table has a Write column that matches the live path.
-8. Seed-key family dropdown includes the full catalog.
+1. Version **3.30.0** from one crate constant (`APP_VERSION`) plus
+   package / Tauri / installer / HTML / overlay fallbacks.
+2. `download_image` now reports progress as
+   `FnMut(&mut Port, u32, u32) -> Result<(), String>` and probes PID
+   0x42 every four blocks. J2534 Vbatt sag still aborts in the flash
+   callback. VPW still re-checks every five chunks.
+3. Catalog table header includes **Write**. `list_ecu_catalog` and
+   identify `write_allowed` both go through `write_path_live`.
+4. Connect page lists official adapters from
+   `list_supported_adapters`. Seed family dropdown fills from the
+   catalog and accepts an optional GM 2-byte algo index (0–1023).
+5. Workspace export version matches the crate.
 
 Write path remains **P01_0411** and **EDC16C41** only.
 
