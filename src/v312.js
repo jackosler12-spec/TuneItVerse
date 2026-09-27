@@ -1,4 +1,4 @@
-// TuneItVerse v3.25.0 overlay — catalog write flags, checksums, flash helpers, scripts.
+// TuneItVerse v3.31.0 overlay — catalog write flags, seed families, adapters, flash helpers.
 (function () {
   const PREF_KEY = 'tiv_conn';
 
@@ -51,8 +51,32 @@
         '</td><td>' + (e.bin_size_bytes || '') + '</td><td>' + (e.checksum || '') + '</td><td>' + (e.security || '') +
         '</td><td>' + (e.write_allowed ? 'LIVE' : 'blocked') + '</td></tr>'
       ).join('');
+      const famSel = document.getElementById('seed-family');
+      if (famSel && list.length) {
+        const current = famSel.value;
+        const ids = list.map((e) => e.ecu_family).filter(Boolean);
+        if (ids.length) {
+          famSel.innerHTML = ids.map((id) => '<option value="' + id + '">' + id + '</option>').join('');
+          if (ids.indexOf(current) >= 0) famSel.value = current;
+        }
+      }
     } catch (e) {
       body.innerHTML = '<tr><td colspan="7">' + e + '</td></tr>';
+    }
+  }
+
+  async function loadAdapters() {
+    const box = document.getElementById('adapter-list');
+    if (!box) return;
+    try {
+      const raw = parseMaybe(await cmd('list_supported_adapters'));
+      const list = (raw && raw.adapters) || [];
+      if (!list.length) { box.textContent = 'No adapter catalog.'; return; }
+      box.textContent = list.map(function (a) {
+        return (a.name || a.id) + ' [' + (a.status || '') + '] — ' + (a.notes || '');
+      }).join('\n');
+    } catch (e) {
+      box.textContent = String(e);
     }
   }
 
@@ -179,6 +203,7 @@
     restorePrefs();
     setTimeout(restorePrefs, 400);
     loadCatalog();
+    loadAdapters();
     refreshDashLive();
     listenFlashProgress();
     ensureScriptEditor();
@@ -206,7 +231,7 @@
         if (badge && info.version) badge.textContent = 'v' + info.version;
       }).catch(function () {
         const sl = document.getElementById('status-left');
-        if (sl) sl.textContent = 'TuneItVerse 3.25.0';
+        if (sl) sl.textContent = 'TuneItVerse 3.31.0';
       });
     } catch (_) {}
   }
