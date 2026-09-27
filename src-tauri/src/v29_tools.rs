@@ -21,7 +21,14 @@ pub fn map_from_log_cmd(csv: Option<String>) -> Result<String, String> {
 pub fn export_workspace_cmd(data: Option<Vec<u8>>) -> Result<String, String> {
     let ident = data.as_deref().map(identify_bin);
     let log = analyze_log().unwrap_or_else(|e| json!({"error": e}));
-    Ok(json!({"tool":"TuneItVerse","version":"3.27.0","families":ecu_database::list_supported_ecu_families(),"identify":ident,"map_from_log":log}).to_string())
+    Ok(json!({
+        "tool":"TuneItVerse",
+        "version": crate::APP_VERSION,
+        "write_families": ecu_database::write_families(),
+        "families": ecu_database::list_supported_ecu_families(),
+        "identify": ident,
+        "map_from_log": log
+    }).to_string())
 }
 
 fn sha256_hex(data: &[u8]) -> String {
@@ -129,6 +136,8 @@ pub fn identify_bin(data: &[u8]) -> serde_json::Value {
         "size_collision": size_collision,
         "correction_safe": correction_safe,
         "write_allowed": write_allowed,
+        "write_families": ecu_database::write_families(),
+        "app_version": crate::APP_VERSION,
         "notes": if honda_os && !gm_p01_os {
             "Honda OS string. P01 additive correction is blocked."
         } else if gm_p59_os && !gm_p01_os {
@@ -279,4 +288,36 @@ pub(crate) fn analyze_log() -> Result<serde_json::Value, String> {
         "stft_avg_16x16": stft_avg,
         "advice": format!("Hottest cell r{} c{} ({} hits). Mean {:.0} RPM / {:.0} kPa. Hint only — not auto-write.", hottest.0, hottest.1, hottest.2, rpm_avg, map_avg)
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn workspace_export_uses_crate_version() {
+        let raw = export_workspace_cmd(None).expect("export");
+        let v: serde_json::Value = serde_json::from_str(&raw).unwrap();
+        assert_eq!(v["version"], crate::APP_VERSION);
+        assert_eq!(v["tool"], "TuneItVerse");
+        assert!(v["write_families"].as_array().unwrap().iter().any(|x| x == "P01_0411"));
+    }
+
+    #[test]
+    fn identify_blank_512k_does_not_advertise_write() {
+        let img = vec![0u8; 524288];
+        let v = identify_bin(&img);
+        assert_eq!(v["write_allowed"], false);
+        assert_eq!(v["app_version"], crate::APP_VERSION);
+    }
+
+    #[test]
+    fn identify_honda_string_blocks_p01_write() {
+        let mut img = vec![0u8; 524288];
+        img[0x40..0x48].copy_from_slice(b"37820-PR");
+        let v = identify_bin(&img);
+        assert_eq!(v["honda_os"], true);
+        assert_eq!(v["write_allowed"], false);
+        assert!(resolved_family(&img).is_err());
+    }
 }
