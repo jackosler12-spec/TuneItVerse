@@ -1,8 +1,8 @@
 {
   "name": "tuneitverse",
   "private": true,
-  "version": "3.30.0",
-  "description": "TuneItVerse - open ECU tuning platform. v3.30.0: UDS mid-write voltage abort actually wired, catalog Write column, adapter list, GM algo field, version chrome sync.",
+  "version": "3.31.0",
+  "description": "TuneItVerse - open ECU tuning platform. v3.31.0: workspace uses crate version, catalog Write header, seed algo + adapters in UI.",
   "type": "module",
   "scripts": {
     "tauri": "tauri",
