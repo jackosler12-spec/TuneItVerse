@@ -1,25 +1,22 @@
-# TuneItVerse v3.30.0 — UDS voltage abort + honest chrome
+# TuneItVerse v3.31.0 — operational honesty pass
 
-v3.29 documented mid-flash voltage and a catalog Write column. The HTML
-thead was still six columns, static chrome was still 3.17, workspace
-export said 3.27, and `uds::download_image` took `FnMut(u32, u32)` so
-the Result-returning sag-abort closure in `flash.rs` could not compile
-or abort a UDS write.
+v3.30 documented catalog Write, crate-version workspace export, seed
+family-from-catalog, and a GM algo field. The HTML thead was still six
+columns, `export_workspace_cmd` still hardcoded `3.27.0`, the Connect
+page never rendered `list_supported_adapters`, and Compute Key never
+sent `algo`.
 
 ## What this pass changed
 
-1. Version **3.30.0** from one crate constant (`APP_VERSION`) plus
-   package / Tauri / installer / HTML / overlay fallbacks.
-2. `download_image` now reports progress as
-   `FnMut(&mut Port, u32, u32) -> Result<(), String>` and probes PID
-   0x42 every four blocks. J2534 Vbatt sag still aborts in the flash
-   callback. VPW still re-checks every five chunks.
-3. Catalog table header includes **Write**. `list_ecu_catalog` and
-   identify `write_allowed` both go through `write_path_live`.
-4. Connect page lists official adapters from
-   `list_supported_adapters`. Seed family dropdown fills from the
-   catalog and accepts an optional GM 2-byte algo index (0–1023).
-5. Workspace export version matches the crate.
+1. Version **3.31.0** from `APP_VERSION` plus package / Tauri / installer
+   / HTML fallbacks. Overlay reads `app_info` and paints the sidebar and
+   status bar from the crate.
+2. Workspace export uses `crate::APP_VERSION` and publishes
+   `write_families`. Identify reports `app_version` + `write_families`.
+3. Catalog table header includes **Write**. Seed family dropdown is
+   filled from `list_ecu_catalog`. Optional GM 2-byte algo index
+   (0–1023) is sent to `compute_seed_key`.
+4. Connect page lists official adapters from `list_supported_adapters`.
 
 Write path remains **P01_0411** and **EDC16C41** only.
 
