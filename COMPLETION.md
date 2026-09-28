@@ -1,22 +1,22 @@
-# TuneItVerse v3.31.0 — operational honesty pass
+# TuneItVerse v3.32.0 — UI honesty + UDS mid-write abort
 
-v3.30 documented catalog Write, crate-version workspace export, seed
-family-from-catalog, and a GM algo field. The HTML thead was still six
-columns, `export_workspace_cmd` still hardcoded `3.27.0`, the Connect
-page never rendered `list_supported_adapters`, and Compute Key never
-sent `algo`.
+v3.31 claimed a catalog Write column, adapter list, and seed `algo` argument.
+The overlay wrote seven catalog cells into a six-column table, `loadAdapters`
+looked for `#adapter-list` that did not exist, and Compute Key never sent
+`algo`. `uds::download_image` also rejected the fallible progress callback
+that `flash.rs` already passed — mid-write J2534 Vbatt abort could not build.
 
 ## What this pass changed
 
-1. Version **3.31.0** from `APP_VERSION` plus package / Tauri / installer
-   / HTML fallbacks. Overlay reads `app_info` and paints the sidebar and
-   status bar from the crate.
-2. Workspace export uses `crate::APP_VERSION` and publishes
-   `write_families`. Identify reports `app_version` + `write_families`.
-3. Catalog table header includes **Write**. Seed family dropdown is
-   filled from `list_ecu_catalog`. Optional GM 2-byte algo index
-   (0–1023) is sent to `compute_seed_key`.
-4. Connect page lists official adapters from `list_supported_adapters`.
+1. Version **3.32.0** across crate / package / Tauri / installer / HTML.
+2. Catalog `<thead>` includes **Write**. Overlay still paints LIVE/blocked.
+3. Connect page renders official adapters from `list_supported_adapters`.
+4. Seed UI has optional GM 2-byte algo (0–1023) and a P01 vs table compare.
+5. Identify chip / dashboard JSON show `write_allowed`.
+6. `download_image` progress is `FnMut(u32, u32) -> Result<(), String>` so
+   J2534 Vbatt sag aborts a Bosch UDS transfer. Serial PID 0x42 stays
+   pre/post — the port is owned by ISO-TP during the write.
+7. Map-from-log adds LTFT grid + occupancy CSV. Still preview only.
 
 Write path remains **P01_0411** and **EDC16C41** only.
 
