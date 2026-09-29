@@ -1,24 +1,18 @@
-# TuneItVerse v3.32.0 — UI honesty + UDS mid-write abort
+# TuneItVerse v3.33.0 — catalog/seed/adapter UI actually in HTML
 
-v3.31 claimed a catalog Write column, adapter list, and seed `algo` argument.
-The overlay wrote seven catalog cells into a six-column table, `loadAdapters`
-looked for `#adapter-list` that did not exist, and Compute Key never sent
-`algo`. `uds::download_image` also rejected the fallible progress callback
-that `flash.rs` already passed — mid-write J2534 Vbatt abort could not build.
+v3.32 docs said the catalog Write column, Connect adapter list, and seed
+`algo` argument were wired. The overlay painted seven cells into a six-column
+table, `#adapter-list` did not exist, and Compute Key never sent `algo`.
 
 ## What this pass changed
 
-1. Version **3.32.0** across crate / package / Tauri / installer / HTML.
-2. Catalog `<thead>` includes **Write**. Overlay still paints LIVE/blocked.
-3. Connect page renders official adapters from `list_supported_adapters`.
+1. Version **3.33.0** across crate / package / Tauri / installer / HTML / overlay.
+2. Catalog `<thead>` includes **Write**. Overlay LIVE/blocked cells match.
+3. Connect page has `#adapter-list` and loads `list_supported_adapters`.
 4. Seed UI has optional GM 2-byte algo (0–1023) and a P01 vs table compare.
 5. Identify chip / dashboard JSON show `write_allowed`.
-6. `download_image` progress is `FnMut(u32, u32) -> Result<(), String>` so
-   J2534 Vbatt sag aborts a Bosch UDS transfer. Serial PID 0x42 stays
-   pre/post — the port is owned by ISO-TP during the write.
-7. Map-from-log adds LTFT grid + occupancy CSV. Still preview only.
-
-Write path remains **P01_0411** and **EDC16C41** only.
+6. Bench script `adapters` command lists the official adapter catalog.
+7. Write path remains **P01_0411** and **EDC16C41** only.
 
 ## Still needs your bench
 
