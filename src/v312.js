@@ -1,4 +1,4 @@
-// TuneItVerse v3.32.0 overlay — catalog write flags, seed families, adapters, flash helpers.
+// TuneItVerse v3.33.0 overlay — catalog write flags, seed families, adapters, flash helpers.
 (function () {
   const PREF_KEY = 'tiv_conn';
 
@@ -217,6 +217,9 @@
       return flashCmd('bosch_uds_unlock', { family: fam, level: 'programming' }, 'Bosch UDS unlock');
     });
     bind('btn-run-script', runBenchScript);
+    bind('btn-p01-compare', function () {
+      if (typeof window.compareP01GmUi === 'function') return window.compareP01GmUi();
+    });
     const connectBtn = document.getElementById('btn-do-connect');
     if (connectBtn && !connectBtn.dataset.v313pref) {
       connectBtn.dataset.v313pref = '1';
@@ -231,7 +234,7 @@
         if (badge && info.version) badge.textContent = 'v' + info.version;
       }).catch(function () {
         const sl = document.getElementById('status-left');
-        if (sl) sl.textContent = 'TuneItVerse 3.32.0';
+        if (sl) sl.textContent = 'TuneItVerse 3.33.0';
       });
     } catch (_) {}
   }
