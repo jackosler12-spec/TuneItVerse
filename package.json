@@ -1,8 +1,8 @@
 {
   "name": "tuneitverse",
   "private": true,
-  "version": "3.32.0",
-  "description": "TuneItVerse - open ECU tuning platform. v3.32.0: catalog Write header, seed algo UI, adapters panel, UDS mid-write abort, map-from-log LTFT.",
+  "version": "3.33.0",
+  "description": "TuneItVerse - open ECU tuning platform. v3.33.0: HTML Write column, adapter list, seed algo + P01 compare, adapters script helper.",
   "type": "module",
   "scripts": {
     "tauri": "tauri",
