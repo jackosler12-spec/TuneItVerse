@@ -1,5 +1,11 @@
 // TuneItVerse v3.33.0 overlay — catalog write flags, seed families, adapters, flash helpers.
 (function () {
+  if (!window.__tiv333) {
+    window.__tiv333 = true;
+    var extra = document.createElement('script');
+    extra.src = 'v333.js';
+    document.head.appendChild(extra);
+  }
   const PREF_KEY = 'tiv_conn';
 
   function parseMaybe(raw) {
@@ -179,7 +185,7 @@
     const src = document.getElementById('script-source');
     const out = document.getElementById('script-output');
     const source = src ? src.value : 'help';
-    if (out) out.textContent = 'Running…';
+    if (out) out.textContent = 'Running\u2026';
     try {
       const bin = window.currentBin;
       const raw = await cmd('run_bench_script', {
@@ -202,6 +208,7 @@
   function boot() {
     restorePrefs();
     setTimeout(restorePrefs, 400);
+    setTimeout(loadAdapters, 50);
     loadCatalog();
     loadAdapters();
     refreshDashLive();
@@ -217,9 +224,6 @@
       return flashCmd('bosch_uds_unlock', { family: fam, level: 'programming' }, 'Bosch UDS unlock');
     });
     bind('btn-run-script', runBenchScript);
-    bind('btn-p01-compare', function () {
-      if (typeof window.compareP01GmUi === 'function') return window.compareP01GmUi();
-    });
     const connectBtn = document.getElementById('btn-do-connect');
     if (connectBtn && !connectBtn.dataset.v313pref) {
       connectBtn.dataset.v313pref = '1';
