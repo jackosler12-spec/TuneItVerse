@@ -1,10 +1,16 @@
-// TuneItVerse v3.33.0 overlay — catalog write flags, seed families, adapters, flash helpers.
+// TuneItVerse v3.34.0 overlay — catalog write flags, seed families, adapters, flash helpers.
 (function () {
   if (!window.__tiv333) {
     window.__tiv333 = true;
     var extra = document.createElement('script');
     extra.src = 'v333.js';
     document.head.appendChild(extra);
+  }
+  if (!window.__tiv334) {
+    window.__tiv334 = true;
+    var extra4 = document.createElement('script');
+    extra4.src = 'v334.js';
+    document.head.appendChild(extra4);
   }
   const PREF_KEY = 'tiv_conn';
 
@@ -238,7 +244,7 @@
         if (badge && info.version) badge.textContent = 'v' + info.version;
       }).catch(function () {
         const sl = document.getElementById('status-left');
-        if (sl) sl.textContent = 'TuneItVerse 3.33.0';
+        if (sl) sl.textContent = 'TuneItVerse 3.34.0';
       });
     } catch (_) {}
   }
