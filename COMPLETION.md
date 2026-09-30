@@ -1,18 +1,26 @@
-# TuneItVerse v3.33.0 — catalog/seed/adapter UI actually in HTML
+# TuneItVerse v3.34.0 — Scripts page actually runs, catalog baked into HTML
 
-v3.32 docs said the catalog Write column, Connect adapter list, and seed
-`algo` argument were wired. The overlay painted seven cells into a six-column
-table, `#adapter-list` did not exist, and Compute Key never sent `algo`.
+v3.33 docs said the Scripts page ran `identify` / `checksum` / `adapters`
+against the loaded BIN. The page only listed helper cards. HTML still said
+3.17.0 and the Write column / adapter list / seed algo lived in a JS overlay.
 
 ## What this pass changed
 
-1. Version **3.33.0** across crate / package / Tauri / installer / HTML / overlay.
-2. Catalog `<thead>` includes **Write**. Overlay LIVE/blocked cells match.
-3. Connect page has `#adapter-list` and loads `list_supported_adapters`.
-4. Seed UI has optional GM 2-byte algo (0–1023) and a P01 vs table compare.
-5. Identify chip / dashboard JSON show `write_allowed`.
-6. Bench script `adapters` command lists the official adapter catalog.
-7. Write path remains **P01_0411** and **EDC16C41** only.
+1. Version **3.34.0** across crate / package / Tauri / installer / HTML / overlay.
+2. Scripts page has a real runner: `run_bench_script` against the loaded BIN
+   (and the last Compare image). `correct` / `poke` mutate the working image
+   and enable Save BIN. No eval, no shell.
+3. Bench language + helper list gained `adapters`. Python CLI gained
+   `adapters` and `diff`.
+4. Catalog `<thead>` includes **Write**. Connect page has `#adapter-list`.
+   Seed UI includes GM algo + P01 vs table in HTML, not only overlay.
+5. Seed family list matches the catalog (ME9 / EDC15 / Simos / T8 / Transtron).
+6. Checksum validate names 1MB / 1.5MB / 4MB catalog sizes instead of UNKNOWN.
+   Correction stays fail-closed for those sizes.
+7. BIN compare adds a 64 KB region histogram and remembers the compare image
+   for scripts.
+
+Write path remains **P01_0411** and **EDC16C41** only.
 
 ## Still needs your bench
 
