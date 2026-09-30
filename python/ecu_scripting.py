@@ -10,6 +10,8 @@ Usage:
   python3 python/ecu_scripting.py identify path/to/dump.bin
   python3 python/ecu_scripting.py seedkey P01_0411 1234 1
   python3 python/ecu_scripting.py p01cmp 1234
+  python3 python/ecu_scripting.py diff stock.bin tuned.bin
+  python3 python/ecu_scripting.py adapters
 """
 
 from __future__ import annotations
@@ -56,6 +58,7 @@ def identify(data: bytes) -> dict:
         1048576: "ME7_COMMON",
         EDC16: "EDC16/EDC17/MED17/DELPHI 2MB",
         SID803: "SIEMENS_SID803 (1.5MB)",
+        4194304: "SIMOS18 (4MB)",
     }.get(size, "unknown")
     return {
         "bytes": size,
@@ -159,11 +162,16 @@ def p01cmp(seed_hex: str) -> dict:
 
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description="TuneItVerse bench helper")
-    parser.add_argument("command", choices=["checksum", "identify", "seedkey", "p01cmp"])
+    parser.add_argument("command", choices=["checksum", "identify", "seedkey", "p01cmp", "diff", "adapters"])
     parser.add_argument("bin_path", nargs="?")
     parser.add_argument("seed_hex", nargs="?")
     parser.add_argument("level", nargs="?", default="1")
     args = parser.parse_args(argv)
+    if args.command == "adapters":
+        root = pathlib.Path(__file__).resolve().parents[1]
+        catalog = root / "reference" / "adapters" / "supported_adapters.json"
+        print(catalog.read_text(encoding="utf-8"))
+        return 0
     if args.command == "seedkey":
         family = args.bin_path or "P01_0411"
         seed = args.seed_hex or ""
@@ -172,6 +180,17 @@ def main(argv: list[str]) -> int:
     if args.command == "p01cmp":
         seed = args.bin_path or args.seed_hex or ""
         print(p01cmp(seed))
+        return 0
+    if args.command == "diff":
+        if not args.bin_path or not args.seed_hex:
+            raise SystemExit("diff stock.bin tuned.bin")
+        a = pathlib.Path(args.bin_path).read_bytes()
+        b = pathlib.Path(args.seed_hex).read_bytes()
+        if len(a) != len(b):
+            print({"same_size": False, "len_a": len(a), "len_b": len(b)})
+            return 0
+        diffs = sum(1 for x, y in zip(a, b) if x != y)
+        print({"same_size": True, "len": len(a), "diff_bytes": diffs, "identical": diffs == 0})
         return 0
     if not args.bin_path:
         raise SystemExit("bin_path required")
