@@ -1,7 +1,7 @@
 [package]
 name = "TuneItVerse"
-version = "3.34.0"
-description = "ECU Tuning platform for JRTuners. v3.34.0: in-app bench script runner, catalog bake-in, size-aware report-only checksums, BIN compare histogram."
+version = "3.35.0"
+description = "ECU Tuning platform for JRTuners. v3.35.0: J2534 mid-write supply watch, definition packs, offline self-check."
 authors = ["JRTuners"]
 edition = "2021"
 

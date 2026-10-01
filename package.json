@@ -1,8 +1,8 @@
 {
   "name": "tuneitverse",
   "private": true,
-  "version": "3.34.0",
-  "description": "TuneItVerse - open ECU tuning platform. v3.34.0: in-app bench script runner, catalog bake-in, size-aware report-only checksums, BIN compare histogram.",
+  "version": "3.35.0",
+  "description": "TuneItVerse - open ECU tuning platform. v3.35.0: J2534 mid-write supply watch, definition packs that cannot enable write, offline self-check.",
   "type": "module",
   "scripts": {
     "tauri": "tauri",

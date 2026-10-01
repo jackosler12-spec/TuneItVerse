@@ -1,0 +1,18 @@
+{
+  "pack_id": "example-p01-hints",
+  "ecu_family": "P01_0411",
+  "display_name": "Example P01 map hints",
+  "write_allowed": false,
+  "notes": "Schema example only. Offsets are not a flashable definition. Import cannot enable write.",
+  "maps": [
+    {
+      "id": "spark_high_octane",
+      "name": "Spark high octane (hint)",
+      "offset": 0,
+      "rows": 1,
+      "cols": 1,
+      "scaling": "deg",
+      "notes": "Replace offset from your own XDF before editing."
+    }
+  ]
+}
