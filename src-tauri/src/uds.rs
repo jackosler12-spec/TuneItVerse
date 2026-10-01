@@ -473,7 +473,7 @@ pub fn download_image<F>(
     mut on_progress: F,
 ) -> Result<(), String>
 where
-    F: FnMut(u32, u32),
+    F: FnMut(u32, u32) -> Result<(), String>,
 {
     let max_block = request_download(port, alfi, address, image.len() as u32, use_elm)?;
     let chunk = max_block.saturating_sub(1).max(1).min(0x800);
@@ -490,7 +490,7 @@ where
         if seq == 0 {
             seq = 1;
         }
-        on_progress(offset as u32, total);
+        on_progress(offset as u32, total)?;
     }
     transfer_exit(port, use_elm)?;
     Ok(())

@@ -33,7 +33,7 @@ These fix the issues that make guided flash dangerous or misleading.
    - [x] PID 0x42 battery voltage query before any Mode 34/36 write
    - [x] Fail-closed ≥ 12.5 V (configurable via `min_voltage_v`; 0 bypasses for bench only)
    - [x] Re-check immediately before the destructive write phase
-   - [ ] Continuous monitoring mid-transfer with abort on sag (future polish)
+   - [x] Continuous monitoring mid-transfer with abort on sag (J2534 Vbatt). Serial PID 0x42 is pre/post only so it does not abort the programming session.
 
 4. **Adaptive Serial / Protocol Timing** — DONE ✅
    - [x] `AdaptiveTiming` replaces hardcoded 20 ms / 3 ms / 5 ms sleeps in guided path
@@ -66,8 +66,8 @@ These fix the issues that make guided flash dangerous or misleading.
 
 ## Priority 4 — Extensibility & Ecosystem
 
-13. **Plugin / Driver SDK** — TODO
-14. **Scripting Runtime** — TODO
+13. **Plugin / Driver SDK** — definition packs landed (hints only, cannot enable write). Driver plugins still TODO.
+14. **Scripting Runtime** — deterministic bench runner landed. No eval.
 15. **UI / UX Polish** — voltage, backup quality, verified_live now available to surface ✅
 
 ## Suggested Release Sequence

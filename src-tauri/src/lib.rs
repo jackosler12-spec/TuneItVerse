@@ -1,7 +1,7 @@
-// TuneItVerse lib.rs — Tauri entry + command surface (v3.34.0)
+// TuneItVerse lib.rs — Tauri entry + command surface (v3.35.0)
 #![allow(unused_imports, dead_code, non_snake_case)]
 
-pub const APP_VERSION: &str = "3.34.0";
+pub const APP_VERSION: &str = "3.35.0";
 
 mod a2l;
 mod can;
@@ -9,6 +9,7 @@ mod checksum;
 mod checksum_sizes;
 mod consult;
 mod cs_guard;
+mod defpack;
 mod dtc;
 mod ecu_database;
 mod file_dialog;
@@ -32,6 +33,7 @@ mod xdf;
 mod v29_tools;
 mod transport;
 mod v312;
+mod voltage_watch;
 
 use tauri::Emitter;
 

@@ -1,4 +1,4 @@
-// flash.rs -- Guided flash pipeline v3.29.0 (fail-closed write families + 5-chunk voltage)
+// flash.rs -- Guided flash pipeline v3.35.0 (J2534 mid-write supply watch, no PID during transfer)
 use serde::{Serialize, Deserialize};
 use crate::checksum::ChecksumReport;
 use serialport::SerialPort;
@@ -42,6 +42,9 @@ pub struct GuidedFlashResult {
     pub success: bool, pub steps_completed: Vec<String>, pub backup: Option<BackupResult>,
     pub checksum_report: Option<ChecksumReport>, pub flash_write_result: Option<FlashWriteResult>,
     pub verification_crc: Option<u32>, pub verified_live: bool, pub voltage_at_start: Option<f32>,
+    #[serde(default)] pub voltage_samples: u32,
+    #[serde(default)] pub voltage_min_seen: Option<f32>,
+    #[serde(default)] pub voltage_aborted: bool,
     pub recovery_prompt: Option<RecoveryPrompt>, pub logs: Vec<String>, pub error: Option<String>,
 }
 pub const DEFAULT_MIN_VOLTAGE_V: f32 = 12.5;
@@ -92,7 +95,8 @@ pub fn orchestrate_guided_flash<F>(port: &mut Box<dyn SerialPort + Send>, reques
 where F: FnMut(FlashProgress),
 {
     let min_v = request.min_voltage_v.unwrap_or(DEFAULT_MIN_VOLTAGE_V);
-    let mut result = GuidedFlashResult { success: false, steps_completed: vec![], backup: None, checksum_report: None, flash_write_result: None, verification_crc: None, verified_live: false, voltage_at_start: None, recovery_prompt: None, logs: vec!["Guided flash: identifying image...".into()], error: None };
+    let mut result = GuidedFlashResult { success: false, steps_completed: vec![], backup: None, checksum_report: None, flash_write_result: None, verification_crc: None, verified_live: false, voltage_at_start: None, voltage_samples: 0, voltage_min_seen: None, voltage_aborted: false, recovery_prompt: None, logs: vec!["Guided flash: identifying image...".into()], error: None };
+    let mut supply = crate::voltage_watch::VoltageWatch::default();
     if !request.user_confirmed_risks { result.error = Some("Risks not confirmed".into()); return Ok(result); }
     if request.tuned_bin.is_empty() { result.error = Some("Empty tuned_bin".into()); return Ok(result); }
     let family = match crate::v29_tools::resolved_family(&request.tuned_bin) {
@@ -167,6 +171,7 @@ where F: FnMut(FlashProgress),
         }
         let cal_addr: u32 = if fam.contains("ME7") { 0x0001_8000 } else { 0x0008_0000 };
         result.logs.push(format!("UDS 0x34/36/37 download at 0x{:06X} ({} bytes)", cal_addr, image.len()));
+        result.logs.push("Mid-write supply monitor: J2534 Vbatt only. Serial PID 0x42 is not sent during the transfer.".into());
         let write = crate::uds::download_image(
             port,
             crate::uds::Alfi::ADDR4_SIZE4,
@@ -174,17 +179,7 @@ where F: FnMut(FlashProgress),
             &image,
             true,
             |done, total| {
-                let mut voltage_warn = None;
-                if crate::j2534::is_device_open() {
-                    if let Ok(v) = crate::j2534::j2534_read_vbatt() {
-                        if v > 0.0 && v < min_v {
-                            return Err(format!("J2534 Vbatt sag mid-write: {:.2} V (min {:.2})", v, min_v));
-                        }
-                        if v > 0.0 && v < min_v + 0.4 {
-                            voltage_warn = Some(v);
-                        }
-                    }
-                }
+                let voltage_warn = sample_supply(min_v, &mut supply)?;
                 on_progress(FlashProgress {
                     bytes_done: done,
                     bytes_total: total,
@@ -194,7 +189,9 @@ where F: FnMut(FlashProgress),
                 Ok(())
             },
         );
+        stamp_supply(&mut result, &supply);
         if let Err(e) = write {
+            if e.contains("sag") { result.voltage_aborted = true; }
             result.error = Some(e);
             return Ok(result);
         }
@@ -210,24 +207,16 @@ where F: FnMut(FlashProgress),
         let _ = unlock_level2(port);
         let cal_addr: u32 = 0x0002_0000;
         if let Err(e) = send_frame(port, &build_mode34_request(cal_addr, image.len() as u32)) { result.error = Some(e); return Ok(result); }
+        result.logs.push("Mid-write supply monitor: J2534 Vbatt only. Serial PID 0x42 is not sent during the transfer.".into());
         let timing = AdaptiveTiming::for_vpw(); timing.sleep();
         let chunk_size = 128; let total = image.len();
         for (i, chunk) in image.chunks(chunk_size).enumerate() {
-            if i > 0 && i % 5 == 0 { if let Err(e) = enforce_voltage_gate(port, min_v, &mut result.logs) { result.error = Some(e); return Ok(result); } }
-            if let Err(e) = send_frame(port, &build_mode36_chunk(chunk)) { result.error = Some(e); return Ok(result); }
+            if let Err(e) = send_frame(port, &build_mode36_chunk(chunk)) { result.error = Some(e); stamp_supply(&mut result, &supply); return Ok(result); }
             let done = ((i + 1) * chunk_size).min(total);
-            let mut voltage_warn = None;
-            if crate::j2534::is_device_open() {
-                if let Ok(v) = crate::j2534::j2534_read_vbatt() {
-                    if v > 0.0 && v < min_v {
-                        result.error = Some(format!("J2534 Vbatt sag mid-write: {:.2} V (min {:.2})", v, min_v));
-                        return Ok(result);
-                    }
-                    if v > 0.0 && v < min_v + 0.4 {
-                        voltage_warn = Some(v);
-                    }
-                }
-            }
+            let voltage_warn = match sample_supply(min_v, &mut supply) {
+                Ok(w) => w,
+                Err(e) => { result.voltage_aborted = true; result.error = Some(e); stamp_supply(&mut result, &supply); return Ok(result); }
+            };
             on_progress(FlashProgress { bytes_done: done as u32, bytes_total: total as u32, percent: ((done * 100) / total.max(1)) as u8, voltage_warn });
             timing.sleep();
         }
@@ -242,7 +231,29 @@ where F: FnMut(FlashProgress),
             result.verified_live = false;
         }
     }
+    stamp_supply(&mut result, &supply);
     Ok(result)
+}
+
+fn sample_supply(min_v: f32, watch: &mut crate::voltage_watch::VoltageWatch) -> Result<Option<f32>, String> {
+    if !crate::j2534::is_device_open() {
+        return Ok(None);
+    }
+    let v = match crate::j2534::j2534_read_vbatt() {
+        Ok(v) if v > 0.0 => v,
+        _ => return Ok(None),
+    };
+    watch.observe(v);
+    match crate::voltage_watch::classify(v, min_v) {
+        crate::voltage_watch::SupplyClass::Abort => Err(crate::voltage_watch::sag_message(v, min_v)),
+        crate::voltage_watch::SupplyClass::Warn => { watch.warns = watch.warns.saturating_add(1); Ok(Some(v)) }
+        crate::voltage_watch::SupplyClass::Ok => Ok(None),
+    }
+}
+
+fn stamp_supply(result: &mut GuidedFlashResult, watch: &crate::voltage_watch::VoltageWatch) {
+    result.voltage_samples = watch.samples;
+    result.voltage_min_seen = watch.min_seen;
 }
 #[cfg(test)]
 mod tests {

@@ -137,6 +137,7 @@ pub fn run() {
             j2534::j2534_read_vbatt, j2534::j2534_set_iso15765_timing, j2534::j2534_clear_buffers,
             v312::app_info, v312::read_battery_voltage_cmd, v312::correct_bin_checksums_report,
             v312::session_snapshot, v312::list_supported_adapters,
+            defpack::import_definition_pack, defpack::list_definition_packs, defpack::operational_self_check,
         ])
         .run(tauri::generate_context!())
         .expect("error while running TuneItVerse");
