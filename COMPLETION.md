@@ -1,14 +1,15 @@
-# TuneItVerse v3.35.0 — supply watch, definition packs, self-check
+# TuneItVerse v3.36.0 — fingerprint, log stats, tune project
 
-v3.34 scripts runner stays. This pass closes three software gaps that were still open on main.
+v3.35 supply watch and definition packs stay. This pass closes the session-workflow gaps that were still software-only.
 
 ## What this pass changed
 
-1. Version **3.35.0** across crate / package / Tauri / installer / HTML.
-2. Mid-write supply monitor uses **J2534 Vbatt** only. Serial Mode 01 PID 0x42 is no longer sent during a Mode 36 / UDS transfer (that request can abort programming). Sag aborts the transfer and sets `voltage_aborted`. Samples land on the flash result.
-3. Community definition packs (`import_definition_pack`). A pack cannot flip `write_allowed`. Example: `reference/ecu_database/example_definition_pack.json`.
-4. Offline `operational_self_check` plus Scripts → Self-check and Maps → Import definition pack.
-5. HTML chrome is 3.35.0 without waiting for the overlay.
+1. Version **3.36.0** across crate / package / Tauri / installer / HTML.
+2. Family fingerprint scores (`score_fingerprint_cmd`). Size is a weak signal. OS/part strings outrank size. A score never grants write.
+3. Log channel stats (`analyze_log_channels_cmd`): min / max / avg / stddev from captured or imported samples only. STFT, ECT, and battery flags are hints, not map writes.
+4. Tune project file (`build_tune_project_cmd` / `load_tune_project_cmd`). Load ignores any `write_allowed` in the JSON. BIN bytes are not restored from the project.
+5. BIN search (`search_bin_cmd`) for ASCII or even-length hex. Project page wires all four.
+6. Bench CLI: `strings` and `logstats`.
 
 Write path remains **P01_0411** and **EDC16C41** only.
 
@@ -21,6 +22,7 @@ Write path remains **P01_0411** and **EDC16C41** only.
 5. A kernel-resident Mode 3C full-image dump. Windowed probes are not a full backup.
 6. Licensed GM 5-byte keys. We do not ship that library.
 7. Isuzu FRR Transtron dump + protocol notes before any 4HK1 write work.
+8. Windows release build of `TuneItVerse.exe` on your machine (`npm run build`). This pass does not commit a stale or fake exe.
 
 Never flash without a verified backup and stable power. Personal dumps only.
 

@@ -1,6 +1,6 @@
 # TuneItVerse Product Direction
 
-**Updated:** 2026-09-30  
+**Updated:** 2026-10-02  
 **Status:** Software-first. VerseLink Apex PCB work is parked.
 
 ## Decision
@@ -11,7 +11,7 @@ VerseLink Apex remains a future hardware option only if a third party builds it 
 
 ## What ships today
 
-TuneItVerse v3.35+ on Windows:
+TuneItVerse v3.36+ on Windows:
 
 - Identify / checksum / patch personal BIN dumps
 - Guided flash with fail-closed voltage gate, honest backup quality, live verify
@@ -21,6 +21,7 @@ TuneItVerse v3.35+ on Windows:
 - Offline seed/key for GM 2-byte tables and dump-derived `seed_tables.json` pairs
 - Map-from-log occupancy + STFT/LTFT VE cell *preview* (never silent write)
 - Official adapter list in the Connect page
+- Fingerprint scores, log channel stats, BIN search, tune project file (cannot enable write)
 
 ## Official adapters (now)
 

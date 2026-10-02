@@ -138,6 +138,8 @@ pub fn run() {
             v312::app_info, v312::read_battery_voltage_cmd, v312::correct_bin_checksums_report,
             v312::session_snapshot, v312::list_supported_adapters,
             defpack::import_definition_pack, defpack::list_definition_packs, defpack::operational_self_check,
+            session_tools::score_fingerprint_cmd, session_tools::analyze_log_channels_cmd,
+            session_tools::build_tune_project_cmd, session_tools::load_tune_project_cmd, session_tools::search_bin_cmd,
         ])
         .run(tauri::generate_context!())
         .expect("error while running TuneItVerse");

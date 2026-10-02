@@ -1,0 +1,10 @@
+{
+  "tool": "TuneItVerse",
+  "kind": "tune_project",
+  "version": "3.36.0",
+  "notes": "Example only. Replace with your dump notes. This file cannot enable write.",
+  "sha256": null,
+  "bin_size_bytes": null,
+  "write_allowed": false,
+  "policy": "Project JSON cannot enable write. Reload the BIN and run identify before any flash."
+}

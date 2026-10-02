@@ -29,7 +29,7 @@ python3 python/ecu_scripting.py adapters
 
 Same commands run in-app on the Scripts page against the loaded BIN (`identify`, `checksum`, `correct`, `compare`, `seedkey`, `poke`, `tables`, `maplog`, `adapters`). No eval, no shell. Scripts → Self-check runs the offline operational check. Maps → Import definition pack loads hint JSON and cannot enable write.
 
-## Current status (v3.35.0)
+## Current status (v3.36.0)
 
 See [COMPLETION.md](COMPLETION.md) and [PRODUCT.md](PRODUCT.md). Catalog includes P01, P59, EDC16C41, EDC15/17, ME7/9, MED17, Delphi DCM, SID803, Honda Keihin, Simos 18, Trionic 8, Transtron 4HK1. Holden/GM P01 BINs auto-load the Universal Patcher TableSeek pack. Offline BIN/XDF/A2L edit and save. Dashboard Write column and identify write_allowed flag match the live path (P01_0411 and EDC16C41 only). P59/Honda checksum correction and write stay blocked.
 
@@ -38,6 +38,9 @@ GM 2-byte security-access tables (`reference/2byte-keys.txt`) run offline: seed 
 Live: Mode 01 / VIN / DTCs on ELM ASCII for CAN/UDS; raw VPW only when you pick VPW. J2534 shows Connected when PassThru is open.
 
 Flash: identify → voltage gate → backup → unlock → write, with live `flash-progress` events. Honda and P59 writes stay blocked. Only P01_0411 and EDC16C41 advertise a live write path.
+
+
+Project page scores catalog families, stats an imported CSV, searches a BIN, and saves a tune project. The project file cannot enable write.
 
 Build your own. No bullshit prices.
 

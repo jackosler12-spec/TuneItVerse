@@ -12,6 +12,8 @@ Usage:
   python3 python/ecu_scripting.py p01cmp 1234
   python3 python/ecu_scripting.py diff stock.bin tuned.bin
   python3 python/ecu_scripting.py adapters
+  python3 python/ecu_scripting.py strings path/to/dump.bin
+  python3 python/ecu_scripting.py logstats path/to/log.csv
 """
 
 from __future__ import annotations
@@ -160,13 +162,65 @@ def p01cmp(seed_hex: str) -> dict:
     }
 
 
+
+def printable_strings(data: bytes, min_len: int = 5, limit: int = 24) -> list[str]:
+    out = []
+    cur = []
+    for b in data:
+        if 32 <= b <= 126:
+            cur.append(chr(b))
+        else:
+            if len(cur) >= min_len:
+                out.append("".join(cur))
+                if len(out) >= limit:
+                    return out
+            cur = []
+    if len(cur) >= min_len and len(out) < limit:
+        out.append("".join(cur))
+    return out
+
+
+def logstats(path: pathlib.Path) -> dict:
+    lines = [ln for ln in path.read_text(encoding="utf-8", errors="replace").splitlines() if ln.strip()]
+    if len(lines) < 2:
+        raise SystemExit("CSV needs a header and one row")
+    cols = [c.strip().strip('"').lower() for c in lines[0].split(",")]
+    acc = {c: [] for c in cols if c not in {"timestamp_ms", "timestamp", "time_ms"}}
+    for line in lines[1:]:
+        cells = [c.strip().strip('"') for c in line.split(",")]
+        for i, col in enumerate(cols):
+            if col not in acc or i >= len(cells):
+                continue
+            try:
+                acc[col].append(float(cells[i]))
+            except ValueError:
+                pass
+    summary = {}
+    for col, vals in acc.items():
+        if not vals:
+            continue
+        summary[col] = {"count": len(vals), "min": min(vals), "max": max(vals), "avg": round(sum(vals) / len(vals), 3)}
+    return {"rows": len(lines) - 1, "channels": summary, "note": "Imported numbers only. No invented channels."}
+
+
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description="TuneItVerse bench helper")
-    parser.add_argument("command", choices=["checksum", "identify", "seedkey", "p01cmp", "diff", "adapters"])
+    parser.add_argument("command", choices=["checksum", "identify", "seedkey", "p01cmp", "diff", "adapters", "strings", "logstats"])
     parser.add_argument("bin_path", nargs="?")
     parser.add_argument("seed_hex", nargs="?")
     parser.add_argument("level", nargs="?", default="1")
     args = parser.parse_args(argv)
+    if args.command == "strings":
+        if not args.bin_path:
+            raise SystemExit("bin_path required")
+        data = pathlib.Path(args.bin_path).read_bytes()
+        print({"bytes": len(data), "strings": printable_strings(data)})
+        return 0
+    if args.command == "logstats":
+        if not args.bin_path:
+            raise SystemExit("csv path required")
+        print(logstats(pathlib.Path(args.bin_path)))
+        return 0
     if args.command == "adapters":
         root = pathlib.Path(__file__).resolve().parents[1]
         catalog = root / "reference" / "adapters" / "supported_adapters.json"

@@ -54,14 +54,14 @@ These fix the issues that make guided flash dangerous or misleading.
 
 ## Priority 2 — Scalable ECU Definition & Identification
 
-7. **Real ECU Auto-Detection & Fingerprinting** — PARTIAL (OS ID + size + family DB)
+7. **Real ECU Auto-Detection & Fingerprinting** — scores landed (OS/part outrank size; score is not a write grant)
 8. **Scalable ECU Database + Import Pipeline** — DONE for 5 families; add via JSON + include
 9. **Checksum Expansion** — existing multipoint solid; more families TODO
 
 ## Priority 3 — Professional Workflow Features
 
 10. **J2534 Windows Registry Device Enumeration** — foundation (hardcoded list + DLL binding production)
-11. **Datalog Import & Map-from-Log Automation** — TODO
+11. **Datalog Import & Map-from-Log Automation** — occupancy + channel stats (min/max/avg/stddev). No silent write.
 12. **BDM / JTAG / Bench Mode Support** — TODO (foundation only)
 
 ## Priority 4 — Extensibility & Ecosystem
@@ -92,3 +92,5 @@ Build your own. No more bullshit prices.
 
 ---
 Updated 2026-08-09: Priority 0 fully landed. v2.0.0 declared production-ready for supported ECUs.
+
+Updated 2026-10-02: v3.36 fingerprint scores, log channel stats, tune project files. Write still P01_0411 and EDC16C41 only.

@@ -2,14 +2,14 @@
 <html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8">
-  <title>TuneItVerse v3.35.0</title>
+  <title>TuneItVerse v3.36.0</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-logo">
       <div class="sidebar-logo-mark">TV</div>
-      <div class="sidebar-logo-text">TuneItVerse <span class="version">v3.35.0</span></div>
+      <div class="sidebar-logo-text">TuneItVerse <span class="version">v3.36.0</span></div>
     </div>
     <nav class="sidebar-nav" id="sidebar-nav">
       <button type="button" class="nav-item active" data-view="dashboard">Dashboard</button>
@@ -19,6 +19,7 @@
       <button type="button" class="nav-item" data-view="tables">Maps</button>
       <button type="button" class="nav-item" data-view="flash">Flash</button>
       <button type="button" class="nav-item" data-view="scripts">Scripts</button>
+      <button type="button" class="nav-item" data-view="project">Project</button>
     </nav>
     <div class="sidebar-footer">
       <div class="connection-status">
@@ -415,8 +416,33 @@
       </div>
     </div>
 
+
+    <div id="view-project" class="content content--hidden view-page" data-view-panel="project" hidden>
+      <div class="page-toolbar">
+        <div class="toolbar-group">
+          <span class="toolbar-label">Session</span>
+          <button id="btn-score-fingerprint" class="btn btn-primary" type="button">Score fingerprint</button>
+          <button id="btn-log-stats" class="btn" type="button">Log channel stats</button>
+          <button id="btn-build-project" class="btn" type="button">Build project</button>
+          <button id="btn-load-project" class="btn" type="button">Load project</button>
+          <button id="btn-search-bin" class="btn" type="button">Search BIN</button>
+        </div>
+        <div class="toolbar-status">Scores and notes only. A project file cannot enable write.</div>
+      </div>
+      <div class="view-body scroll-pane">
+        <div class="panel quiet-panel">
+          <div class="panel-header"><span class="panel-title">Notes</span></div>
+          <textarea id="project-notes" rows="4" placeholder="Personal dump notes. Not a tune recipe."></textarea>
+          <div class="row wrap" style="margin-top:8px">
+            <input id="bin-search-q" placeholder="search text or hex e.g. 12225074 or DEADBEEF">
+          </div>
+        </div>
+        <pre id="project-output" class="mono-block log-box">Load a BIN or CSV. Fingerprint ranks catalog families. Write stays P01_0411 and EDC16C41 only.</pre>
+      </div>
+    </div>
+
     <footer class="status-bar">
-      <div class="status-left" id="status-left">TuneItVerse 3.35.0</div>
+      <div class="status-left" id="status-left">TuneItVerse 3.36.0</div>
       <div class="status-center" id="status-center">No invented live values</div>
       <div class="status-right" id="status-right">Desktop app required</div>
     </footer>
@@ -424,5 +450,6 @@
   <script src="main.js"></script>
   <script src="v312.js"></script>
   <script src="v335.js"></script>
+  <script src="v336.js"></script>
 </body>
 </html>

@@ -128,6 +128,7 @@ pub fn operational_self_check() -> Result<String, String> {
         "definition_pack_ok": pack_ok,
         "p59_write_blocked": !crate::ecu_database::write_path_live("GM_P59"),
         "honda_write_blocked": !families.iter().any(|f| f.to_ascii_uppercase().contains("HONDA") && crate::ecu_database::write_path_live(f)),
+        "fingerprint_ok": crate::session_tools::score_fingerprint(&[]).get("write_allowed").and_then(|v| v.as_bool()) == Some(false),
         "notes": "Self-check is offline. It does not talk to an ECU and does not enable write."
     });
     serde_json::to_string(&report).map_err(|e| e.to_string())
