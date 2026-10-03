@@ -12,11 +12,15 @@ Usage:
   python3 python/ecu_scripting.py p01cmp 1234
   python3 python/ecu_scripting.py diff stock.bin tuned.bin
   python3 python/ecu_scripting.py adapters
+  python3 python/ecu_scripting.py profile path/to/dump.bin
+  python3 python/ecu_scripting.py hex path/to/dump.bin 0 256
+  python3 python/ecu_scripting.py report path/to/dump.bin
 """
 
 from __future__ import annotations
 
 import argparse
+import math
 import pathlib
 import sys
 import hashlib
@@ -160,9 +164,60 @@ def p01cmp(seed_hex: str) -> dict:
     }
 
 
+def entropy(block: bytes) -> float:
+    if not block:
+        return 0.0
+    counts = [0] * 256
+    for b in block:
+        counts[b] += 1
+    n = len(block)
+    h = 0.0
+    for c in counts:
+        if c:
+            p = c / n
+            h -= p * math.log2(p)
+    return round(h, 3)
+
+
+def profile(data: bytes) -> dict:
+    if not data:
+        return {"bytes": 0, "note": "empty image"}
+    zero = data.count(0)
+    ff = data.count(0xFF)
+    n = len(data)
+    note = "Mixed entropy. Profile is not an identification."
+    ent = entropy(data)
+    if ent >= 7.8:
+        note = "High entropy. Could be compressed or encrypted — do not assume a raw cal."
+    elif zero / n > 0.5:
+        note = "Mostly empty (0x00)."
+    elif ff / n > 0.5:
+        note = "Mostly 0xFF. Typical of erased flash."
+    return {
+        "bytes": n,
+        "entropy": ent,
+        "zero_percent": round(zero * 1000 / n) / 10,
+        "ff_percent": round(ff * 1000 / n) / 10,
+        "note": note,
+    }
+
+
+def hex_window(data: bytes, offset: int, length: int) -> str:
+    if offset >= len(data):
+        raise SystemExit(f"offset 0x{offset:X} past end ({len(data)})")
+    end = min(len(data), offset + max(1, min(length, 4096)))
+    lines = []
+    for i in range(offset, end, 16):
+        row = data[i:min(i + 16, end)]
+        hexpart = " ".join(f"{b:02X}" for b in row)
+        ascii_part = "".join(chr(b) if 32 <= b < 127 else "." for b in row)
+        lines.append(f"{i:06X}: {hexpart:<47} | {ascii_part}")
+    return "\n".join(lines)
+
+
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description="TuneItVerse bench helper")
-    parser.add_argument("command", choices=["checksum", "identify", "seedkey", "p01cmp", "diff", "adapters"])
+    parser.add_argument("command", choices=["checksum", "identify", "seedkey", "p01cmp", "diff", "adapters", "profile", "hex", "report"])
     parser.add_argument("bin_path", nargs="?")
     parser.add_argument("seed_hex", nargs="?")
     parser.add_argument("level", nargs="?", default="1")
@@ -198,6 +253,30 @@ def main(argv: list[str]) -> int:
     data = path.read_bytes()
     if args.command == "identify":
         print(identify(data))
+    elif args.command == "profile":
+        print(profile(data))
+    elif args.command == "hex":
+        off = int(args.seed_hex or "0", 0)
+        length = int(args.level or "256", 0)
+        print(hex_window(data, off, length))
+    elif args.command == "report":
+        ident = identify(data)
+        cs = checksum_report(data)
+        prof = profile(data)
+        print(
+            "\n".join(
+                [
+                    "# TuneItVerse tune report",
+                    "",
+                    "Personal dump review only. This report does not enable a write path.",
+                    "",
+                    f"- Bytes: {len(data)}",
+                    f"- Identify: {ident}",
+                    f"- Checksum: {cs}",
+                    f"- Profile: {prof}",
+                ]
+            )
+        )
     else:
         print(checksum_report(data))
     return 0

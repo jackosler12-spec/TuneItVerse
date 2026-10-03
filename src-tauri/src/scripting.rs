@@ -10,6 +10,9 @@
 //!   poke OFFSET HEXBYTES
 //!   tables
 //!   maplog
+//!   hex OFFSET [LEN]
+//!   profile
+//!   report
 //!   help
 //!
 //! `#` starts a comment. Empty lines are ignored. Commands that mutate the
@@ -68,6 +71,9 @@ fn help_text() -> Value {
             "poke OFFSET HEX          — write bytes at offset (0x4000 AA BB)",
             "tables                   — locate TableSeek / catalog maps",
             "maplog                   — occupancy heatmap from imported / live log",
+            "hex OFFSET [LEN]        — hex+ASCII window (max 4096 bytes)",
+            "profile                  — block entropy, empty/erased ratios",
+            "report                   — markdown identify + checksum + profile",
             "help                     — this list"
         ],
         "notes": "No eval, no shell, no invented seed tables. Personal dumps only."
@@ -181,6 +187,26 @@ fn run_line(state: &mut ScriptState, line: &str) -> Result<Value, String> {
             }))
         }
         "maplog" | "map_from_log" => crate::v29_tools::analyze_log(),
+        "hex" => {
+            if state.bin.is_empty() {
+                return Err("No working BIN.".into());
+            }
+            let off = parse_offset(parts.next().unwrap_or("0"))?;
+            let len = parts.next().map(parse_offset).transpose()?.unwrap_or(256);
+            crate::bin_inspect::hex_window(&state.bin, off, len)
+        }
+        "profile" => {
+            if state.bin.is_empty() {
+                return Err("No working BIN.".into());
+            }
+            Ok(crate::bin_inspect::profile_bin(&state.bin))
+        }
+        "report" => {
+            if state.bin.is_empty() {
+                return Err("No working BIN.".into());
+            }
+            Ok(json!({"markdown": crate::bin_inspect::tune_report(&state.bin)?}))
+        }
         other => Err(format!("unknown command '{}'. Type help.", other)),
     }
 }
@@ -275,6 +301,27 @@ pub fn list_script_helpers() -> Result<String, String> {
             "description": "Occupancy heatmap from the current log buffer.",
             "command": "maplog",
             "cli": null
+        },
+        {
+            "id": "profile",
+            "name": "Image profile",
+            "description": "Entropy and empty/erased ratios. Not an identification.",
+            "command": "profile",
+            "cli": "python3 python/ecu_scripting.py profile path/to/dump.bin"
+        },
+        {
+            "id": "hex",
+            "name": "Hex window",
+            "description": "Hex+ASCII at an offset. Same path as Inspect.",
+            "command": "hex 0 256",
+            "cli": "python3 python/ecu_scripting.py hex path/to/dump.bin 0 256"
+        },
+        {
+            "id": "report",
+            "name": "Tune report",
+            "description": "Markdown identify + checksum + profile. Does not enable write.",
+            "command": "report",
+            "cli": "python3 python/ecu_scripting.py report path/to/dump.bin"
         }
     ])
     .to_string())
@@ -316,6 +363,13 @@ mod tests {
         let ident = &v["steps"][0]["result"];
         assert_eq!(ident["size_collision"], true);
         assert!(ident["family"].is_null());
+    }
+
+    #[test]
+    fn profile_script_on_blank() {
+        let v = run_script("profile\n", Some(vec![0u8; 64]), None);
+        assert_eq!(v["ok"], true);
+        assert_eq!(v["steps"][0]["result"]["entropy"], 0.0);
     }
 
     #[test]

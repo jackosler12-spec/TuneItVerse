@@ -2,14 +2,14 @@
 <html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8">
-  <title>TuneItVerse v3.35.0</title>
+  <title>TuneItVerse v3.36.0</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-logo">
       <div class="sidebar-logo-mark">TV</div>
-      <div class="sidebar-logo-text">TuneItVerse <span class="version">v3.35.0</span></div>
+      <div class="sidebar-logo-text">TuneItVerse <span class="version">v3.36.0</span></div>
     </div>
     <nav class="sidebar-nav" id="sidebar-nav">
       <button type="button" class="nav-item active" data-view="dashboard">Dashboard</button>
@@ -19,6 +19,7 @@
       <button type="button" class="nav-item" data-view="tables">Maps</button>
       <button type="button" class="nav-item" data-view="flash">Flash</button>
       <button type="button" class="nav-item" data-view="scripts">Scripts</button>
+      <button type="button" class="nav-item" data-view="inspect">Inspect</button>
     </nav>
     <div class="sidebar-footer">
       <div class="connection-status">
@@ -415,8 +416,25 @@
       </div>
     </div>
 
+    <div id="view-inspect" class="content content--hidden view-page" data-view-panel="inspect" hidden>
+      <div class="page-toolbar">
+        <div class="toolbar-group">
+          <span class="toolbar-label">Image</span>
+          <button id="btn-inspect-profile" class="btn btn-primary" type="button">Profile</button>
+          <button id="btn-inspect-hex" class="btn" type="button">Hex window</button>
+          <button id="btn-inspect-report" class="btn" type="button">Tune report</button>
+          <input id="inspect-offset" type="text" value="0" class="table-search" style="width:7rem" placeholder="offset">
+          <input id="inspect-len" type="text" value="256" class="table-search" style="width:5rem" placeholder="len">
+        </div>
+        <div class="toolbar-status" id="inspect-status">Uses the BIN loaded on Maps. Does not enable write.</div>
+      </div>
+      <div class="view-body scroll-pane">
+        <pre id="inspect-output" class="mono-block log-box">Load a BIN on Maps, then profile or jump to an offset.</pre>
+      </div>
+    </div>
+
     <footer class="status-bar">
-      <div class="status-left" id="status-left">TuneItVerse 3.35.0</div>
+      <div class="status-left" id="status-left">TuneItVerse 3.36.0</div>
       <div class="status-center" id="status-center">No invented live values</div>
       <div class="status-right" id="status-right">Desktop app required</div>
     </footer>
@@ -424,5 +442,6 @@
   <script src="main.js"></script>
   <script src="v312.js"></script>
   <script src="v335.js"></script>
+  <script src="v336.js"></script>
 </body>
 </html>

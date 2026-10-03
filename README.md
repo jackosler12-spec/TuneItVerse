@@ -25,13 +25,18 @@ python3 python/ecu_scripting.py checksum path/to/dump.bin
 python3 python/ecu_scripting.py seedkey P01_0411 1234 1
 python3 python/ecu_scripting.py diff stock.bin tuned.bin
 python3 python/ecu_scripting.py adapters
+python3 python/ecu_scripting.py profile path/to/dump.bin
+python3 python/ecu_scripting.py hex path/to/dump.bin 0 64
+python3 python/ecu_scripting.py report path/to/dump.bin
 ```
 
-Same commands run in-app on the Scripts page against the loaded BIN (`identify`, `checksum`, `correct`, `compare`, `seedkey`, `poke`, `tables`, `maplog`, `adapters`). No eval, no shell. Scripts → Self-check runs the offline operational check. Maps → Import definition pack loads hint JSON and cannot enable write.
+Scripts page runs the same ideas against the loaded BIN (`identify`, `checksum`, `correct`, `compare`, `seedkey`, `poke`, `tables`, `maplog`, `hex`, `profile`, `report`). No eval, no shell. Scripts → Self-check runs the offline operational check. Maps → Import definition pack loads hint JSON and cannot enable write.
 
-## Current status (v3.35.0)
+## Current status (v3.36.0)
 
 See [COMPLETION.md](COMPLETION.md) and [PRODUCT.md](PRODUCT.md). Catalog includes P01, P59, EDC16C41, EDC15/17, ME7/9, MED17, Delphi DCM, SID803, Honda Keihin, Simos 18, Trionic 8, Transtron 4HK1. Holden/GM P01 BINs auto-load the Universal Patcher TableSeek pack. Offline BIN/XDF/A2L edit and save. Dashboard Write column and identify write_allowed flag match the live path (P01_0411 and EDC16C41 only). P59/Honda checksum correction and write stay blocked.
+
+Inspect page reviews a loaded dump: hex+ASCII window, block entropy, markdown tune report. None of those flip write_allowed.
 
 GM 2-byte security-access tables (`reference/2byte-keys.txt`) run offline: seed + algo index → key. Measured pairs in `seed_tables.json` win when present. Licensed 5-byte GM keys are not included.
 
