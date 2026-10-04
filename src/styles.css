@@ -1744,3 +1744,10 @@ html, body { overflow: hidden; }
   margin-right: 16px;
 }
 .dash-panels .data-table { margin: 0; }
+#log-replay-readout,
+#compare-report {
+  white-space: pre-wrap;
+  max-height: 28rem;
+  overflow: auto;
+}
+#log-replay-index { width: 12rem; }

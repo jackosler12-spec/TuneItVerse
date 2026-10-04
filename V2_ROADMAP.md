@@ -61,7 +61,7 @@ These fix the issues that make guided flash dangerous or misleading.
 ## Priority 3 — Professional Workflow Features
 
 10. **J2534 Windows Registry Device Enumeration** — foundation (hardcoded list + DLL binding production)
-11. **Datalog Import & Map-from-Log Automation** — TODO
+11. **Datalog Import & Map-from-Log Automation** — preview landed in v3.37 (CSV import, replay, clamped trim grid). Silent write stays off.
 12. **BDM / JTAG / Bench Mode Support** — TODO (foundation only)
 
 ## Priority 4 — Extensibility & Ecosystem

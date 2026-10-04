@@ -85,7 +85,9 @@ const PAGE_TITLES = {
   diagnostics: ['Diagnostics', 'Read, inspect, or clear DTCs from the adapter.'],
   tables: ['Maps', 'Load a BIN, pick a parameter, edit, save. No ECU required.'],
   flash: ['Flash', 'Identify → voltage → backup → write → verify.'],
-  scripts: ['Scripts', 'Bench CLI helpers. Not an embedded interpreter.']
+  scripts: ['Scripts', 'Bench CLI helpers. Not an embedded interpreter.'],
+  inspect: ['Inspect', 'Hex window, entropy, and a tune report. Does not enable write.'],
+  compare: ['Compare', 'Changed ranges between the working BIN and a second dump.']
 };
 
 function escapeHtml(s) {

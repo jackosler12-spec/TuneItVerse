@@ -215,9 +215,75 @@ def hex_window(data: bytes, offset: int, length: int) -> str:
     return "\n".join(lines)
 
 
+def diff_report(a: bytes, b: bytes) -> str:
+    if len(a) != len(b):
+        return f"# BIN diff\n\nImages differ in length ({len(a)} vs {len(b)}).\n"
+    diffs = 0
+    ranges = []
+    start = None
+    for i, (x, y) in enumerate(zip(a, b)):
+        if x != y:
+            diffs += 1
+            if start is None:
+                start = i
+        elif start is not None:
+            ranges.append((start, i - 1))
+            start = None
+    if start is not None:
+        ranges.append((start, len(a) - 1))
+    pct = 0 if not a else diffs * 100.0 / len(a)
+    lines = [
+        "# BIN diff",
+        "",
+        f"- Length: {len(a)}",
+        f"- Changed bytes: {diffs} ({pct:.4f}%)",
+        f"- Ranges: {len(ranges)}",
+        "- write_allowed: false",
+        "",
+        "| start | end | length |",
+        "|---|---|---|",
+    ]
+    for s, e in ranges[:80]:
+        lines.append(f"| 0x{s:06X} | 0x{e:06X} | {e - s + 1} |")
+    if len(ranges) > 80:
+        lines.append(f"\n{len(ranges) - 80} further ranges omitted.")
+    lines.append("\nPersonal dumps only. Diff does not patch either image.")
+    return "\n".join(lines)
+
+
+def log_summary(csv_text: str) -> dict:
+    lines = [ln for ln in csv_text.splitlines() if ln.strip()]
+    if len(lines) < 2:
+        raise SystemExit("CSV needs a header and one numeric row")
+    cols = [c.strip().strip('"').lower() for c in lines[0].split(",")]
+    stats = {}
+    for line in lines[1:]:
+        cells = [c.strip().strip('"') for c in line.split(",")]
+        for i, col in enumerate(cols):
+            if not col or i >= len(cells):
+                continue
+            try:
+                value = float(cells[i])
+            except ValueError:
+                continue
+            slot = stats.setdefault(col, [value, value, 0.0, 0])
+            slot[0] = min(slot[0], value)
+            slot[1] = max(slot[1], value)
+            slot[2] += value
+            slot[3] += 1
+    return {
+        "channels": {
+            k: {"min": v[0], "max": v[1], "mean": v[2] / v[3], "samples": v[3]}
+            for k, v in stats.items()
+        },
+        "rows": len(lines) - 1,
+        "write_allowed": False,
+    }
+
+
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description="TuneItVerse bench helper")
-    parser.add_argument("command", choices=["checksum", "identify", "seedkey", "p01cmp", "diff", "adapters", "profile", "hex", "report"])
+    parser.add_argument("command", choices=["checksum", "identify", "seedkey", "p01cmp", "diff", "adapters", "profile", "hex", "report", "logsummary"])
     parser.add_argument("bin_path", nargs="?")
     parser.add_argument("seed_hex", nargs="?")
     parser.add_argument("level", nargs="?", default="1")
@@ -246,6 +312,12 @@ def main(argv: list[str]) -> int:
             return 0
         diffs = sum(1 for x, y in zip(a, b) if x != y)
         print({"same_size": True, "len": len(a), "diff_bytes": diffs, "identical": diffs == 0})
+        print(diff_report(a, b))
+        return 0
+    if args.command == "logsummary":
+        if not args.bin_path:
+            raise SystemExit("logsummary path/to/log.csv")
+        print(log_summary(pathlib.Path(args.bin_path).read_text(encoding="utf-8")))
         return 0
     if not args.bin_path:
         raise SystemExit("bin_path required")

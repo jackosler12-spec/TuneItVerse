@@ -1,8 +1,8 @@
 {
   "name": "tuneitverse",
   "private": true,
-  "version": "3.36.0",
-  "description": "TuneItVerse - open ECU tuning platform. v3.36.0: Inspect page with hex window, entropy profile, and tune report. Write path still P01 and EDC16C41 only.",
+  "version": "3.37.0",
+  "description": "TuneItVerse - open ECU tuning platform. v3.37.0: log replay, trim preview, and BIN diff. Write path still P01 and EDC16C41 only.",
   "type": "module",
   "scripts": {
     "tauri": "tauri",
