@@ -2,14 +2,14 @@
 <html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8">
-  <title>TuneItVerse v3.36.0</title>
+  <title>TuneItVerse v3.37.0</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-logo">
       <div class="sidebar-logo-mark">TV</div>
-      <div class="sidebar-logo-text">TuneItVerse <span class="version">v3.36.0</span></div>
+      <div class="sidebar-logo-text">TuneItVerse <span class="version">v3.37.0</span></div>
     </div>
     <nav class="sidebar-nav" id="sidebar-nav">
       <button type="button" class="nav-item active" data-view="dashboard">Dashboard</button>
@@ -20,6 +20,7 @@
       <button type="button" class="nav-item" data-view="flash">Flash</button>
       <button type="button" class="nav-item" data-view="scripts">Scripts</button>
       <button type="button" class="nav-item" data-view="inspect">Inspect</button>
+      <button type="button" class="nav-item" data-view="compare">Compare</button>
     </nav>
     <div class="sidebar-footer">
       <div class="connection-status">
@@ -188,6 +189,10 @@
             <button id="btn-log-clear" class="btn" type="button">Clear</button>
             <button id="btn-log-export" class="btn" type="button">Export CSV</button>
             <button id="btn-log-import" class="btn" type="button">Import CSV</button>
+            <button id="btn-log-summary" class="btn" type="button">Summary</button>
+            <button id="btn-log-replay" class="btn" type="button">Replay</button>
+            <button id="btn-log-replay-stop" class="btn" type="button">Pause</button>
+            <button id="btn-log-suggest" class="btn" type="button">Trim preview</button>
             <span id="log-status" class="status-ok">Idle</span>
         </div>
         <div class="toolbar-status" id="log-session-meta">—</div>
@@ -205,6 +210,8 @@
               <div id="log-kpis" class="kpi-inline"></div>
               <canvas id="log-spark" width="720" height="160" aria-label="sample sparkline"></canvas>
               <p class="muted" id="log-spark-hint">Chart stays empty until a live or imported sample exists.</p>
+              <label class="tool-field">Replay <input id="log-replay-index" type="range" min="0" max="0" value="0"></label>
+              <pre id="log-replay-readout" class="mono-block log-box">Import a CSV, then Summary / Replay / Trim preview. Preview does not write.</pre>
             </div>
             <div class="panel quiet-panel">
               <div class="panel-header"><span class="panel-title">Recent samples</span></div>
@@ -433,8 +440,22 @@
       </div>
     </div>
 
+    <div id="view-compare" class="content content--hidden view-page" data-view-panel="compare" hidden>
+      <div class="page-toolbar">
+        <div class="toolbar-group">
+          <span class="toolbar-label">BIN diff</span>
+          <button id="btn-compare-load" class="btn" type="button">Load compare BIN</button>
+          <button id="btn-compare-run" class="btn btn-primary" type="button">Diff against working BIN</button>
+        </div>
+      </div>
+      <div class="view-body scroll-pane">
+        <p class="muted">Working image is the BIN loaded on Maps. Diff lists changed ranges. It does not patch either file and does not enable write.</p>
+        <pre id="compare-report" class="mono-block log-box">No diff yet.</pre>
+      </div>
+    </div>
+
     <footer class="status-bar">
-      <div class="status-left" id="status-left">TuneItVerse 3.36.0</div>
+      <div class="status-left" id="status-left">TuneItVerse 3.37.0</div>
       <div class="status-center" id="status-center">No invented live values</div>
       <div class="status-right" id="status-right">Desktop app required</div>
     </footer>
@@ -443,5 +464,6 @@
   <script src="v312.js"></script>
   <script src="v335.js"></script>
   <script src="v336.js"></script>
+  <script src="v337.js"></script>
 </body>
 </html>

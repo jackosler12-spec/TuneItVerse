@@ -28,11 +28,15 @@ python3 python/ecu_scripting.py adapters
 python3 python/ecu_scripting.py profile path/to/dump.bin
 python3 python/ecu_scripting.py hex path/to/dump.bin 0 64
 python3 python/ecu_scripting.py report path/to/dump.bin
+python3 python/ecu_scripting.py diff stock.bin tuned.bin
+python3 python/ecu_scripting.py logsummary path/to/log.csv
 ```
 
 Scripts page runs the same ideas against the loaded BIN (`identify`, `checksum`, `correct`, `compare`, `seedkey`, `poke`, `tables`, `maplog`, `hex`, `profile`, `report`). No eval, no shell. Scripts → Self-check runs the offline operational check. Maps → Import definition pack loads hint JSON and cannot enable write.
 
-## Current status (v3.36.0)
+Data Logging can import a CSV, replay it, and build a clamped STFT/LTFT multiplier preview. Compare lists changed ranges against the working BIN. Neither path writes a calibration.
+
+## Current status (v3.37.0)
 
 See [COMPLETION.md](COMPLETION.md) and [PRODUCT.md](PRODUCT.md). Catalog includes P01, P59, EDC16C41, EDC15/17, ME7/9, MED17, Delphi DCM, SID803, Honda Keihin, Simos 18, Trionic 8, Transtron 4HK1. Holden/GM P01 BINs auto-load the Universal Patcher TableSeek pack. Offline BIN/XDF/A2L edit and save. Dashboard Write column and identify write_allowed flag match the live path (P01_0411 and EDC16C41 only). P59/Honda checksum correction and write stay blocked.
 
