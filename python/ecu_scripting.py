@@ -108,6 +108,37 @@ def checksum_report(data: bytes) -> str:
     return "\n".join(lines)
 
 
+
+def preflight(data: bytes) -> dict:
+    """Offline gate. Mirrors the app: empty / unknown / bad checksum is not ready."""
+    info = identify(data)
+    report = checksum_report(data)
+    bad = "BAD" in report or "Report-only" in report or "do not invent" in report or "Unsupported" in report
+    family = info.get("family_by_size") or "unknown"
+    write_families = ("P01_0411", "EDC16")
+    size_ok = len(data) in (P01_512, EDC16)
+    blockers = []
+    if not data:
+        blockers.append("No BIN loaded.")
+    if "unknown" in family:
+        blockers.append("Family not resolved from size.")
+    if not any(tok in family for tok in write_families):
+        blockers.append("Write path is not live for this size. P01_0411 and EDC16C41 only.")
+    if bad or "BAD" in report:
+        blockers.append("Checksum report is not clean. Do not treat this as flash-ready.")
+    if "Honda" in report:
+        blockers.append("512KB also matches Honda. Confirm OS before any P01 corrector.")
+    ready = not blockers and size_ok and not bad
+    return {
+        "bytes": len(data),
+        "family_by_size": family,
+        "checksum_report": report,
+        "blockers": blockers,
+        "ready_for_guided_flash": ready,
+        "write_families": ["P01_0411", "EDC16C41"],
+        "notes": "CLI preflight does not write and is stricter than a clean personal dump with a matched OS string.",
+    }
+
 def p01_key(seed: int, level: int) -> int:
     if seed == 0:
         return 0
@@ -283,7 +314,7 @@ def log_summary(csv_text: str) -> dict:
 
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description="TuneItVerse bench helper")
-    parser.add_argument("command", choices=["checksum", "identify", "seedkey", "p01cmp", "diff", "adapters", "profile", "hex", "report", "logsummary"])
+    parser.add_argument("command", choices=["checksum", "identify", "seedkey", "p01cmp", "diff", "adapters", "profile", "hex", "report", "logsummary", "preflight"])
     parser.add_argument("bin_path", nargs="?")
     parser.add_argument("seed_hex", nargs="?")
     parser.add_argument("level", nargs="?", default="1")
@@ -313,6 +344,11 @@ def main(argv: list[str]) -> int:
         diffs = sum(1 for x, y in zip(a, b) if x != y)
         print({"same_size": True, "len": len(a), "diff_bytes": diffs, "identical": diffs == 0})
         print(diff_report(a, b))
+        return 0
+    if args.command == "preflight":
+        if not args.bin_path:
+            raise SystemExit("preflight path/to/dump.bin")
+        print(preflight(pathlib.Path(args.bin_path).read_bytes()))
         return 0
     if args.command == "logsummary":
         if not args.bin_path:

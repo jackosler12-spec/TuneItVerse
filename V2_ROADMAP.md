@@ -62,6 +62,7 @@ These fix the issues that make guided flash dangerous or misleading.
 
 10. **J2534 Windows Registry Device Enumeration** — foundation (hardcoded list + DLL binding production)
 11. **Datalog Import & Map-from-Log Automation** — preview landed in v3.37 (CSV import, replay, clamped trim grid). Silent write stays off.
+11b. **Flash preflight** — v3.38 offline gate. Ready only for validated P01_0411 / EDC16C41. Does not enable other families.
 12. **BDM / JTAG / Bench Mode Support** — TODO (foundation only)
 
 ## Priority 4 — Extensibility & Ecosystem

@@ -74,6 +74,7 @@ fn help_text() -> Value {
             "hex OFFSET [LEN]        — hex+ASCII window (max 4096 bytes)",
             "profile                  — block entropy, empty/erased ratios",
             "report                   — markdown identify + checksum + profile",
+            "preflight                — offline flash gate (does not write)",
             "help                     — this list"
         ],
         "notes": "No eval, no shell, no invented seed tables. Personal dumps only."
@@ -201,6 +202,9 @@ fn run_line(state: &mut ScriptState, line: &str) -> Result<Value, String> {
             }
             Ok(crate::bin_inspect::profile_bin(&state.bin))
         }
+        "preflight" => {
+            Ok(crate::preflight::flash_preflight(&state.bin))
+        }
         "report" => {
             if state.bin.is_empty() {
                 return Err("No working BIN.".into());
@@ -260,6 +264,13 @@ pub fn run_bench_script(
 #[tauri::command]
 pub fn list_script_helpers() -> Result<String, String> {
     Ok(json!([
+        {
+            "id": "preflight",
+            "name": "Flash preflight",
+            "description": "Offline gate. Ready only for a valid P01_0411 or EDC16C41 image. Does not write.",
+            "command": "preflight",
+            "cli": "python3 python/ecu_scripting.py preflight path/to/dump.bin"
+        },
         {
             "id": "identify",
             "name": "Identify dump",
