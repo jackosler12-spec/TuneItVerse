@@ -281,9 +281,79 @@ def log_summary(csv_text: str) -> dict:
     }
 
 
+WRITE_LIVE = {"P01_0411", "EDC16C41"}
+DTC = {
+    "P0100": "Mass air flow circuit",
+    "P0171": "System too lean, bank 1",
+    "P0172": "System too rich, bank 1",
+    "P0300": "Random/multiple cylinder misfire",
+    "P0301": "Cylinder 1 misfire",
+    "P0420": "Catalyst system efficiency below threshold, bank 1",
+    "P0442": "Evaporative emission system leak detected, small",
+    "P0601": "Internal control module memory check sum",
+    "U0100": "Lost communication with ECM/PCM",
+}
+
+
+def harvest_strings(data: bytes, min_len: int = 5) -> dict:
+    min_len = max(4, min(min_len, 32))
+    found = []
+    i = 0
+    truncated = False
+    while i < len(data):
+        if 32 <= data[i] < 127:
+            start = i
+            while i < len(data) and 32 <= data[i] < 127:
+                i += 1
+            if i - start >= min_len:
+                if len(found) >= 200:
+                    truncated = True
+                    break
+                found.append({"offset": f"0x{start:06X}", "text": data[start:i].decode("ascii")})
+        else:
+            i += 1
+    return {"count": len(found), "truncated": truncated, "strings": found, "write_allowed": False}
+
+
+def preflight(data: bytes, voltage: float | None) -> dict:
+    info = identify(data)
+    size = info["bytes"]
+    family = info["family_by_size"]
+    blockers = []
+    if size == 0:
+        blockers.append("No image loaded.")
+    if "unknown" in family or "confirm" in family or "2MB" in family:
+        blockers.append("Family not uniquely identified. Confirm OS string in the app.")
+    write_allowed = False
+    blockers.append("CLI cannot advertise a live write path. Use the desktop preflight.")
+    if voltage is None:
+        blockers.append("Battery voltage not supplied.")
+    elif voltage < 12.5:
+        blockers.append(f"Voltage {voltage:.2f} V is below the 12.5 V gate.")
+    return {
+        "ready": False,
+        "write_allowed": write_allowed,
+        "family_by_size": family,
+        "bytes": size,
+        "blockers": blockers,
+        "warnings": ["CLI preflight is a size/voltage hint. The app command is authoritative."],
+        "note": "Does not flash and cannot enable write.",
+    }
+
+
+def dtc_lookup(code: str) -> dict:
+    normalized = "".join(c for c in code if c.isalnum()).upper()
+    return {
+        "code": normalized,
+        "known": normalized in DTC,
+        "description": DTC.get(normalized, "Not in the CLI list. App has the fuller generic SAE set."),
+        "write_allowed": False,
+    }
+
+
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description="TuneItVerse bench helper")
-    parser.add_argument("command", choices=["checksum", "identify", "seedkey", "p01cmp", "diff", "adapters", "profile", "hex", "report", "logsummary"])
+    parser.add_argument("command", choices=["checksum", "identify", "seedkey", "p01cmp", "diff", "adapters", "profile", "hex", "report", "logsummary", "strings", "preflight", "dtc"])
     parser.add_argument("bin_path", nargs="?")
     parser.add_argument("seed_hex", nargs="?")
     parser.add_argument("level", nargs="?", default="1")
@@ -319,10 +389,20 @@ def main(argv: list[str]) -> int:
             raise SystemExit("logsummary path/to/log.csv")
         print(log_summary(pathlib.Path(args.bin_path).read_text(encoding="utf-8")))
         return 0
+    if args.command == "dtc":
+        print(dtc_lookup(args.bin_path or args.seed_hex or "P0300"))
+        return 0
     if not args.bin_path:
         raise SystemExit("bin_path required")
     path = pathlib.Path(args.bin_path)
     data = path.read_bytes()
+    if args.command == "strings":
+        print(harvest_strings(data))
+        return 0
+    if args.command == "preflight":
+        voltage = float(args.seed_hex) if args.seed_hex else None
+        print(preflight(data, voltage))
+        return 0
     if args.command == "identify":
         print(identify(data))
     elif args.command == "profile":

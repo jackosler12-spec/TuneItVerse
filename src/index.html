@@ -2,14 +2,14 @@
 <html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8">
-  <title>TuneItVerse v3.37.0</title>
+  <title>TuneItVerse v3.38.0</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-logo">
       <div class="sidebar-logo-mark">TV</div>
-      <div class="sidebar-logo-text">TuneItVerse <span class="version">v3.37.0</span></div>
+      <div class="sidebar-logo-text">TuneItVerse <span class="version">v3.38.0</span></div>
     </div>
     <nav class="sidebar-nav" id="sidebar-nav">
       <button type="button" class="nav-item active" data-view="dashboard">Dashboard</button>
@@ -229,6 +229,8 @@
         <div class="toolbar-group">
           <span class="toolbar-label">DTCs</span>
           <button id="btn-read-dtcs" class="btn btn-primary" type="button">Read DTCs</button>
+          <input id="dtc-lookup-code" class="table-search" style="width:7rem" placeholder="P0300">
+          <button id="btn-dtc-lookup" class="btn" type="button">Lookup</button>
           <button id="btn-read-freeze" class="btn" type="button">Freeze frame</button>
           <button id="btn-clear-dtcs" class="btn btn-danger" type="button">Clear DTCs</button>
         </div>
@@ -374,6 +376,7 @@
         <div class="toolbar-group">
           <span class="toolbar-label">Prepare</span>
           <button id="btn-check-voltage" class="btn" type="button">Battery</button>
+          <button id="btn-flash-preflight" class="btn btn-primary" type="button">Preflight</button>
           <button id="btn-unlock-l1" class="btn" type="button">Unlock L1</button>
           <button id="btn-unlock-l2" class="btn" type="button">Unlock L2</button>
           <button id="btn-bosch-unlock" class="btn" type="button">Bosch UDS</button>
@@ -395,6 +398,7 @@
           <div class="step" data-step="write"><span class="step-num">5</span> Write <span class="step-status" id="st-write">pending</span></div>
           <div class="step" data-step="verify"><span class="step-num">6</span> Verify <span class="step-status" id="st-verify">pending</span></div>
         </div>
+        <pre id="flash-preflight" class="mono-block log-box">Preflight checks family, checksum, voltage, and the live write flag. It does not flash.</pre>
         <div class="progress-track"><div id="flash-bar" class="progress-fill"></div></div>
         <div>Progress: <span id="flash-progress">0%</span></div>
         <pre id="compare-result" class="mono-block" hidden></pre>
@@ -430,6 +434,7 @@
           <button id="btn-inspect-profile" class="btn btn-primary" type="button">Profile</button>
           <button id="btn-inspect-hex" class="btn" type="button">Hex window</button>
           <button id="btn-inspect-report" class="btn" type="button">Tune report</button>
+          <button id="btn-inspect-strings" class="btn" type="button">Strings</button>
           <input id="inspect-offset" type="text" value="0" class="table-search" style="width:7rem" placeholder="offset">
           <input id="inspect-len" type="text" value="256" class="table-search" style="width:5rem" placeholder="len">
         </div>
@@ -455,7 +460,7 @@
     </div>
 
     <footer class="status-bar">
-      <div class="status-left" id="status-left">TuneItVerse 3.37.0</div>
+      <div class="status-left" id="status-left">TuneItVerse 3.38.0</div>
       <div class="status-center" id="status-center">No invented live values</div>
       <div class="status-right" id="status-right">Desktop app required</div>
     </footer>
@@ -465,5 +470,6 @@
   <script src="v335.js"></script>
   <script src="v336.js"></script>
   <script src="v337.js"></script>
+  <script src="v338.js"></script>
 </body>
 </html>

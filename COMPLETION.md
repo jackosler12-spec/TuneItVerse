@@ -1,16 +1,17 @@
-# TuneItVerse v3.37.0 — log studio and BIN diff
+# TuneItVerse v3.38.0 — operational desk
 
-v3.36 inspect stays. This pass closes the datalog gap that was still a heatmap-only hint.
+v3.37 log studio stays. This pass closes the gap between "I have a dump" and "is this image actually allowed to go near flash".
 
 ## What this pass changed
 
-1. Version **3.37.0** across crate / package / Tauri / installer / HTML.
-2. Data Logging: session summary, replay frame, trim preview. Commands: `log_session_summary`, `log_replay_frame`, `log_trim_suggestion`.
-3. Compare page: markdown range report via `bin_diff_report`. Working BIN stays the Maps image.
-4. Bench CLI: `diff` prints ranges; `logsummary` reads a CSV. No shell, no write flag.
-5. Self-check reports `log_studio_ok`. Preview multiplier is clamped 0.85–1.15 and cannot enable write.
+1. Version **3.38.0** across crate / package / Tauri / installer / HTML.
+2. Flash page **Preflight**. Command: `flash_preflight_cmd`. Checks family, OS confirmation, checksum, and the 12.5 V gate. Ready stays false unless the live write flag is already true.
+3. Inspect **Strings**. Command: `bin_strings_cmd`. Printable runs only. Not an identification.
+4. Diagnostics **Lookup**. Command: `dtc_lookup_cmd`. Generic SAE descriptions. Does not clear codes.
+5. Bench CLI: `strings`, `preflight`, `dtc`. CLI preflight cannot advertise write.
+6. Self-check reports `ops_desk_ok`.
 
-Write path remains **P01_0411** and **EDC16C41** only.
+Write path remains **P01_0411** and **EDC16C41** only. Preflight cannot enable write.
 
 ## Still needs your bench
 
