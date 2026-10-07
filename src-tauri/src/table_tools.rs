@@ -171,6 +171,29 @@ pub fn interpolate_v(values: &[Vec<f64>]) -> Result<TableMathResult, String> {
     Ok(TableMathResult { values: out, cells_changed: n, message: "interpolate vertical".into() })
 }
 
+pub fn clamp_range(values: &[Vec<f64>], lo: f64, hi: f64) -> Result<TableMathResult, String> {
+    let _ = dims(values)?;
+    if lo > hi { return Err("clamp low is above high".into()); }
+    let mut out = values.to_vec();
+    let mut n = 0;
+    for row in &mut out {
+        for cell in row {
+            let next = cell.clamp(lo, hi);
+            if (next - *cell).abs() > 1e-12 { n += 1; }
+            *cell = next;
+        }
+    }
+    Ok(TableMathResult { values: out, cells_changed: n, message: format!("clamped [{lo}, {hi}]") })
+}
+
+pub fn percent(values: &[Vec<f64>], pct: f64) -> Result<TableMathResult, String> {
+    // pct is a signed percent: 5 => *1.05, -10 => *0.90. Not a write.
+    scale(values, 1.0 + pct / 100.0).map(|mut r| {
+        r.message = format!("percent {pct}%");
+        r
+    })
+}
+
 pub fn apply_op(req: TableMathRequest) -> Result<TableMathResult, String> {
     match req.op.to_ascii_lowercase().as_str() {
         "scale" | "multiply" | "mul" => scale(&req.values, req.factor.unwrap_or(1.0)),
@@ -179,6 +202,8 @@ pub fn apply_op(req: TableMathRequest) -> Result<TableMathResult, String> {
         "smooth" | "blur" => smooth(&req.values),
         "interp_h" | "interpolate_h" => interpolate_h(&req.values),
         "interp_v" | "interpolate_v" => interpolate_v(&req.values),
+        "clamp" => clamp_range(&req.values, req.offset.unwrap_or(f64::MIN), req.factor.unwrap_or(f64::MAX)),
+        "percent" | "pct" => percent(&req.values, req.factor.or(req.offset).unwrap_or(0.0)),
         other => Err(format!("unknown table op '{}'", other)),
     }
 }
@@ -216,5 +241,9 @@ mod tests {
         assert!((p.values[0][1] - 100.0).abs() < 1e-9);
         let h = interpolate_h(&vec![vec![0.0, 50.0, 100.0]]).unwrap();
         assert!((h.values[0][1] - 50.0).abs() < 1e-9);
+        let c = clamp_range(&vec![vec![-5.0, 3.0, 40.0]], 0.0, 10.0).unwrap();
+        assert_eq!(c.values[0], vec![0.0, 3.0, 10.0]);
+        let pct = percent(&vec![vec![100.0]], -10.0).unwrap();
+        assert!((pct.values[0][0] - 90.0).abs() < 1e-9);
     }
 }

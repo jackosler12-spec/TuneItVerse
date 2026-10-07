@@ -408,3 +408,93 @@ pub fn patch_table_into_bin(req: PatchRequest) -> Result<PatchResult, String> {
         message: format!("Patched table {} at {} ({}x{})", req.table.name, req.table.addr, rows, cols),
     })
 }
+#[derive(Debug, Clone, Serialize)]
+pub struct CellDelta {
+    pub row: usize,
+    pub col: usize,
+    pub stock: f64,
+    pub tuned: f64,
+    pub delta: f64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct TableDeltaReport {
+    pub name: String,
+    pub cells: usize,
+    pub changed: usize,
+    pub max_abs: f64,
+    pub samples: Vec<CellDelta>,
+    pub note: String,
+}
+
+/// Compare one map between a stock image and the working image. Does not write.
+pub fn table_delta(stock: &[u8], tuned: &[u8], table: &TableDef) -> Result<TableDeltaReport, String> {
+    if stock.len() != tuned.len() {
+        return Err(format!("size mismatch: stock {} tuned {}", stock.len(), tuned.len()));
+    }
+    let a = extract_table(stock, table);
+    let b = extract_table(tuned, table);
+    if a.values.len() != b.values.len() {
+        return Err("row mismatch after extract".into());
+    }
+    let mut samples = Vec::new();
+    let mut changed = 0usize;
+    let mut cells = 0usize;
+    let mut max_abs = 0.0f64;
+    for (r, (ra, rb)) in a.values.iter().zip(b.values.iter()).enumerate() {
+        if ra.len() != rb.len() { return Err("column mismatch after extract".into()); }
+        for (c, (va, vb)) in ra.iter().zip(rb.iter()).enumerate() {
+            cells += 1;
+            let delta = vb - va;
+            if delta.abs() > 1e-9 {
+                changed += 1;
+                max_abs = max_abs.max(delta.abs());
+                if samples.len() < 48 {
+                    samples.push(CellDelta { row: r, col: c, stock: *va, tuned: *vb, delta });
+                }
+            }
+        }
+    }
+    Ok(TableDeltaReport {
+        name: table.name.clone(),
+        cells,
+        changed,
+        max_abs,
+        samples,
+        note: "Cell delta is offline. It does not enable a write path.".into(),
+    })
+}
+
+#[tauri::command]
+pub fn table_delta_cmd(stock: Vec<u8>, tuned: Vec<u8>, table: TableDef) -> Result<String, String> {
+    let report = table_delta(&stock, &tuned, &table)?;
+    serde_json::to_string(&report).map_err(|e| e.to_string())
+}
+
+#[cfg(test)]
+mod delta_tests {
+    use super::*;
+
+    #[test]
+    fn delta_sees_one_word() {
+        let mut stock = vec![0u8; 16];
+        let mut tuned = stock.clone();
+        tuned[0] = 0x00; tuned[1] = 0x0A;
+        stock[0] = 0x00; stock[1] = 0x05;
+        let table = TableDef {
+            id: "t".into(),
+            name: "scalar".into(),
+            rows: 1,
+            cols: 1,
+            addr: "0".into(),
+            data_type: "UWORD".into(),
+            math: "X".into(),
+            file_offset: true,
+            msb: true,
+            ..Default::default()
+        };
+        let r = table_delta(&stock, &tuned, &table).unwrap();
+        assert_eq!(r.changed, 1);
+        assert!((r.samples[0].delta - 5.0).abs() < 1e-6);
+    }
+}

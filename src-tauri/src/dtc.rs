@@ -607,8 +607,63 @@ pub fn describe_dtc(code: &str) -> String {
         "P1810" => "TFP valve position switch circuit",
         "P1860" => "TCC PWM solenoid circuit electrical",
         "P1887" => "TCC release switch circuit",
+        // ── Diesel / boost / rail (SAE generic, Patrol-relevant) ─────────────
+        "P0087" => "Fuel rail/system pressure too low",
+        "P0088" => "Fuel rail/system pressure too high",
+        "P0089" => "Fuel pressure regulator performance",
+        "P0093" => "Fuel system leak detected — large leak",
+        "P0234" => "Turbocharger/supercharger overboost condition",
+        "P0299" => "Turbocharger/supercharger underboost condition",
+        "P2263" => "Turbocharger/supercharger boost system performance",
+        "P0400" => "Exhaust gas recirculation flow malfunction",
+        "P0401" => "Exhaust gas recirculation flow insufficient",
+        "P0402" => "Exhaust gas recirculation flow excessive",
+        "P0403" => "Exhaust gas recirculation circuit malfunction",
+        "P0380" => "Glow plug/heater circuit A malfunction",
+        "P0335" => "Crankshaft position sensor A circuit malfunction",
+        "P0340" => "Camshaft position sensor A circuit malfunction",
+        "P0562" => "System voltage low",
+        "P0563" => "System voltage high",
+        "P0420" => "Catalyst system efficiency below threshold (Bank 1)",
+        "P0440" => "Evaporative emission system malfunction",
+        "P0500" => "Vehicle speed sensor A circuit",
+        "P0700" => "Transmission control system malfunction",
+        "U0100" => "Lost communication with ECM/PCM",
         _ => "No description available",
     }.to_string()
+}
+
+/// Normalize P0301 / 0301 / p0301 into the table key. Does not invent a code.
+pub fn normalize_dtc(code: &str) -> String {
+    let t = code.trim().to_ascii_uppercase().replace([' ', '-'], "");
+    if t.len() == 5 && matches!(t.chars().next(), Some('P' | 'C' | 'B' | 'U')) {
+        return t;
+    }
+    if t.len() == 4 && t.chars().all(|c| c.is_ascii_hexdigit()) {
+        return format!("P{t}");
+    }
+    t
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct DtcExplain {
+    pub code: String,
+    pub description: String,
+    pub known: bool,
+    pub write_allowed: bool,
+}
+
+pub fn explain_one(code: &str) -> DtcExplain {
+    let norm = normalize_dtc(code);
+    let description = describe_dtc(&norm);
+    let known = description != "No description available";
+    DtcExplain { code: norm, description, known, write_allowed: false }
+}
+
+#[tauri::command]
+pub fn explain_dtcs_cmd(codes: Vec<String>) -> Result<String, String> {
+    let rows: Vec<DtcExplain> = codes.iter().map(|c| explain_one(c)).collect();
+    serde_json::to_string(&rows).map_err(|e| e.to_string())
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -620,6 +675,15 @@ mod tests {
     use super::*;
 
     // ── DTC byte decoder ─────────────────────────────────────────────────────
+
+    #[test]
+    fn explains_rail_and_normalizes() {
+        let e = explain_one("0087");
+        assert_eq!(e.code, "P0087");
+        assert!(e.known);
+        assert!(!e.write_allowed);
+        assert!(!explain_one("P9999").known);
+    }
 
     #[test]
     fn decode_p0300_random_misfire() {

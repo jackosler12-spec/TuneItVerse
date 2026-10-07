@@ -150,6 +150,10 @@ let forceCats = null;
 let selCells = new Set();
 let selAnchor = null;
 let undoStack = [];
+let redoStack = [];
+let binUndo = [];
+let binRedo = [];
+let referenceBin = null;
 let clipGrid = null;
 let originalValues = null;
 
@@ -186,6 +190,7 @@ function pushUndo() {
   if (!currentValues) return;
   undoStack.push(JSON.parse(JSON.stringify(currentValues)));
   if (undoStack.length > 40) undoStack.shift();
+  redoStack = [];
 }
 
 function stepSize() {
@@ -335,10 +340,46 @@ function pasteSelection() {
 
 function undoEdit() {
   if (!undoStack.length) { setTablesStatus('Nothing to undo'); return; }
+  redoStack.push(JSON.parse(JSON.stringify(currentValues)));
   currentValues = undoStack.pop();
   syncGlobals();
   renderCurrentEditor();
-  setTablesStatus('Undo');
+  setTablesStatus('Undo table cells. Apply Patch to write the BIN.');
+}
+
+function redoEdit() {
+  if (!redoStack.length) { setTablesStatus('Nothing to redo'); return; }
+  undoStack.push(JSON.parse(JSON.stringify(currentValues)));
+  currentValues = redoStack.pop();
+  syncGlobals();
+  renderCurrentEditor();
+  setTablesStatus('Redo table cells. Apply Patch to write the BIN.');
+}
+
+function snapshotBin(reason) {
+  if (!currentBin) return;
+  binUndo.push(currentBin.slice());
+  if (binUndo.length > 8) binUndo.shift();
+  binRedo = [];
+  if (reason) setTablesStatus(reason);
+}
+
+function undoBin() {
+  if (!binUndo.length || !currentBin) { setTablesStatus('No BIN snapshot to undo'); return; }
+  binRedo.push(currentBin.slice());
+  currentBin = binUndo.pop();
+  syncGlobals();
+  setTablesStatus('BIN undo — image restored. Checksum is not re-run until you validate.');
+  validateCurrentBinChecksums();
+}
+
+function redoBin() {
+  if (!binRedo.length) { setTablesStatus('No BIN redo'); return; }
+  binUndo.push(currentBin.slice());
+  currentBin = binRedo.pop();
+  syncGlobals();
+  setTablesStatus('BIN redo');
+  validateCurrentBinChecksums();
 }
 
 function readToolValue() {
@@ -1064,7 +1105,110 @@ async function clearDtcs() {
   }
 }
 
+async function explainDtcUi() {
+  const input = document.getElementById('dtc-lookup');
+  const raw = (input && input.value || '').trim();
+  if (!raw) { setStatus('Type a code like P0301 or P0087'); return; }
+  const codes = raw.split(/[\s,]+/).filter(Boolean);
+  const st = document.getElementById('dtc-status');
+  try {
+    const rows = parseMaybe(await invokeCmd('explain_dtcs_cmd', { codes })) || [];
+    const tbody = document.getElementById('dtc-tbody');
+    const summary = document.getElementById('dtc-summary');
+    if (summary) summary.textContent = 'Offline explain — not a live read. Does not enable write.';
+    if (tbody) {
+      tbody.innerHTML = rows.map((rec) => {
+        const code = rec.code || '????';
+        const desc = String(rec.description || '').replace(/</g, '<');
+        const known = rec.known ? 'known' : 'unknown';
+        return `<tr><td class="dtc-code">${code}</td><td>${known}</td><td>${desc}</td></tr>`;
+      }).join('');
+    }
+    if (st) st.textContent = 'Explained ' + rows.length + ' code(s) offline';
+  } catch (e) {
+    if (st) st.textContent = 'Explain error: ' + e;
+  }
+}
+
 function setupDiagnostics() {}
+
+async function loadReferenceBin() {
+  setTablesStatus('Opening reference BIN…');
+  try {
+    const res = await openNativeFile('bin');
+    if (res.cancelled) { setTablesStatus('Reference open cancelled.'); return; }
+    referenceBin = res.bytes instanceof Uint8Array ? res.bytes : new Uint8Array(res.bytes);
+    setTablesStatus('Reference loaded (' + referenceBin.length + ' bytes). Cell delta compares it to the working BIN.');
+  } catch (e) {
+    setTablesStatus('Reference error: ' + e);
+  }
+}
+
+async function cellDelta() {
+  if (!currentBin || !referenceBin) { alert('Load a working BIN and a reference BIN first'); return; }
+  if (!currentTable) { alert('Select a table first'); return; }
+  if (currentBin.length !== referenceBin.length) {
+    setTablesStatus('Reference size ' + referenceBin.length + ' != working ' + currentBin.length);
+    return;
+  }
+  try {
+    const report = parseMaybe(await invokeCmd('table_delta_cmd', {
+      stock: binBytes(referenceBin),
+      tuned: binBytes(currentBin),
+      table: currentTable
+    }));
+    const meta = document.getElementById('side-meta');
+    if (meta) meta.innerHTML = '<pre class="mono-block">' + JSON.stringify(report, null, 2) + '</pre>';
+    setTablesStatus((report.name || 'table') + ': ' + report.changed + '/' + report.cells + ' cells differ, max |d| ' + report.max_abs);
+  } catch (e) {
+    setTablesStatus('Cell delta error: ' + e);
+  }
+}
+
+function clampSelection() {
+  if (!currentValues) { alert('Select a table first'); return; }
+  const raw = (document.getElementById('tbl-value') || {}).value || '';
+  const parts = String(raw).split(',').map((s) => parseFloat(s.trim()));
+  if (parts.length < 2 || parts.some((n) => Number.isNaN(n))) {
+    alert('Clamp needs min,max in the value box, e.g. 0,40');
+    return;
+  }
+  pushUndo();
+  redoStack = [];
+  const keys = targetCells();
+  let n = 0;
+  keys.forEach((k) => {
+    const [r, c] = k.split(',').map(Number);
+    if (!currentValues[r] || currentValues[r][c] == null) return;
+    const next = Math.min(parts[1], Math.max(parts[0], currentValues[r][c]));
+    if (next !== currentValues[r][c]) n += 1;
+    currentValues[r][c] = next;
+  });
+  syncGlobals();
+  renderCurrentEditor();
+  setTablesStatus('Clamped ' + n + ' cells to [' + parts[0] + ', ' + parts[1] + ']. Apply Patch to write BIN.');
+}
+
+function percentSelection() {
+  if (!currentValues) { alert('Select a table first'); return; }
+  const pct = readToolValue();
+  if (Number.isNaN(pct)) { alert('Enter a percent, e.g. 5 or -3'); return; }
+  pushUndo();
+  redoStack = [];
+  const factor = 1 + pct / 100;
+  const keys = targetCells();
+  let n = 0;
+  keys.forEach((k) => {
+    const [r, c] = k.split(',').map(Number);
+    if (!currentValues[r] || currentValues[r][c] == null) return;
+    const next = Math.round(currentValues[r][c] * factor * 1000) / 1000;
+    if (next !== currentValues[r][c]) n += 1;
+    currentValues[r][c] = next;
+  });
+  syncGlobals();
+  renderCurrentEditor();
+  setTablesStatus('Percent ' + pct + '% on ' + n + ' cells. Apply Patch to write BIN.');
+}
 
 // ---------- Tables ----------
 async function identifyCurrentBin() {
@@ -1439,6 +1583,7 @@ function updateSidePanel() {
 
 async function applyCurrentPatch() {
   if (!currentBin || !currentTable || !currentValues) { alert('Load BIN and select table'); return; }
+  snapshotBin();
   try {
     const res = await invokeCmd('patch_table_into_bin', {
       req: { bin_bytes: Array.from(currentBin), table: currentTable, new_values: currentValues }
@@ -1601,6 +1746,7 @@ async function scanCs() {
 
 async function pokeHex() {
   if (!currentBin) { alert('Load a .BIN first'); return; }
+  snapshotBin();
   const off = parseInt((document.getElementById('hex-poke-off')?.value) || '0', 16);
   const hex = ((document.getElementById('hex-poke-val')?.value) || '').replace(/[^0-9a-fA-F]/g, '');
   if (!hex || hex.length % 2) { alert('Value must be even-length hex'); return; }
@@ -1905,6 +2051,7 @@ function bindAppClicks() {
     'btn-log-apply-ch': applyChannels,
     'btn-log-apply-tmpl': applyTemplate,
     'btn-read-dtcs': readDtcs,
+    'btn-explain-dtc': explainDtcUi,
     'btn-read-freeze': readFreezeFrame,
     'btn-clear-dtcs': clearDtcs,
     'btn-load-bin': loadBinFile,
@@ -1913,6 +2060,10 @@ function bindAppClicks() {
     'btn-save-patched': savePatchedBin,
     'btn-identify-bin': identifyCurrentBin,
     'btn-compare-bins': compareAnotherBin,
+    'btn-load-reference': loadReferenceBin,
+    'btn-cell-delta': cellDelta,
+    'btn-bin-undo': undoBin,
+    'btn-bin-redo': redoBin,
     'btn-map-from-log': mapFromLog,
     'btn-export-workspace': exportWorkspace,
     'btn-import-workspace': importWorkspace,
@@ -1934,6 +2085,9 @@ function bindAppClicks() {
     'btn-tbl-copy': copySelection,
     'btn-tbl-paste': pasteSelection,
     'btn-tbl-undo': undoEdit,
+    'btn-tbl-redo': redoEdit,
+    'btn-tbl-clamp': clampSelection,
+    'btn-tbl-pct': percentSelection,
     'btn-tbl-stft': applyStft,
     'btn-compare-bin': compareBinToEcuUi,
     'btn-verify-write': verifyAfterWriteUi,
@@ -1963,7 +2117,7 @@ function setupAll() {
   pollHealth();
   if (healthTimer) clearInterval(healthTimer);
   healthTimer = setInterval(pollHealth, 2500);
-  console.log('TuneItVerse UI v3.11.0');
+  console.log('TuneItVerse UI v3.38.0');
 }
 
 setupNav();

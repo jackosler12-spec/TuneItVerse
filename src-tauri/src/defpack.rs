@@ -130,7 +130,8 @@ pub fn operational_self_check() -> Result<String, String> {
         "honda_write_blocked": !families.iter().any(|f| f.to_ascii_uppercase().contains("HONDA") && crate::ecu_database::write_path_live(f)),
         "notes": "Self-check is offline. It does not talk to an ECU and does not enable write.",
         "inspect_ok": crate::bin_inspect::profile_bin(&[0u8; 32]).get("entropy").and_then(|v| v.as_f64()) == Some(0.0),
-        "log_studio_ok": crate::log_studio::self_check_ok()
+        "log_studio_ok": crate::log_studio::self_check_ok(),
+        "dtc_explain_ok": crate::dtc::explain_one("P0301").known && !crate::dtc::explain_one("P9999").known
     });
     serde_json::to_string(&report).map_err(|e| e.to_string())
 }
