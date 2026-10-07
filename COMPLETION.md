@@ -1,14 +1,14 @@
-# TuneItVerse v3.37.0 — log studio and BIN diff
+# TuneItVerse v3.38.0 — desk tools
 
-v3.36 inspect stays. This pass closes the datalog gap that was still a heatmap-only hint.
+v3.37 log studio stays. This pass closes three offline desk gaps. It does not add a write family.
 
 ## What this pass changed
 
-1. Version **3.37.0** across crate / package / Tauri / installer / HTML.
-2. Data Logging: session summary, replay frame, trim preview. Commands: `log_session_summary`, `log_replay_frame`, `log_trim_suggestion`.
-3. Compare page: markdown range report via `bin_diff_report`. Working BIN stays the Maps image.
-4. Bench CLI: `diff` prints ranges; `logsummary` reads a CSV. No shell, no write flag.
-5. Self-check reports `log_studio_ok`. Preview multiplier is clamped 0.85–1.15 and cannot enable write.
+1. Version **3.38.0** across crate / package / Tauri / installer / HTML.
+2. Diagnostics: offline `explain_dtcs_cmd` for SAE codes, including rail/boost/EGR codes used on the Patrol. Lookup does not talk to an ECU.
+3. Maps: reference BIN + `table_delta_cmd` cell report. Clamp and percent on the selected cells. Table redo. BIN undo/redo snapshots before poke and table patch (8 images).
+4. Bench CLI: `dtc P0087`. Scripts list includes dtc and delta. Self-check reports `dtc_explain_ok`.
+5. Clamp/percent also exist on the Rust table math path. Neither path enables write.
 
 Write path remains **P01_0411** and **EDC16C41** only.
 

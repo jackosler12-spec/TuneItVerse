@@ -1,8 +1,8 @@
 {
   "name": "tuneitverse",
   "private": true,
-  "version": "3.37.0",
-  "description": "TuneItVerse - open ECU tuning platform. v3.37.0: log replay, trim preview, and BIN diff. Write path still P01 and EDC16C41 only.",
+  "version": "3.38.0",
+  "description": "TuneItVerse - open ECU tuning platform. v3.38.0: offline DTC explain, map cell delta, clamp/percent, BIN undo. Write path still P01 and EDC16C41 only.",
   "type": "module",
   "scripts": {
     "tauri": "tauri",

@@ -281,9 +281,34 @@ def log_summary(csv_text: str) -> dict:
     }
 
 
+DTC_TEXT = {
+    "P0300": "Random/multiple cylinder misfire detected",
+    "P0301": "Cylinder 1 misfire detected",
+    "P0171": "System too lean (Bank 1)",
+    "P0172": "System too rich (Bank 1)",
+    "P0087": "Fuel rail/system pressure too low",
+    "P0088": "Fuel rail/system pressure too high",
+    "P0234": "Turbocharger/supercharger overboost condition",
+    "P0299": "Turbocharger/supercharger underboost condition",
+    "P0401": "Exhaust gas recirculation flow insufficient",
+    "P2263": "Turbocharger/supercharger boost system performance",
+    "P0101": "MAF circuit range/performance",
+    "P0117": "Engine coolant temperature circuit low input",
+    "P0562": "System voltage low",
+}
+
+
+def explain_dtc(code: str) -> dict:
+    raw = code.strip().upper().replace(" ", "")
+    if len(raw) == 4 and all(c in "0123456789ABCDEF" for c in raw):
+        raw = "P" + raw
+    desc = DTC_TEXT.get(raw, "No description available")
+    return {"code": raw, "description": desc, "known": desc != "No description available", "write_allowed": False}
+
+
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description="TuneItVerse bench helper")
-    parser.add_argument("command", choices=["checksum", "identify", "seedkey", "p01cmp", "diff", "adapters", "profile", "hex", "report", "logsummary"])
+    parser.add_argument("command", choices=["checksum", "identify", "seedkey", "p01cmp", "diff", "adapters", "profile", "hex", "report", "logsummary", "dtc"])
     parser.add_argument("bin_path", nargs="?")
     parser.add_argument("seed_hex", nargs="?")
     parser.add_argument("level", nargs="?", default="1")
@@ -318,6 +343,12 @@ def main(argv: list[str]) -> int:
         if not args.bin_path:
             raise SystemExit("logsummary path/to/log.csv")
         print(log_summary(pathlib.Path(args.bin_path).read_text(encoding="utf-8")))
+        return 0
+    if args.command == "dtc":
+        code = args.bin_path or args.seed_hex or ""
+        if not code:
+            raise SystemExit("dtc P0087")
+        print(explain_dtc(code))
         return 0
     if not args.bin_path:
         raise SystemExit("bin_path required")

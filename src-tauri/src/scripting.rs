@@ -322,6 +322,20 @@ pub fn list_script_helpers() -> Result<String, String> {
             "description": "Markdown identify + checksum + profile. Does not enable write.",
             "command": "report",
             "cli": "python3 python/ecu_scripting.py report path/to/dump.bin"
+        },
+        {
+            "id": "dtc",
+            "name": "Explain DTC",
+            "description": "Offline SAE description. Does not read the ECU and does not enable write.",
+            "command": "dtc P0087",
+            "cli": "python3 python/ecu_scripting.py dtc P0087"
+        },
+        {
+            "id": "delta",
+            "name": "Map cell delta",
+            "description": "Load a reference BIN on Maps, select a table, then Cell delta.",
+            "command": "delta",
+            "cli": null
         }
     ])
     .to_string())
