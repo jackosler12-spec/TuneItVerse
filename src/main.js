@@ -87,7 +87,9 @@ const PAGE_TITLES = {
   flash: ['Flash', 'Identify → voltage → backup → write → verify.'],
   scripts: ['Scripts', 'Bench CLI helpers. Not an embedded interpreter.'],
   inspect: ['Inspect', 'Hex window, entropy, and a tune report. Does not enable write.'],
-  compare: ['Compare', 'Changed ranges between the working BIN and a second dump.']
+  compare: ['Compare', 'Changed ranges between the working BIN and a second dump.'],
+  bench: ['Bench', 'Session checklist only. Does not start a write.'],
+  plugins: ['Plugins', 'Driver descriptors. Cannot enable write.']
 };
 
 function escapeHtml(s) {
@@ -2117,7 +2119,7 @@ function setupAll() {
   pollHealth();
   if (healthTimer) clearInterval(healthTimer);
   healthTimer = setInterval(pollHealth, 2500);
-  console.log('TuneItVerse UI v3.38.0');
+  console.log('TuneItVerse UI v3.39.0');
 }
 
 setupNav();

@@ -1,6 +1,6 @@
 # TuneItVerse Product Direction
 
-**Updated:** 2026-09-30  
+**Updated:** 2026-10-08  
 **Status:** Software-first. VerseLink Apex PCB work is parked.
 
 ## Decision
@@ -21,6 +21,8 @@ TuneItVerse v3.35+ on Windows:
 - Offline seed/key for GM 2-byte tables and dump-derived `seed_tables.json` pairs
 - Map-from-log occupancy + STFT/LTFT VE cell *preview* (never silent write)
 - Official adapter list in the Connect page
+- Driver plugin descriptors and a bench session planner (neither can enable write)
+- Offline BIN fingerprint and checksum coverage desk
 
 ## Official adapters (now)
 

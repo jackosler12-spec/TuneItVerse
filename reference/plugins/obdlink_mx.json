@@ -1,0 +1,10 @@
+{
+  "id": "obdlink-mx",
+  "name": "OBDLink MX+",
+  "transport": "serial-ascii",
+  "protocols": ["CAN", "ISO15765", "VPW"],
+  "families": ["P01_0411", "EDC16C41"],
+  "capabilities": ["identify", "mode01", "dtc", "voltage"],
+  "write_allowed": false,
+  "notes": "Primary daily adapter. STN commands are used as published by the adapter."
+}

@@ -131,7 +131,11 @@ pub fn operational_self_check() -> Result<String, String> {
         "notes": "Self-check is offline. It does not talk to an ECU and does not enable write.",
         "inspect_ok": crate::bin_inspect::profile_bin(&[0u8; 32]).get("entropy").and_then(|v| v.as_f64()) == Some(0.0),
         "log_studio_ok": crate::log_studio::self_check_ok(),
-        "dtc_explain_ok": crate::dtc::explain_one("P0301").known && !crate::dtc::explain_one("P9999").known
+        "dtc_explain_ok": crate::dtc::explain_one("P0301").known && !crate::dtc::explain_one("P9999").known,
+        "plugins_ok": crate::plugins::builtin_plugins().map(|v| v.len() >= 4 && v.iter().all(|p| !p.write_allowed)).unwrap_or(false),
+        "bench_plan_ok": crate::bench::plan_for("P01_0411")["write_allowed"] == false,
+        "fingerprint_ok": crate::fingerprint::fingerprint(b"12225074")["write_allowed"] == false,
+        "coverage_ok": crate::fingerprint::coverage()["rows"].as_array().map(|r| !r.is_empty()).unwrap_or(false)
     });
     serde_json::to_string(&report).map_err(|e| e.to_string())
 }

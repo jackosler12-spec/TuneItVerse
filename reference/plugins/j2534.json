@@ -1,0 +1,10 @@
+{
+  "id": "j2534",
+  "name": "J2534 pass-thru",
+  "transport": "passthru",
+  "protocols": ["CAN", "ISO15765", "VPW"],
+  "families": ["P01_0411", "EDC16C41"],
+  "capabilities": ["identify", "mode01", "dtc", "voltage", "passthru"],
+  "write_allowed": false,
+  "notes": "Windows programming path when a vendor DLL is installed. Descriptor cannot enable write by itself."
+}

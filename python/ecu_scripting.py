@@ -298,6 +298,27 @@ DTC_TEXT = {
 }
 
 
+
+def coverage_report():
+    """Honest catalog vs write-path report. Does not patch a BIN."""
+    import json
+    root = pathlib.Path(__file__).resolve().parents[1] / "reference" / "ecu_database"
+    index = json.loads((root / "index.json").read_text(encoding="utf-8"))
+    live = {"P01_0411", "EDC16C41"}
+    impl = {
+        "P01_0411": "implemented_additive16",
+        "EDC16C41": "implemented_crc32_multipoint",
+        "GM_P59": "blocked_until_measured_words",
+        "HONDA_KEIHIN": "blocked_do_not_use_p01",
+    }
+    lines = ["# coverage", f"- index: {index.get('version')}", "- write_allowed: false"]
+    for fam in index.get("families", []):
+        fid = fam.get("id")
+        lines.append(
+            f"- {fid}: checksum_impl={impl.get(fid, 'catalog_only')} catalog_write_path={fid in live}"
+        )
+    return "\n".join(lines)
+
 def explain_dtc(code: str) -> dict:
     raw = code.strip().upper().replace(" ", "")
     if len(raw) == 4 and all(c in "0123456789ABCDEF" for c in raw):
@@ -308,7 +329,7 @@ def explain_dtc(code: str) -> dict:
 
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description="TuneItVerse bench helper")
-    parser.add_argument("command", choices=["checksum", "identify", "seedkey", "p01cmp", "diff", "adapters", "profile", "hex", "report", "logsummary", "dtc"])
+    parser.add_argument("command", choices=["checksum", "identify", "seedkey", "p01cmp", "diff", "adapters", "profile", "hex", "report", "logsummary", "dtc", "coverage"])
     parser.add_argument("bin_path", nargs="?")
     parser.add_argument("seed_hex", nargs="?")
     parser.add_argument("level", nargs="?", default="1")
@@ -349,6 +370,9 @@ def main(argv: list[str]) -> int:
         if not code:
             raise SystemExit("dtc P0087")
         print(explain_dtc(code))
+        return 0
+    if args.command == "coverage":
+        print(coverage_report())
         return 0
     if not args.bin_path:
         raise SystemExit("bin_path required")

@@ -140,6 +140,8 @@ pub fn run() {
             defpack::import_definition_pack, defpack::list_definition_packs, defpack::operational_self_check,
             bin_inspect::bin_hex_window, bin_inspect::bin_profile, bin_inspect::bin_tune_report,
             log_studio::log_session_summary, log_studio::log_replay_frame, log_studio::log_trim_suggestion, log_studio::bin_diff_report,
+            plugins::list_driver_plugins, plugins::validate_driver_plugin,
+            bench::bench_session_plan, fingerprint::fingerprint_bin_cmd, fingerprint::coverage_report_cmd,
         ])
         .run(tauri::generate_context!())
         .expect("error while running TuneItVerse");

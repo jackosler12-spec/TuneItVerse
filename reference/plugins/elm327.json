@@ -1,0 +1,10 @@
+{
+  "id": "elm327",
+  "name": "ELM327-class USB/BT",
+  "transport": "serial-ascii",
+  "protocols": ["CAN", "ISO9141", "KWP2000"],
+  "families": ["*"],
+  "capabilities": ["identify", "mode01", "dtc"],
+  "write_allowed": false,
+  "notes": "Daily diagnostics. Not a programming interface."
+}

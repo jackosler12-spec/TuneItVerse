@@ -1,0 +1,10 @@
+{
+  "id": "ftdi-serial",
+  "name": "FTDI USB-serial",
+  "transport": "usb-serial",
+  "protocols": ["UART"],
+  "families": ["*"],
+  "capabilities": ["bench-serial", "identify"],
+  "write_allowed": false,
+  "notes": "Bench / legacy serial. No BDM or JTAG bitbang payload."
+}

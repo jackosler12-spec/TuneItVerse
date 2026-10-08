@@ -62,11 +62,11 @@ These fix the issues that make guided flash dangerous or misleading.
 
 10. **J2534 Windows Registry Device Enumeration** — foundation (hardcoded list + DLL binding production)
 11. **Datalog Import & Map-from-Log Automation** — preview landed in v3.37 (CSV import, replay, clamped trim grid). Silent write stays off.
-12. **BDM / JTAG / Bench Mode Support** — TODO (foundation only)
+12. **BDM / JTAG / Bench Mode Support** — planner landed in v3.39 (checklist only, no probe script, cannot enable write)
 
 ## Priority 4 — Extensibility & Ecosystem
 
-13. **Plugin / Driver SDK** — definition packs landed (hints only, cannot enable write). Driver plugins still TODO.
+13. **Plugin / Driver SDK** — definition packs and driver descriptors landed (hints/read only, cannot enable write).
 14. **Scripting Runtime** — deterministic bench runner landed. No eval.
 15. **UI / UX Polish** — voltage, backup quality, verified_live now available to surface ✅
 

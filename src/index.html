@@ -2,14 +2,14 @@
 <html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8">
-  <title>TuneItVerse v3.38.0</title>
+  <title>TuneItVerse v3.39.0</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-logo">
       <div class="sidebar-logo-mark">TV</div>
-      <div class="sidebar-logo-text">TuneItVerse <span class="version">v3.38.0</span></div>
+      <div class="sidebar-logo-text">TuneItVerse <span class="version">v3.39.0</span></div>
     </div>
     <nav class="sidebar-nav" id="sidebar-nav">
       <button type="button" class="nav-item active" data-view="dashboard">Dashboard</button>
@@ -21,6 +21,8 @@
       <button type="button" class="nav-item" data-view="scripts">Scripts</button>
       <button type="button" class="nav-item" data-view="inspect">Inspect</button>
       <button type="button" class="nav-item" data-view="compare">Compare</button>
+      <button type="button" class="nav-item" data-view="bench">Bench</button>
+      <button type="button" class="nav-item" data-view="plugins">Plugins</button>
     </nav>
     <div class="sidebar-footer">
       <div class="connection-status">
@@ -463,8 +465,33 @@
       </div>
     </div>
 
+    <div id="view-bench" class="content content--hidden view-page" data-view-panel="bench" hidden>
+      <div class="page-toolbar">
+        <div><strong>Bench planner</strong><span class="page-sub">Checklist only. No programming frames.</span></div>
+        <div class="toolbar-actions">
+          <select id="bench-family"></select>
+          <button type="button" id="btn-bench-plan" class="btn">Plan</button>
+          <button type="button" id="btn-bench-fingerprint" class="btn">Fingerprint BIN</button>
+        </div>
+      </div>
+      <pre id="bench-readout" class="panel quiet-panel">Plan a family or fingerprint the BIN loaded on Maps. Write stays off.</pre>
+    </div>
+
+    <div id="view-plugins" class="content content--hidden view-page" data-view-panel="plugins" hidden>
+      <div class="page-toolbar">
+        <div><strong>Driver plugins</strong><span class="page-sub">JSON descriptors. write_allowed is forced false.</span></div>
+        <div class="toolbar-actions">
+          <button type="button" id="btn-plugins-list" class="btn">List</button>
+          <button type="button" id="btn-plugins-validate" class="btn">Validate</button>
+          <button type="button" id="btn-coverage" class="btn">Coverage</button>
+        </div>
+      </div>
+      <textarea id="plugin-json" class="panel quiet-panel" rows="6" spellcheck="false">{"id":"my-reader","name":"My reader","transport":"serial","protocols":["CAN"],"families":["EDC16C41"],"capabilities":["identify"],"write_allowed":false,"notes":"personal"}</textarea>
+      <pre id="plugin-readout" class="panel quiet-panel">List built-in adapters or validate a descriptor.</pre>
+    </div>
+
     <footer class="status-bar">
-      <div class="status-left" id="status-left">TuneItVerse 3.38.0</div>
+      <div class="status-left" id="status-left">TuneItVerse 3.39.0</div>
       <div class="status-center" id="status-center">No invented live values</div>
       <div class="status-right" id="status-right">Desktop app required</div>
     </footer>
@@ -474,5 +501,6 @@
   <script src="v335.js"></script>
   <script src="v336.js"></script>
   <script src="v337.js"></script>
+  <script src="v339.js"></script>
 </body>
 </html>
