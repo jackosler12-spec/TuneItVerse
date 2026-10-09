@@ -125,6 +125,7 @@ pub fn run() {
             xdf::parse_xdf_definitions, xdf::extract_table_from_bin, xdf::patch_table_into_bin, xdf::table_delta_cmd,
             a2l::parse_a2l_definitions, a2l::parse_a2l_summary,
             table_tools::table_math_cmd, table_tools::apply_stft_preview_cmd,
+            desk_ops::flash_readiness_cmd, desk_ops::seed_coverage_cmd, desk_ops::table_csv_cmd,
             auto_load_tables_for_bin, get_tuning_advice, guided_flash_pipeline, compare_bin_to_ecu, verify_after_write,
             unlock_level1, unlock_level2, bosch_uds_unlock,
             scripting::list_script_helpers, scripting::run_bench_script,

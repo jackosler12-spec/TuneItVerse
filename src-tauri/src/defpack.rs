@@ -131,7 +131,9 @@ pub fn operational_self_check() -> Result<String, String> {
         "notes": "Self-check is offline. It does not talk to an ECU and does not enable write.",
         "inspect_ok": crate::bin_inspect::profile_bin(&[0u8; 32]).get("entropy").and_then(|v| v.as_f64()) == Some(0.0),
         "log_studio_ok": crate::log_studio::self_check_ok(),
-        "dtc_explain_ok": crate::dtc::explain_one("P0301").known && !crate::dtc::explain_one("P9999").known
+        "dtc_explain_ok": crate::dtc::explain_one("P0301").known && !crate::dtc::explain_one("P9999").known,
+        "desk_ops_ok": crate::desk_ops::self_check_ok(),
+        "scripts_loaded_note": "v333 and v334 must be included from index.html"
     });
     serde_json::to_string(&report).map_err(|e| e.to_string())
 }

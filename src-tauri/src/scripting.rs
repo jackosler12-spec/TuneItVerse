@@ -60,7 +60,7 @@ fn parse_offset(tok: &str) -> Result<usize, String> {
 
 fn help_text() -> Value {
     json!({
-        "language": "TuneItVerse bench script v3.28",
+        "language": "TuneItVerse bench script v3.39",
         "commands": [
             "identify                 — family / OS / size / correction_safe",
             "checksum                 — validate known families (report-only for Honda/P59)",
@@ -74,6 +74,8 @@ fn help_text() -> Value {
             "hex OFFSET [LEN]        — hex+ASCII window (max 4096 bytes)",
             "profile                  — block entropy, empty/erased ratios",
             "report                   — markdown identify + checksum + profile",
+            "readiness               — offline image checklist; not a flash authorization",
+            "seedcov                  — which catalog families have dump-derived pairs",
             "help                     — this list"
         ],
         "notes": "No eval, no shell, no invented seed tables. Personal dumps only."
@@ -89,6 +91,8 @@ fn run_line(state: &mut ScriptState, line: &str) -> Result<Value, String> {
     let cmd = parts.next().unwrap_or("").to_ascii_lowercase();
     match cmd.as_str() {
         "help" | "?" => Ok(help_text()),
+        "readiness" => Ok(crate::desk_ops::flash_readiness(&state.bin)),
+        "seedcov" | "seedcoverage" => Ok(crate::desk_ops::seed_coverage()),
         "identify" => {
             if state.bin.is_empty() {
                 return Err("No working BIN. Load a dump first.".into());
@@ -335,6 +339,20 @@ pub fn list_script_helpers() -> Result<String, String> {
             "name": "Map cell delta",
             "description": "Load a reference BIN on Maps, select a table, then Cell delta.",
             "command": "delta",
+            "cli": null
+        },
+        {
+            "id": "readiness",
+            "name": "Flash readiness",
+            "description": "Offline identify + checksum checklist. flash_allowed_now stays false.",
+            "command": "readiness",
+            "cli": "python3 python/ecu_scripting.py readiness path/to/dump.bin"
+        },
+        {
+            "id": "seedcov",
+            "name": "Seed coverage",
+            "description": "Families with dump-derived pairs vs empty catalog entries.",
+            "command": "seedcov",
             "cli": null
         }
     ])

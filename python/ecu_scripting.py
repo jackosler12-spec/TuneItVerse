@@ -306,9 +306,27 @@ def explain_dtc(code: str) -> dict:
     return {"code": raw, "description": desc, "known": desc != "No description available", "write_allowed": False}
 
 
+
+WRITE_SIZES = {
+    524288: "P01_0411 candidate (512 KB). Still needs OS-string confirmation in the app.",
+    2097152: "EDC16C41 candidate (2048 KB flash). EEPROM is a separate 2 KB image.",
+}
+
+def readiness(path: str) -> dict:
+    data = open(path, "rb").read()
+    size = len(data)
+    note = WRITE_SIZES.get(size, "Size is not a live write family. Identify only.")
+    return {
+        "bytes": size,
+        "size_note": note,
+        "write_families": ["P01_0411", "EDC16C41"],
+        "flash_allowed_now": False,
+        "notes": "CLI size check only. App readiness also runs identify and checksum. Not a flash authorization.",
+    }
+
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description="TuneItVerse bench helper")
-    parser.add_argument("command", choices=["checksum", "identify", "seedkey", "p01cmp", "diff", "adapters", "profile", "hex", "report", "logsummary", "dtc"])
+    parser.add_argument("command", choices=["checksum", "identify", "seedkey", "p01cmp", "diff", "adapters", "profile", "hex", "report", "logsummary", "dtc", "readiness"])
     parser.add_argument("bin_path", nargs="?")
     parser.add_argument("seed_hex", nargs="?")
     parser.add_argument("level", nargs="?", default="1")
@@ -343,6 +361,11 @@ def main(argv: list[str]) -> int:
         if not args.bin_path:
             raise SystemExit("logsummary path/to/log.csv")
         print(log_summary(pathlib.Path(args.bin_path).read_text(encoding="utf-8")))
+        return 0
+    if args.command == "readiness":
+        if not args.bin_path:
+            raise SystemExit("readiness path/to/dump.bin")
+        print(readiness(args.bin_path))
         return 0
     if args.command == "dtc":
         code = args.bin_path or args.seed_hex or ""

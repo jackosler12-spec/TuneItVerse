@@ -1,7 +1,7 @@
-// TuneItVerse lib.rs — Tauri entry + command surface (v3.38.0)
+// TuneItVerse lib.rs — Tauri entry + command surface (v3.39.0)
 #![allow(unused_imports, dead_code, non_snake_case)]
 
-pub const APP_VERSION: &str = "3.38.0";
+pub const APP_VERSION: &str = "3.39.0";
 
 mod a2l;
 mod bin_inspect;
@@ -11,6 +11,7 @@ mod checksum_sizes;
 mod consult;
 mod cs_guard;
 mod defpack;
+mod desk_ops;
 mod dtc;
 mod ecu_database;
 mod file_dialog;

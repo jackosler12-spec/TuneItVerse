@@ -2,14 +2,14 @@
 <html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8">
-  <title>TuneItVerse v3.38.0</title>
+  <title>TuneItVerse v3.39.0</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-logo">
       <div class="sidebar-logo-mark">TV</div>
-      <div class="sidebar-logo-text">TuneItVerse <span class="version">v3.38.0</span></div>
+      <div class="sidebar-logo-text">TuneItVerse <span class="version">v3.39.0</span></div>
     </div>
     <nav class="sidebar-nav" id="sidebar-nav">
       <button type="button" class="nav-item active" data-view="dashboard">Dashboard</button>
@@ -354,6 +354,7 @@
               <button id="btn-tbl-redo" class="btn" type="button">Redo</button>
               <button id="btn-tbl-clamp" class="btn" type="button" title="Clamp selected to min,max in the value box">Clamp</button>
               <button id="btn-tbl-pct" class="btn" type="button" title="Percent from the value box">%</button>
+              <button id="btn-tbl-csv" class="btn" type="button" title="Export the open table as CSV">CSV</button>
               <button id="btn-tbl-stft" class="btn" type="button">STFT</button>
             </div>
             <div class="toolbar-sep"></div>
@@ -382,6 +383,8 @@
       <div class="page-toolbar">
         <div class="toolbar-group">
           <span class="toolbar-label">Prepare</span>
+          <button id="btn-flash-readiness" class="btn btn-primary" type="button">Readiness</button>
+          <button id="btn-seed-coverage" class="btn" type="button">Seed coverage</button>
           <button id="btn-check-voltage" class="btn" type="button">Battery</button>
           <button id="btn-unlock-l1" class="btn" type="button">Unlock L1</button>
           <button id="btn-unlock-l2" class="btn" type="button">Unlock L2</button>
@@ -464,15 +467,18 @@
     </div>
 
     <footer class="status-bar">
-      <div class="status-left" id="status-left">TuneItVerse 3.38.0</div>
+      <div class="status-left" id="status-left">TuneItVerse 3.39.0</div>
       <div class="status-center" id="status-center">No invented live values</div>
       <div class="status-right" id="status-right">Desktop app required</div>
     </footer>
   </div>
   <script src="main.js"></script>
   <script src="v312.js"></script>
+  <script src="v333.js"></script>
+  <script src="v334.js"></script>
   <script src="v335.js"></script>
   <script src="v336.js"></script>
   <script src="v337.js"></script>
+  <script src="v339.js"></script>
 </body>
 </html>

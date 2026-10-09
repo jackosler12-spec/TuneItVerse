@@ -1,7 +1,7 @@
 [package]
 name = "TuneItVerse"
-version = "3.38.0"
-description = "ECU Tuning platform for JRTuners. v3.38.0: offline DTC explain, map cell delta, clamp/percent, BIN undo. Write path still P01 and EDC16C41 only."
+version = "3.39.0"
+description = "ECU Tuning platform for JRTuners. v3.39.0: script wiring, flash readiness, seed coverage, table CSV. Write path still P01 and EDC16C41 only."
 authors = ["JRTuners"]
 edition = "2021"
 
