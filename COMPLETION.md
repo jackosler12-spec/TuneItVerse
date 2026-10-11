@@ -1,16 +1,15 @@
-# TuneItVerse v3.38.0 — desk tools
+# TuneItVerse v3.39.0 — community checksum + desk polish
 
-v3.37 log studio stays. This pass closes three offline desk gaps. It does not add a write family.
+v3.38 desk tools stay. This pass adds an explicit community multipoint CRC32 helper for 2 MB Bosch-style images and bumps the version.
 
 ## What this pass changed
 
-1. Version **3.38.0** across crate / package / Tauri / installer / HTML.
-2. Diagnostics: offline `explain_dtcs_cmd` for SAE codes, including rail/boost/EGR codes used on the Patrol. Lookup does not talk to an ECU.
-3. Maps: reference BIN + `table_delta_cmd` cell report. Clamp and percent on the selected cells. Table redo. BIN undo/redo snapshots before poke and table patch (8 images).
-4. Bench CLI: `dtc P0087`. Scripts list includes dtc and delta. Self-check reports `dtc_explain_ok`.
-5. Clamp/percent also exist on the Rust table math path. Neither path enables write.
+1. Version **3.39.0** across crate / package / Tauri / installer / HTML.
+2. New `community_bosch_correct_cmd` exposes a multipoint CRC32 corrector using EDC16-style regions for 2 MB images. Labeled community / verify-before-flash. Live write path remains **P01_0411** and **EDC16C41** only.
+3. Identification, map catalog, seed-table lookup, voltage gate, and guided flash fail-closed behavior unchanged.
+4. Offline DTC explain, table delta, clamp/percent, BIN undo/redo remain.
 
-Write path remains **P01_0411** and **EDC16C41** only.
+Write path remains **P01_0411** and **EDC16C41** only. Community corrector is never auto-applied on the live flash path.
 
 ## Still needs your bench
 
