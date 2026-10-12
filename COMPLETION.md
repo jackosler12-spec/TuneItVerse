@@ -56,3 +56,9 @@ Build your own. No bullshit prices.
 - src/index.html restored from Jack's v3.17.0 copy, version strings set to 3.40.0, and script tags added for the overlays that exist (v312, v333–v337). main.js and styles.css kept (current files are newer supersets of the supplied copies).
 - Headless Chromium load test with a mocked Tauri invoke: 0 console/page errors; all 7 views render; logging Demo toggle + badge, seed/key and unlock controls present.
 - `#dtc-lookup` (used by main.js explainDtcUi) has no element in the restored HTML; DTC explain lookup has no input yet.
+
+## GM flash segment + UI fixes (2026-10-12)
+- GM VPW write: level-2 unlock must succeed (was ignored); Mode 34/36/37 each need a positive reply. Writes only the P01_0411 Calibration segment 0x8000-0x1FFFF (source: reference/PcmHammer_debugLog_20260504@180810.txt line 7716). The old 0x20000 target is the OperatingSystem segment per the same log, and the full 512KB used to be sent there.
+- BIN size must equal the DB image size (512KB for P01). EDC16C41 has no authoritative segment data in the repo, so its write and live verify are refused until one is added.
+- Failed checksum correction now refuses the write instead of flashing the uncorrected image.
+- Diagnostics: DTC lookup input `#dtc-lookup` + Explain button; output HTML-escaped. DEMO badge moved inline into the page header.

@@ -952,8 +952,11 @@ function renderDemoBadge(on) {
     badge = document.createElement('div');
     badge.id = 'log-demo-badge';
     badge.textContent = 'DEMO MODE: simulated data, not from an ECU';
-    badge.style.cssText = 'position:fixed;top:8px;right:8px;z-index:9999;background:#c62828;color:#fff;font-weight:700;padding:6px 10px;border-radius:4px;';
-    document.body.appendChild(badge);
+    // Inline in the page header (after the subtitle) so it never covers header controls.
+    badge.style.cssText = 'display:inline-block;margin-left:12px;background:#c62828;color:#fff;font-weight:700;font-size:12px;padding:3px 8px;border-radius:4px;white-space:nowrap;vertical-align:middle;';
+    const sub = document.getElementById('page-sub');
+    if (sub && sub.parentNode) sub.parentNode.insertBefore(badge, sub.nextSibling);
+    else document.body.insertBefore(badge, document.body.firstChild);
   }
   badge.style.display = on ? 'block' : 'none';
 }
@@ -1184,8 +1187,8 @@ async function explainDtcUi() {
     if (summary) summary.textContent = 'Offline explain — not a live read. Does not enable write.';
     if (tbody) {
       tbody.innerHTML = rows.map((rec) => {
-        const code = rec.code || '????';
-        const desc = String(rec.description || '').replace(/</g, '<');
+        const desc = String(rec.description || '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
+        const code = String(rec.code || '????').replace(/</g, '&lt;');
         const known = rec.known ? 'known' : 'unknown';
         return `<tr><td class="dtc-code">${code}</td><td>${known}</td><td>${desc}</td></tr>`;
       }).join('');
