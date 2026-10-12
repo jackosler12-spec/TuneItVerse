@@ -277,15 +277,8 @@ impl J2534Device {
                 return Err(format!("PassThruConnect failed status {}", status));
             }
         }
-        if protocol == J2534_PROTOCOL_CAN
-            || protocol == J2534_PROTOCOL_ISO15765
-            || protocol == J2534_PROTOCOL_J1850VPW
-        {
-            self.channel_id = 1;
-            Ok(())
-        } else {
-            Err(format!("Protocol {} not supported without full binding", protocol))
-        }
+        let _ = (protocol, flags, baud);
+        Err(not_implemented("PassThruConnect (J2534 DLL not bound)"))
     }
 
     pub fn disconnect(&mut self) -> Result<(), String> {
@@ -339,7 +332,7 @@ impl J2534Device {
             }
         }
         let _ = (data, protocol, flags, timeout_ms);
-        Ok(())
+        Err(not_implemented("PassThruWriteMsgs (J2534 DLL not bound)"))
     }
 
     pub fn read_msgs(&self, max_msgs: usize, timeout_ms: u32) -> Result<Vec<Vec<u8>>, String> {
@@ -372,7 +365,7 @@ impl J2534Device {
             }
         }
         let _ = (max_msgs, timeout_ms);
-        Ok(vec![])
+        Err(not_implemented("PassThruReadMsgs (J2534 DLL not bound)"))
     }
 
     pub fn ioctl(
@@ -512,8 +505,13 @@ impl J2534Device {
         if self.channel_id == 0 {
             return Err("Connect first".into());
         }
-        Ok(42)
+        Err(not_implemented("PassThruStartMsgFilter (ISO15765 flow-control filter)"))
     }
+}
+
+/// Explicit error for J2534 features without a real implementation. Never fake `Ok`.
+pub fn not_implemented(what: &str) -> String {
+    format!("NotImplemented: {} is not supported in this build.", what)
 }
 
 static SHARED: Mutex<Option<J2534Device>> = Mutex::new(None);
@@ -565,8 +563,9 @@ pub fn j2534_connect(dll_path: Option<String>) -> Result<String, String> {
                 *guard = Some(dev);
                 Ok("J2534 opened + ISO15765 connected (Ioctl bound)".into())
             } else {
-                *guard = Some(dev);
-                Ok("J2534 opened (Ioctl bound); protocol connect returned non-zero".into())
+                // Do not report success when the protocol channel failed.
+                let _ = dev.close();
+                Err("J2534 device opened but ISO15765 PassThruConnect failed. Not connected.".into())
             }
         }
         Err(e) => Err(e),
@@ -681,6 +680,19 @@ pub fn j2534_clear_buffers() -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn unbound_device_never_fakes_success() {
+        let mut d = J2534Device::new();
+        d.device_id = 1; // pretend open, but no DLL bound
+        let e = d.connect(J2534_PROTOCOL_ISO15765, 0, 500_000).unwrap_err();
+        assert!(e.starts_with("NotImplemented"), "{e}");
+        assert_eq!(d.channel_id, 0);
+        d.channel_id = 7; // force a channel to reach the stubs
+        assert!(d.write_msg(&[1, 2], J2534_PROTOCOL_ISO15765, 0, 10).unwrap_err().starts_with("NotImplemented"));
+        assert!(d.read_msgs(1, 10).unwrap_err().starts_with("NotImplemented"));
+        assert!(d.start_iso15765_filter(0x7E0, 0x7FF, false).unwrap_err().starts_with("NotImplemented"));
+    }
 
     #[test]
     fn vpw_baud_constants() {
