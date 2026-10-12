@@ -9,6 +9,7 @@ v3.39 community Bosch multipoint CRC32 helper and desk tools stay. This pass syn
 3. Offline tools (identify, checksum, hex, profile, report, DTC explain, map delta, BIN undo) remain fully operational.
 4. Live write path remains strictly limited to **P01_0411** and **EDC16C41**. All other families are identify/catalog only.
 5. Guided flash, voltage gate, backup quality labeling, and live verify stay fail-closed.
+6. Guided flash now refuses write unless backup quality is FullImage (PartialDidOnly and Failed both block). Backup is mandatory.
 
 ## Current operational status
 
@@ -25,7 +26,7 @@ Write path remains **P01_0411** and **EDC16C41** only. Community correctors are 
 2. EDC17 / MED17 / ME7 / SID803 / Honda / Simos / T8 / Transtron seed tables from **your** dumps. Put pairs in `seed_tables.json`.
 3. PCM Hammer comparison on your 512 KB P01 OS (`12225074`).
 4. A vendor J2534 DLL on Windows so mid-write Vbatt and the registry walk are live.
-5. A kernel-resident Mode 3C full-image dump. Windowed probes are not a full backup.
+5. A kernel-resident Mode 3C full-image dump. Windowed probes stay PartialDidOnly and now block write until FullImage exists.
 6. Licensed GM 5-byte keys. We do not ship that library.
 7. Isuzu FRR Transtron dump + protocol notes before any 4HK1 write work.
 

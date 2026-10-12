@@ -91,6 +91,12 @@ pub fn verify_after_write(port: &mut Box<dyn SerialPort + Send>, ecu_family: &st
     let windows = crate::live_verify::probe_live_windows(port, ecu_family, written.len(), logs);
     crate::live_verify::compare_windows(written, &windows, logs)
 }
+
+/// Only a full flash-image backup may proceed to write. Partial window probes and failures stay blocked.
+pub fn backup_quality_allows_write(quality: &BackupQuality) -> bool {
+    matches!(quality, BackupQuality::FullImage)
+}
+
 pub fn orchestrate_guided_flash<F>(port: &mut Box<dyn SerialPort + Send>, request: GuidedFlashRequest, mut on_progress: F) -> Result<GuidedFlashResult, String>
 where F: FnMut(FlashProgress),
 {
@@ -139,13 +145,29 @@ where F: FnMut(FlashProgress),
             Err(e) => { result.logs.push(format!("Checksum correct skipped: {}", e)); }
         }
     }
-    if request.perform_backup {
+    if !request.perform_backup {
+        result.error = Some("Backup required before write. Refusing flash without a full-image backup.".into());
+        return Ok(result);
+    }
+    {
         let w = crate::live_verify::attempt_live_backup(port, &family, image.len(), &mut result.logs);
+        // attempt_live_backup is windowed only today, so non-failed captures stay PartialDidOnly.
+        // FullImage is reserved for a future kernel Mode 3C / full dump path.
         let quality = if w.failed { BackupQuality::Failed } else { BackupQuality::PartialDidOnly };
-        let backup = BackupResult { path: w.path, quality, bytes: w.bytes, crc32: w.crc32, notes: w.notes };
-        if w.failed { result.error = Some("Backup failed. Refusing write.".into()); result.backup = Some(backup); return Ok(result); }
+        let backup = BackupResult { path: w.path, quality: quality.clone(), bytes: w.bytes, crc32: w.crc32, notes: w.notes };
         result.backup = Some(backup);
-        result.steps_completed.push("Backup captured".into());
+        if !backup_quality_allows_write(&quality) {
+            let msg = match quality {
+                BackupQuality::Failed => "Backup failed. Refusing write.".to_string(),
+                BackupQuality::PartialDidOnly => {
+                    "Backup is PartialDidOnly (windowed probe, not a full flash dump). Refusing write until a FullImage backup exists.".to_string()
+                }
+                BackupQuality::FullImage => unreachable!("FullImage always allows write"),
+            };
+            result.error = Some(msg);
+            return Ok(result);
+        }
+        result.steps_completed.push("Full-image backup captured".into());
     }
     let fam = family.to_ascii_uppercase();
     if fam.contains("HONDA") || fam.contains("KEIHIN") {
@@ -273,5 +295,10 @@ mod tests {
         assert!(!crate::ecu_database::write_path_live("EDC17_COMMON"));
         assert!(!crate::ecu_database::write_path_live("MED17_COMMON"));
         assert!(!crate::ecu_database::write_path_live("TRANSTRON_4HK1"));
+    }
+    #[test] fn partial_or_failed_backup_blocks_write() {
+        assert!(!backup_quality_allows_write(&BackupQuality::PartialDidOnly));
+        assert!(!backup_quality_allows_write(&BackupQuality::Failed));
+        assert!(backup_quality_allows_write(&BackupQuality::FullImage));
     }
 }
