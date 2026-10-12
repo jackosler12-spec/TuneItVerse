@@ -80,7 +80,10 @@ fn compare_bin_to_ecu(file_bytes: Vec<u8>) -> Result<String, String> {
     let fam = family_from_bin_or_state(&file_bytes)?;
     with_port(|port| {
         let mut logs = Vec::new();
-        let windows = crate::live_verify::probe_live_windows(port, &fam, file_bytes.len(), &mut logs);
+        let windows = match crate::live_verify::probe_live_windows(port, &fam, file_bytes.len(), &mut logs) {
+            Ok(w) => w,
+            Err(e) => return Ok(json!({"family":fam,"matched":false,"error":e,"logs":logs}).to_string()),
+        };
         match crate::live_verify::compare_windows(&file_bytes, &windows, &mut logs) {
             Ok((crc, matched)) => Ok(json!({"family":fam,"windows":windows.len(),"matched":matched,"crc":format!("0x{:08X}", crc),"logs":logs}).to_string()),
             Err(e) => Ok(json!({"family":fam,"windows":windows.len(),"matched":false,"error":e,"logs":logs}).to_string()),

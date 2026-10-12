@@ -88,7 +88,7 @@ fn crc32_ieee(data: &[u8]) -> u32 {
 }
 pub fn verify_after_write(port: &mut Box<dyn SerialPort + Send>, ecu_family: &str, written: &[u8], logs: &mut Vec<String>) -> Result<(u32, bool), String> {
     logs.push(format!("verify family={} len={}", ecu_family, written.len()));
-    let windows = crate::live_verify::probe_live_windows(port, ecu_family, written.len(), logs);
+    let windows = crate::live_verify::probe_live_windows(port, ecu_family, written.len(), logs)?;
     crate::live_verify::compare_windows(written, &windows, logs)
 }
 

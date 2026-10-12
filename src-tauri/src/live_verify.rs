@@ -23,30 +23,45 @@ fn crc32_ieee(data: &[u8]) -> u32 {
     !crc
 }
 
-fn window_offset(addr: u32, written_len: usize) -> usize {
-    if (addr as usize) < written_len { addr as usize } else { 0 }
+/// File offset for a live window. `None` when the address is outside the image —
+/// never fall back to offset 0 (that compares unrelated bytes).
+fn window_offset(addr: u32, written_len: usize) -> Option<usize> {
+    if (addr as usize) < written_len { Some(addr as usize) } else { None }
 }
 
-pub fn probe_live_windows(port: &mut Box<dyn SerialPort + Send>, ecu_family: &str, written_len: usize, logs: &mut Vec<String>) -> Vec<LiveWindow> {
-    let fam = ecu_family.to_ascii_uppercase();
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LiveProto { GmVpw, BoschUdsKwp }
+
+/// Calibration address + protocol for a known family. Unknown families are an
+/// explicit error: no GM/P01 default.
+pub fn live_address_plan(ecu_family: &str) -> Result<(u32, LiveProto), String> {
+    let fam = ecu_family.trim().to_ascii_uppercase();
+    if fam.is_empty() || fam == "UNKNOWN" {
+        return Err("ECU family unknown. Identify the ECU/OS first; live verify/compare refused.".into());
+    }
+    if fam.contains("ME7") { return Ok((0x0001_8000, LiveProto::BoschUdsKwp)); }
+    if fam.contains("EDC") || fam.contains("MED") || fam.contains("BOSCH") || fam.contains("DELPHI") || fam.contains("DCM") {
+        return Ok((0x0008_0000, LiveProto::BoschUdsKwp));
+    }
+    if fam.contains("P01") || fam.contains("P59") || fam.starts_with("GM") {
+        return Ok((0x0002_0000, LiveProto::GmVpw));
+    }
+    Err(format!("No live-read address plan for family {}. Refusing.", ecu_family))
+}
+
+pub fn probe_live_windows(port: &mut Box<dyn SerialPort + Send>, ecu_family: &str, written_len: usize, logs: &mut Vec<String>) -> Result<Vec<LiveWindow>, String> {
+    let (cal_addr, proto) = live_address_plan(ecu_family)?;
     let mut out = Vec::new();
-    let cal_addr: u32 = if fam.contains("EDC") || fam.contains("MED") || fam.contains("DELPHI") || fam.contains("DCM") {
-        0x0008_0000
-    } else if fam.contains("ME7") {
-        0x0001_8000
-    } else {
-        0x0002_0000
-    };
     let starts = [(cal_addr, "cal_start"), (cal_addr.saturating_add(0x1000), "cal_plus_4k")];
     let use_elm = true;
 
-    if fam.contains("P01") || fam.contains("P59") || fam.contains("GM") {
+    if proto == LiveProto::GmVpw {
         for (addr, label) in &starts {
             match request_response(port, &build_mode3c_read_block(*addr, 64)) {
                 Ok(resp) => match parse_mode3c_response(&resp) {
                     Ok(data) if !data.is_empty() => {
                         logs.push(format!("Mode 3C answered at 0x{:06X} ({} bytes)", addr, data.len()));
-                        out.push(LiveWindow { label: label.to_string(), offset: window_offset(*addr, written_len), data, method: "VPW Mode 3C".into() });
+                        match window_offset(*addr, written_len) { Some(offset) => out.push(LiveWindow { label: label.to_string(), offset, data, method: "VPW Mode 3C".into() }), None => logs.push(format!("Window 0x{:06X} outside {}-byte image; skipped", addr, written_len)) }
                     }
                     Ok(_) => logs.push(format!("Mode 3C empty at 0x{:06X}", addr)),
                     Err(e) => logs.push(format!("Mode 3C parse at 0x{:06X}: {}", addr, e)),
@@ -56,12 +71,12 @@ pub fn probe_live_windows(port: &mut Box<dyn SerialPort + Send>, ecu_family: &st
         }
     }
 
-    if fam.contains("EDC") || fam.contains("MED") || fam.contains("BOSCH") || fam.contains("ME7") || fam.contains("DELPHI") || fam.contains("DCM") || out.is_empty() {
+    if proto == LiveProto::BoschUdsKwp {
         for (addr, label) in &starts {
             match crate::uds::read_memory_by_address(port, crate::uds::Alfi::ADDR4_SIZE2, *addr, 64, use_elm) {
                 Ok(data) if !data.is_empty() => {
                     logs.push(format!("UDS 0x23 ISO-TP answered at 0x{:06X} ({} bytes)", addr, data.len()));
-                    out.push(LiveWindow { label: label.to_string(), offset: window_offset(*addr, written_len), data, method: "UDS 0x23 ISO-TP".into() });
+                    match window_offset(*addr, written_len) { Some(offset) => out.push(LiveWindow { label: label.to_string(), offset, data, method: "UDS 0x23 ISO-TP".into() }), None => logs.push(format!("Window 0x{:06X} outside {}-byte image; skipped", addr, written_len)) }
                 }
                 Ok(_) => logs.push(format!("UDS 0x23 empty at 0x{:06X}", addr)),
                 Err(e) => logs.push(format!("UDS 0x23 at 0x{:06X}: {}", addr, e)),
@@ -71,14 +86,14 @@ pub fn probe_live_windows(port: &mut Box<dyn SerialPort + Send>, ecu_family: &st
             match crate::kwp::kwp_read_memory(port, *addr, 64) {
                 Ok(data) if data.len() > 4 => {
                     logs.push(format!("KWP 0x23 answered at 0x{:06X} ({} bytes)", addr, data.len()));
-                    out.push(LiveWindow { label: format!("{}_kwp", label), offset: window_offset(*addr, written_len), data, method: "KWP 0x23".into() });
+                    match window_offset(*addr, written_len) { Some(offset) => out.push(LiveWindow { label: format!("{}_kwp", label), offset, data, method: "KWP 0x23".into() }), None => logs.push(format!("Window 0x{:06X} outside {}-byte image; skipped", addr, written_len)) }
                 }
                 Ok(_) => logs.push(format!("KWP 0x23 short at 0x{:06X}", addr)),
                 Err(e) => logs.push(format!("KWP 0x23 at 0x{:06X}: {}", addr, e)),
             }
         }
     }
-    out
+    Ok(out)
 }
 
 pub fn compare_windows(written: &[u8], windows: &[LiveWindow], logs: &mut Vec<String>) -> Result<(u32, bool), String> {
@@ -101,7 +116,10 @@ pub fn compare_windows(written: &[u8], windows: &[LiveWindow], logs: &mut Vec<St
 }
 
 pub fn attempt_live_backup(port: &mut Box<dyn SerialPort + Send>, ecu_family: &str, expected_len: usize, logs: &mut Vec<String>) -> WindowBackup {
-    let windows = probe_live_windows(port, ecu_family, expected_len.max(1), logs);
+    let windows = match probe_live_windows(port, ecu_family, expected_len.max(1), logs) {
+        Ok(w) => w,
+        Err(e) => return WindowBackup { failed: true, path: String::new(), bytes: 0, crc32: None, notes: e },
+    };
     if windows.is_empty() {
         return WindowBackup { failed: true, path: String::new(), bytes: 0, crc32: None, notes: "No Mode 23 / 3C windows. Not a full-image backup.".into() };
     }
@@ -113,5 +131,27 @@ pub fn attempt_live_backup(port: &mut Box<dyn SerialPort + Send>, ecu_family: &s
         bytes: crc_src.len() as u32,
         crc32: Some(crc32_ieee(&crc_src)),
         notes: format!("Collected {} bytes across {} live windows. PartialDidOnly — not a full flash dump.", crc_src.len(), windows.len()),
+    }
+}
+
+#[cfg(test)]
+mod family_plan_tests {
+    use super::*;
+    #[test]
+    fn unknown_family_refused_no_p01_default() {
+        for f in ["", "UNKNOWN", "unknown", "HONDA_KEIHIN", "TRANSTRON_4HK1", "SOMETHING"] {
+            assert!(live_address_plan(f).is_err(), "{f} must not default");
+        }
+    }
+    #[test]
+    fn known_families_plan() {
+        assert_eq!(live_address_plan("P01_0411").unwrap(), (0x20000, LiveProto::GmVpw));
+        assert_eq!(live_address_plan("EDC16C41").unwrap(), (0x80000, LiveProto::BoschUdsKwp));
+        assert_eq!(live_address_plan("ME7_5").unwrap(), (0x18000, LiveProto::BoschUdsKwp));
+    }
+    #[test]
+    fn window_offset_never_falls_back_to_zero() {
+        assert_eq!(window_offset(0x80000, 0x1000), None);
+        assert_eq!(window_offset(0x100, 0x1000), Some(0x100));
     }
 }

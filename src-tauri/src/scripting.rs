@@ -123,7 +123,7 @@ fn run_line(state: &mut ScriptState, line: &str) -> Result<Value, String> {
             Ok(crate::v29_tools::compare_bins(&state.bin, &state.compare))
         }
         "seedkey" => {
-            let family = parts.next().unwrap_or("P01_0411").to_string();
+            let family = parts.next().filter(|f| !f.is_empty()).ok_or_else(|| "seedkey: family required (e.g. seedkey P01_0411 <seed>)".to_string())?.to_string();
             let seed = parts.next().unwrap_or("");
             let level = parts.next().unwrap_or("1").to_string();
             let algo = parts.next().and_then(|s| {
@@ -344,6 +344,13 @@ pub fn list_script_helpers() -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn seedkey_requires_family_no_p01_default() {
+        let v = run_script("seedkey\n", None, None);
+        assert_eq!(v["steps"][0]["ok"], false);
+        assert!(crate::compute_seed_key("1234".into(), None, None, None).unwrap_err().contains("family required"));
+    }
 
     #[test]
     fn help_runs() {
