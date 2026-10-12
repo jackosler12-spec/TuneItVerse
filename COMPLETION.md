@@ -1,15 +1,23 @@
-# TuneItVerse v3.39.0 — community checksum + desk polish
+# TuneItVerse v3.40.0 — version sync + offline polish
 
-v3.38 desk tools stay. This pass adds an explicit community multipoint CRC32 helper for 2 MB Bosch-style images and bumps the version.
+v3.39 community Bosch multipoint CRC32 helper and desk tools stay. This pass synchronizes versions, expands documentation of the operational offline and limited live paths, and confirms fail-closed behavior.
 
 ## What this pass changed
 
-1. Version **3.39.0** across crate / package / Tauri / installer / HTML.
-2. New `community_bosch_correct_cmd` exposes a multipoint CRC32 corrector using EDC16-style regions for 2 MB images. Labeled community / verify-before-flash. Live write path remains **P01_0411** and **EDC16C41** only.
-3. Identification, map catalog, seed-table lookup, voltage gate, and guided flash fail-closed behavior unchanged.
-4. Offline DTC explain, table delta, clamp/percent, BIN undo/redo remain.
+1. Version **3.40.0** in package.json and documentation.
+2. COMPLETION.md updated to accurately reflect the current state of the application.
+3. Offline tools (identify, checksum, hex, profile, report, DTC explain, map delta, BIN undo) remain fully operational.
+4. Live write path remains strictly limited to **P01_0411** and **EDC16C41**. All other families are identify/catalog only.
+5. Guided flash, voltage gate, backup quality labeling, and live verify stay fail-closed.
 
-Write path remains **P01_0411** and **EDC16C41** only. Community corrector is never auto-applied on the live flash path.
+## Current operational status
+
+- Full offline BIN/XDF/A2L inspection, patching, checksum validation/correction (P01 additive, EDC16 multipoint CRC32), map editing, and export.
+- Catalog of 14+ ECU families with JSON definitions, TableSeek for P01, community map hints.
+- Live diagnostics and logging via ELM/J2534 where hardware is present.
+- Guided flash pipeline with safety gates for supported families only.
+
+Write path remains **P01_0411** and **EDC16C41** only. Community correctors are never auto-applied on the live flash path.
 
 ## Still needs your bench
 
