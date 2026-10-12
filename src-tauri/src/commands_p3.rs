@@ -54,6 +54,24 @@ fn guided_flash_pipeline(app: tauri::AppHandle, request_json: String) -> Result<
         Ok(serde_json::to_string(&result).unwrap_or_else(|_| "{}".into()))
     }).or_else(|e| Ok(json!({"success":false,"steps_completed":[],"logs":[format!("Fail-closed: not connected ({})", e)],"verified_live":false,"error":format!("Not connected: {}", e)}).to_string()))
 }
+/// P01 OS 12225074 full 512KB read-back through Kernel-P01.bin (STN adapter). Saves
+/// <app data>/backups/p01_<os>_<ms>.bin + .json (SHA-256, quality).
+#[tauri::command]
+fn p01_full_backup(app: tauri::AppHandle, dir: Option<String>) -> Result<String, String> {
+    use tauri::Manager;
+    let dir = match dir.filter(|d| !d.trim().is_empty()) {
+        Some(d) => std::path::PathBuf::from(d),
+        None => app.path().app_data_dir().map_err(|e| e.to_string())?.join("backups"),
+    };
+    with_port(|port| {
+        let mut logs = vec![];
+        let mut link = crate::p01_backup::StnLink { port };
+        let (img, os) = crate::p01_backup::read_full_image(&mut link, |p| { let _ = app.emit("p01-backup-progress", &p); }, &mut logs)?;
+        let a = crate::p01_backup::assess_image(&img, os);
+        let saved = crate::p01_backup::save_backup(&dir, &img, &a)?;
+        Ok(json!({"backup": saved, "logs": logs}).to_string())
+    })
+}
 /// Pick the family for live compare/verify. A family requested by the UI must
 /// agree with the one identified from the BIN; with no BIN match, the request
 /// (then session state) is used. Nothing → explicit error, never a default.
@@ -133,7 +151,7 @@ pub fn run() {
             xdf::parse_xdf_definitions, xdf::extract_table_from_bin, xdf::patch_table_into_bin, xdf::table_delta_cmd,
             a2l::parse_a2l_definitions, a2l::parse_a2l_summary,
             table_tools::table_math_cmd, table_tools::apply_stft_preview_cmd,
-            auto_load_tables_for_bin, get_tuning_advice, guided_flash_pipeline, compare_bin_to_ecu, verify_after_write,
+            auto_load_tables_for_bin, get_tuning_advice, guided_flash_pipeline, p01_full_backup, compare_bin_to_ecu, verify_after_write,
             unlock_level1, unlock_level2, bosch_uds_unlock,
             scripting::list_script_helpers, scripting::run_bench_script,
             v29_tools::identify_bin_cmd, v29_tools::compare_bins_cmd, v29_tools::map_from_log_cmd, v29_tools::export_workspace_cmd, v29_tools::import_workspace_cmd, v29_tools::patch_bin_bytes_cmd,

@@ -2064,6 +2064,7 @@ async function runGuidedFlashUi() {
       do_kernel: true,
       do_write: true,
       user_confirmed_risks: true,
+      backup_path: window.__p01BackupPath || null,
       accept_unverified_write: !!(document.getElementById('risk-unverified') && document.getElementById('risk-unverified').checked)
     };
     const raw = await invokeCmd('guided_flash_pipeline', { request_json: JSON.stringify(req) });

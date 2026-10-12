@@ -380,6 +380,7 @@
           <span class="toolbar-label">Verify</span>
           <button id="btn-compare-bin" class="btn" type="button">BIN vs ECU</button>
           <button id="btn-verify-write" class="btn" type="button">Verify write</button>
+          <button id="btn-p01-backup" class="btn" type="button">P01 full backup</button>
           <button id="btn-show-risk" class="btn btn-danger" type="button">Guided flash…</button>
         </div>
       </div>
@@ -394,6 +395,12 @@
         </div>
         <div class="progress-track"><div id="flash-bar" class="progress-fill"></div></div>
         <div>Progress: <span id="flash-progress">0%</span></div>
+        <div id="p01-backup-panel" class="panel" hidden>
+          <div>Backup: <span id="p01-backup-progress">0%</span> <span id="p01-backup-stage"></span></div>
+          <div>Path: <span id="p01-backup-path" class="mono">—</span></div>
+          <div>SHA-256: <span id="p01-backup-sha" class="mono">—</span></div>
+          <div>Quality: <span id="p01-backup-quality">—</span></div>
+        </div>
         <pre id="compare-result" class="mono-block" hidden></pre>
         <div id="risk-section" class="panel danger-panel" hidden>
           <label><input type="checkbox" id="risk-backup"> verified backup</label>
@@ -433,5 +440,6 @@
   <script src="v335.js"></script>
   <script src="v336.js"></script>
   <script src="v337.js"></script>
+  <script src="v340.js"></script>
 </body>
 </html>

@@ -37,6 +37,7 @@ mod private_bin_probe;
 mod transport;
 mod v312;
 mod voltage_watch;
+mod p01_backup;
 
 use tauri::Emitter;
 

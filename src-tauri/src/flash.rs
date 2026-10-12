@@ -34,6 +34,8 @@ pub struct GuidedFlashRequest {
     pub min_voltage_v: Option<f32>,
     pub prefer_high_speed: Option<bool>,
     #[serde(default = "default_false")] pub accept_unverified_write: bool,
+    /// P01: path of a saved p01_backup image (with .json sidecar) from p01_full_backup.
+    #[serde(default)] pub backup_path: Option<String>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RecoveryPrompt { pub prompt_type: String, pub message: String, pub steps: Vec<String>, pub kernel_to_upload: Option<String>, pub grounding_required: bool, pub reference_notes: String }
@@ -192,7 +194,24 @@ where F: FnMut(FlashProgress),
         result.error = Some("Backup required before write. Refusing flash without a full-image backup.".into());
         return Ok(result);
     }
-    {
+    if family.eq_ignore_ascii_case("P01_0411") {
+        let gate = request.backup_path.as_deref()
+            .ok_or_else(|| "No P01 full backup. Run the P01 full read-back backup first.".to_string())
+            .and_then(crate::p01_backup::load_verified_backup)
+            .and_then(|b| crate::p01_backup::check_write_os(&image, &b).map(|_| b));
+        match gate {
+            Ok(b) => {
+                result.logs.push(format!("Backup {} SHA-256 {} FullImage", b.path, b.sha256));
+                result.backup = Some(BackupResult { path: b.path, quality: BackupQuality::FullImage, bytes: b.bytes, crc32: None, notes: format!("sha256 {}", b.sha256) });
+                result.steps_completed.push("Full-image backup verified".into());
+            }
+            Err(e) => {
+                result.backup = Some(BackupResult { path: request.backup_path.clone().unwrap_or_default(), quality: BackupQuality::Failed, bytes: 0, crc32: None, notes: e.clone() });
+                result.error = Some(format!("Backup gate refused write: {}", e));
+                return Ok(result);
+            }
+        }
+    } else {
         let w = crate::live_verify::attempt_live_backup(port, &family, image.len(), &mut result.logs);
         // attempt_live_backup is windowed only today, so non-failed captures stay PartialDidOnly.
         // FullImage is reserved for a future kernel Mode 3C / full dump path.

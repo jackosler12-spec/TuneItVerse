@@ -72,3 +72,16 @@ Build your own. No bullshit prices.
 ## P01 CVN (CS2) + table offsets (2026-10-12)
 - CS2 per reference/P01-P59.xml: Checksum2Method=crc16, CS2Address empty (the value is not stored in the image; it is the CVN, CVN=2), CS2SwapBytes=true, CS2Blocks OS 0-3FFF+20000-@510 and each cal segment whole (covers the CS1 word). The XML doesn't name the CRC variant; CRC-16/ARC (0xA001 reflected, init 0) reproduces the stock CVN 717A for OS 12225074 BF in reference/stockcvn.xml, so that is what is used. Correction fixes CS1 first, then recomputes and reports CVNs. Reports compare against stockcvn.xml where the PN/segment is listed.
 - Table addresses: removed the +0x20000 "cal base" applied to non-TableSeek tables on images >=160KB (XDF tables on P01, ME7/EDC catalog tables were all read 0x20000 too high). All addresses are file offsets. Honda catalog addresses have no authoritative base in the repo and are refused (extract notes it, patch refuses).
+
+## P01 full read-back backup (OS 12225074)
+
+- `src-tauri/src/p01_backup.rs`: OS query 3C0A, chatter off 2800, seed/key 2701/2702 (algo 0x28),
+  kernel upload 34 + eight 36 blocks of `reference/Kernel-P01.bin` (last block sub 0x80 = execute),
+  kernel version 3D00, flash ID 3D01 (only Intel 28F400B accepted), 512 reads of 35 01 0400 <addr>,
+  block-sum checked, 3 retries, halt 20. Every frame cites `reference/PcmHammer_debugLog_20260504@180810.txt`.
+- FullImage only if all 524288 bytes read, OS ID @0x504 = PCM OS, segment table parses, all 8 CS1 pass.
+- Saved as `<app data>/backups/p01_<os>_<ms>.bin` + `.json` (SHA-256, quality). Guided flash for
+  P01_0411 needs `backup_path`; it re-hashes, re-assesses, and refuses a tuned image with a different OS.
+- UI: "P01 full backup" button on the flash view (v340.js) shows progress, path, hash, quality.
+- Unverified: STN STPX link (`StnLink`) is not bench-tested; only OS 12225074 / 28F400B are accepted.
+  Tests use a scripted fake PCM; `TIV_P01_BIN` runs the same against a private real image.
