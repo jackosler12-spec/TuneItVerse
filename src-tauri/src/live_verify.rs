@@ -39,12 +39,14 @@ pub fn live_address_plan(ecu_family: &str) -> Result<(u32, LiveProto), String> {
     if fam.is_empty() || fam == "UNKNOWN" {
         return Err("ECU family unknown. Identify the ECU/OS first; live verify/compare refused.".into());
     }
-    if fam.contains("ME7") { return Ok((0x0001_8000, LiveProto::BoschUdsKwp)); }
-    if fam.contains("EDC") || fam.contains("MED") || fam.contains("BOSCH") || fam.contains("DELPHI") || fam.contains("DCM") {
-        return Ok((0x0008_0000, LiveProto::BoschUdsKwp));
-    }
-    if fam.contains("P01") || fam.contains("P59") || fam.starts_with("GM") {
-        return Ok((0x0002_0000, LiveProto::GmVpw));
+    let proto = if fam.contains("EDC") || fam.contains("MED") || fam.contains("ME7") || fam.contains("BOSCH") || fam.contains("DELPHI") || fam.contains("DCM") {
+        Some(LiveProto::BoschUdsKwp)
+    } else if fam.contains("P01") || fam.contains("P59") || fam.starts_with("GM") {
+        Some(LiveProto::GmVpw)
+    } else { None };
+    if let Some(proto) = proto {
+        let addr = crate::ecu_database::flash_cal_address(ecu_family)?;
+        return Ok((addr, proto));
     }
     Err(format!("No live-read address plan for family {}. Refusing.", ecu_family))
 }
@@ -147,7 +149,8 @@ mod family_plan_tests {
     fn known_families_plan() {
         assert_eq!(live_address_plan("P01_0411").unwrap(), (0x20000, LiveProto::GmVpw));
         assert_eq!(live_address_plan("EDC16C41").unwrap(), (0x80000, LiveProto::BoschUdsKwp));
-        assert_eq!(live_address_plan("ME7_5").unwrap(), (0x18000, LiveProto::BoschUdsKwp));
+        // No DB address entry → refused (was hardcoded 0x18000).
+        assert!(live_address_plan("ME7_COMMON").is_err());
     }
     #[test]
     fn window_offset_never_falls_back_to_zero() {

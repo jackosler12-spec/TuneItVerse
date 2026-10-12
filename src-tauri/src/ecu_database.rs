@@ -49,6 +49,9 @@ pub struct EcuDbEntry {
     pub maps_and_xdf: MapsXdfInfo,
     pub communication_kernels: Option<Vec<String>>,
     pub notes: String,
+    /// Calibration download/verify start address (hex string, e.g. "0x00020000").
+    #[serde(default)]
+    pub flash_write_address: Option<String>,
 }
 
 const P01_JSON: &str = include_str!("../../reference/ecu_database/p01_0411.json");
@@ -92,6 +95,22 @@ pub fn get_ecu_by_os_id(os_id: &str) -> Option<EcuDbEntry> {
 
 pub fn list_supported_ecu_families() -> Vec<String> {
     load_ecu_database().into_iter().map(|e| e.ecu_family).collect()
+}
+
+/// Calibration flash/verify start address for `family` from the ECU database.
+/// Errors when the family is unknown or has no `flash_write_address` entry.
+pub fn flash_cal_address(family: &str) -> Result<u32, String> {
+    let e = get_ecu_by_family(family)
+        .ok_or_else(|| format!("ECU family {} not in database; no flash address. Refusing.", family))?;
+    let raw = e.flash_write_address
+        .ok_or_else(|| format!("ECU database has no flash_write_address for {}. Refusing.", e.ecu_family))?;
+    parse_hex_u32(&raw).ok_or_else(|| format!("Bad flash_write_address '{}' for {}", raw, e.ecu_family))
+}
+
+fn parse_hex_u32(s: &str) -> Option<u32> {
+    let t = s.trim();
+    let h = t.strip_prefix("0x").or_else(|| t.strip_prefix("0X"))?;
+    u32::from_str_radix(&h.replace('_', ""), 16).ok()
 }
 
 /// Live write is advertised only for families with a measured corrector + kernel path.
@@ -260,6 +279,26 @@ pub fn get_tables_for_bin_size(size: usize) -> Vec<TableDef> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn flash_addresses_match_previous_hardcoded_values() {
+        assert_eq!(flash_cal_address("P01_0411").unwrap(), 0x0002_0000);
+        assert_eq!(flash_cal_address("EDC16C41").unwrap(), 0x0008_0000);
+        assert_eq!(flash_cal_address("p01_0411").unwrap(), 0x0002_0000);
+    }
+
+    #[test]
+    fn flash_address_refused_without_db_entry() {
+        assert!(flash_cal_address("ME7_COMMON").unwrap_err().contains("no flash_write_address"));
+        assert!(flash_cal_address("EDC17_COMMON").is_err());
+        assert!(flash_cal_address("NOT_A_FAMILY").unwrap_err().contains("not in database"));
+    }
+
+    #[test]
+    fn hex_parse() {
+        assert_eq!(parse_hex_u32("0x0002_0000"), Some(0x20000));
+        assert_eq!(parse_hex_u32("20000"), None);
+    }
     #[test]
     fn catalog_includes_me7_and_delphi() {
         let fams = list_supported_ecu_families();

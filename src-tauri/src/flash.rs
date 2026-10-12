@@ -185,13 +185,17 @@ where F: FnMut(FlashProgress),
         result.error = Some(format!("No verified write path for family {}", family));
         return Ok(result);
     }
+    // Address comes from the ECU database before any unlock or erase.
+    let cal_addr = match crate::ecu_database::flash_cal_address(&family) {
+        Ok(a) => a,
+        Err(e) => { result.error = Some(e); return Ok(result); }
+    };
     if bosch_uds {
         let lvl = crate::security::BoschSecurityLevel::from_str("programming");
         match crate::security::bosch_uds_unlock_full(port, &family, lvl) {
             Ok(msg) => result.logs.push(format!("Bosch UDS unlock: {}", msg)),
             Err(e) => { result.error = Some(format!("Bosch UDS unlock failed: {}", e)); return Ok(result); }
         }
-        let cal_addr: u32 = if fam.contains("ME7") { 0x0001_8000 } else { 0x0008_0000 };
         result.logs.push(format!("UDS 0x34/36/37 download at 0x{:06X} ({} bytes)", cal_addr, image.len()));
         result.logs.push("Mid-write supply monitor: J2534 Vbatt only. Serial PID 0x42 is not sent during the transfer.".into());
         let write = crate::uds::download_image(
@@ -227,7 +231,6 @@ where F: FnMut(FlashProgress),
         });
     } else {
         let _ = unlock_level2(port);
-        let cal_addr: u32 = 0x0002_0000;
         if let Err(e) = send_frame(port, &build_mode34_request(cal_addr, image.len() as u32)) { result.error = Some(e); return Ok(result); }
         result.logs.push("Mid-write supply monitor: J2534 Vbatt only. Serial PID 0x42 is not sent during the transfer.".into());
         let timing = AdaptiveTiming::for_vpw(); timing.sleep();

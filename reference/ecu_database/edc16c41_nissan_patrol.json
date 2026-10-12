@@ -1,8 +1,15 @@
 {
   "ecu_family": "EDC16C41",
   "display_name": "Bosch EDC16C41 Nissan Patrol GU V Wagon (23710-VS43B / ZD30CRD variants)",
-  "part_numbers_or_os_ids": ["23710-VS43B", "392203", "VS43D and similar calibrations"],
-  "vehicles": ["Nissan Patrol GU V Wagon 3.0 TDI / ZD30CRD", "Nissan Patrol diesel ~2010 era"],
+  "part_numbers_or_os_ids": [
+    "23710-VS43B",
+    "392203",
+    "VS43D and similar calibrations"
+  ],
+  "vehicles": [
+    "Nissan Patrol GU V Wagon 3.0 TDI / ZD30CRD",
+    "Nissan Patrol diesel ~2010 era"
+  ],
   "hardware": "Bosch EDC16C41 diesel ECU",
   "protocol": "CAN @ 500 kbps + KWP2000 / UDS (ISO 15765)",
   "bin_size_bytes": 2097152,
@@ -13,13 +20,22 @@
   "checksum": {
     "type": "bosch_edc16_multipoint_crc32 (primary) + additive16 fallback",
     "description": "Primary: 7 multipoint CRC32 regions (IEEE 0xEDB88320 poly, init/xor 0xFFFFFFFF) aligned to diesel map blocks. CS treated as final 4 bytes of each region. Correction forces region CRC to 0. Secondary: additive 16-bit sum-to-zero retained. Matches WinOLS EDC16 plugin concept (multipoint + compatibility test CS). Exact poly/block tables still proprietary — verify against WinOLS-corrected bin for production use.",
-    "reference_files": ["NissanPatrol_2010_EDC16C41_392203.bin", "EDC16C41 working flash", "EDC16C41 working file complete (cal region)", "WinOLS (Nissan (nissan egr off+fault delete) - 392203).bin"],
+    "reference_files": [
+      "NissanPatrol_2010_EDC16C41_392203.bin",
+      "EDC16C41 working flash",
+      "EDC16C41 working file complete (cal region)",
+      "WinOLS (Nissan (nissan egr off+fault delete) - 392203).bin"
+    ],
     "notes": "WinOLS EDC16 plugin features: auto-search, multipoint CRC correction, compatibility-test CS (can patch correction value at map end instead of full recompute), manufacturer keys (Nissan Patrol supported since ~2007), EEPROM block handling. To lock exact match: diff original vs WinOLS-corrected pair and update CRC32_REGIONS / target."
   },
   "security_access": {
     "type": "UDS Service 0x27 seed-key",
     "reference": "Code for Device.md + planned edc16_seedkey.rs (similar to security.rs for P01)",
-    "levels": ["Standard diagnostic access", "Extended for calibration read/write", "Flash programming access"]
+    "levels": [
+      "Standard diagnostic access",
+      "Extended for calibration read/write",
+      "Flash programming access"
+    ]
   },
   "maps_and_xdf": {
     "has_xdf": false,
@@ -37,5 +53,7 @@
       "start_of_injection": "0xCC000"
     }
   },
-  "notes": "Matches and expands the REFERENCE_INDEX.md entry. 23710-VS43B is the specific hardware/part for GU V Wagon variant. DB entry enables auto-identification. Rust support added: CAN (ELM/ISO-TP), KWP2000, Nissan Consult II for live data + commands. Use protocol selector in UI. **Multipoint CRC32 now primary** for EDC16C41. v1.2.0 expanded maps for industry-leading coverage."
+  "notes": "Matches and expands the REFERENCE_INDEX.md entry. 23710-VS43B is the specific hardware/part for GU V Wagon variant. DB entry enables auto-identification. Rust support added: CAN (ELM/ISO-TP), KWP2000, Nissan Consult II for live data + commands. Use protocol selector in UI. **Multipoint CRC32 now primary** for EDC16C41. v1.2.0 expanded maps for industry-leading coverage.",
+  "flash_write_address": "0x00080000",
+  "flash_write_address_note": "Calibration download start address used by guided flash and live verify. Carried over from the previous hardcoded flash.rs value; not bench-verified."
 }
