@@ -51,3 +51,8 @@ Build your own. No bullshit prices.
 - Frontend never defaults a family; unknown family shows an explicit error. Backend compare/verify refuse a family that contradicts the BIN.
 - Logging screen gets a Demo mode checkbox (disabled while logging).
 - KNOWN BLOCKER: src/index.html on main is a 14-line placeholder (no markup, no script tags) since the history-rewrite commit 21e4535. The UI does not load main.js at all until the real index.html is restored.
+
+## UI restored (2026-10-12)
+- src/index.html restored from Jack's v3.17.0 copy, version strings set to 3.40.0, and script tags added for the overlays that exist (v312, v333–v337). main.js and styles.css kept (current files are newer supersets of the supplied copies).
+- Headless Chromium load test with a mocked Tauri invoke: 0 console/page errors; all 7 views render; logging Demo toggle + badge, seed/key and unlock controls present.
+- `#dtc-lookup` (used by main.js explainDtcUi) has no element in the restored HTML; DTC explain lookup has no input yet.
