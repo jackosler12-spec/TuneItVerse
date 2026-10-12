@@ -18,6 +18,9 @@ pub struct LogChannel {
 pub struct LogSample {
     pub timestamp_ms: u64,
     pub values: HashMap<String, f64>,
+    /// True only for simulated samples from explicit Demo mode. Never set on the live path.
+    #[serde(default)]
+    pub demo: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -29,6 +32,8 @@ pub struct LogStatus {
     pub session_name: String,
     pub started_at_ms: Option<u64>,
     pub last_sample: Option<LogSample>,
+    /// Demo mode: samples are simulated, not read from an ECU.
+    pub demo: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -49,6 +54,7 @@ struct LogSession {
     started_at: Option<Instant>,
     started_at_ms: Option<u64>,
     max_samples: usize,
+    demo: bool,
 }
 
 static LOG: Mutex<LogSession> = Mutex::new(LogSession {
@@ -60,6 +66,7 @@ static LOG: Mutex<LogSession> = Mutex::new(LogSession {
     started_at: None,
     started_at_ms: None,
     max_samples: 50_000,
+    demo: false,
 });
 
 fn now_ms() -> u64 {
@@ -154,24 +161,71 @@ pub fn apply_template(template_id: &str) -> Result<LogStatus, String> {
     Ok(status_from(&g))
 }
 
-pub fn capture_sample(live_overrides: Option<HashMap<String, f64>>) -> Result<LogSample, String> {
+pub const NO_LIVE_CONNECTION: &str = "No live connection: connect an adapter to log real PIDs, or enable Demo mode (simulated data).";
+
+/// Real-path capture. `live` is the PID map read over the active connection
+/// (`None` = no connection). Never invents values.
+pub fn capture_sample(live: Option<HashMap<String, f64>>) -> Result<LogSample, String> {
     ensure_initialized();
     let mut g = LOG.lock().map_err(|e| e.to_string())?;
     if !g.running { return Err("Logging not running".into()); }
+    if g.demo { return Err("Demo mode is on. Turn it off to log from the ECU.".into()); }
+    let live = live.ok_or_else(|| NO_LIVE_CONNECTION.to_string())?;
     let mut values = HashMap::new();
-    if let Some(over) = live_overrides {
-        for (k, v) in over {
-            if g.channels.iter().any(|c| c.enabled && c.id == k) {
-                values.insert(k, v);
-            }
+    for (k, v) in live {
+        if g.channels.iter().any(|c| c.enabled && c.id == k) {
+            values.insert(k, v);
         }
     }
-    let sample = LogSample { timestamp_ms: now_ms(), values };
-    g.samples.push(sample.clone());
+    if values.is_empty() {
+        return Err("Connected, but no enabled PID answered. Nothing recorded.".into());
+    }
+    let sample = LogSample { timestamp_ms: now_ms(), values, demo: false };
+    push_sample(&mut g, sample.clone());
+    Ok(sample)
+}
+
+fn push_sample(g: &mut LogSession, sample: LogSample) {
+    g.samples.push(sample);
     if g.samples.len() > g.max_samples {
         let overflow = g.samples.len() - g.max_samples;
         g.samples.drain(0..overflow);
     }
+}
+
+/// Toggle explicit Demo mode. Not allowed mid-session; clears samples so demo
+/// and real data never mix.
+pub fn set_demo_mode(enabled: bool) -> Result<LogStatus, String> {
+    ensure_initialized();
+    let mut g = LOG.lock().map_err(|e| e.to_string())?;
+    if g.running { return Err("Stop logging before changing Demo mode.".into()); }
+    if g.demo != enabled { g.samples.clear(); }
+    g.demo = enabled;
+    Ok(status_from(&g))
+}
+
+/// Simulated sample. Only works in Demo mode; every sample is flagged `demo: true`.
+pub fn capture_demo_sample() -> Result<LogSample, String> {
+    ensure_initialized();
+    let mut g = LOG.lock().map_err(|e| e.to_string())?;
+    if !g.demo { return Err("Demo mode is off. Simulated data is only available in Demo mode.".into()); }
+    if !g.running { return Err("Logging not running".into()); }
+    let t = g.samples.len() as f64 * 0.1;
+    let mut values = HashMap::new();
+    for ch in g.channels.iter().filter(|c| c.enabled) {
+        let v = match ch.id.as_str() {
+            "rpm" => 2000.0 + 800.0 * t.sin(),
+            "map" => 60.0 + 20.0 * (t * 0.7).sin(),
+            "ect" => 88.0,
+            "iat" => 30.0,
+            "tps" => 20.0 + 15.0 * (t * 0.5).sin().abs(),
+            "batt" => 13.8,
+            _ => 0.0,
+        };
+        values.insert(ch.id.clone(), (v * 10.0).round() / 10.0);
+    }
+    let sample = LogSample { timestamp_ms: now_ms(), values, demo: true };
+    push_sample(&mut g, sample.clone());
     Ok(sample)
 }
 
@@ -192,7 +246,11 @@ pub fn export_csv() -> Result<String, String> {
     let g = LOG.lock().map_err(|e| e.to_string())?;
     if g.samples.is_empty() { return Err("No samples to export".into()); }
     let enabled: Vec<&LogChannel> = g.channels.iter().filter(|c| c.enabled).collect();
-    let mut csv = String::from("timestamp_ms");
+    let mut csv = String::new();
+    if g.samples.iter().any(|s| s.demo) {
+        csv.push_str("# DEMO DATA - simulated, not read from an ECU\n");
+    }
+    csv.push_str("timestamp_ms");
     for ch in &enabled { csv.push(','); csv.push_str(&ch.id); }
     csv.push('\n');
     for s in &g.samples {
@@ -208,7 +266,7 @@ pub fn export_csv() -> Result<String, String> {
 
 pub fn import_csv(csv: &str) -> Result<LogStatus, String> {
     ensure_initialized();
-    let mut lines = csv.lines().filter(|l| !l.trim().is_empty());
+    let mut lines = csv.lines().filter(|l| !l.trim().is_empty() && !l.trim_start().starts_with('#'));
     let header = lines.next().ok_or_else(|| "CSV is empty".to_string())?;
     let cols: Vec<String> = header.split(',').map(|s| s.trim().trim_matches('"').to_ascii_lowercase()).collect();
     let ts_idx = cols.iter().position(|c| c == "timestamp_ms" || c == "timestamp" || c == "time_ms");
@@ -228,7 +286,7 @@ pub fn import_csv(csv: &str) -> Result<LogStatus, String> {
         }
         if values.is_empty() { continue; }
         let timestamp_ms = ts_idx.and_then(|i| cells.get(i)).and_then(|s| s.parse::<u64>().ok()).unwrap_or(now_ms() + row_i as u64);
-        imported.push(LogSample { timestamp_ms, values });
+        imported.push(LogSample { timestamp_ms, values, demo: false });
     }
     if imported.is_empty() { return Err("No numeric rows found in CSV".into()); }
     let mut g = LOG.lock().map_err(|e| e.to_string())?;
@@ -255,6 +313,7 @@ fn status_from(g: &LogSession) -> LogStatus {
         session_name: g.session_name.clone(),
         started_at_ms: g.started_at_ms,
         last_sample: g.samples.last().cloned(),
+        demo: g.demo,
     }
 }
 
@@ -274,6 +333,7 @@ mod tests {
             started_at: None,
             started_at_ms: None,
             max_samples: 50_000,
+            demo: false,
         };
         lock
     }
@@ -293,12 +353,47 @@ mod tests {
         assert_eq!(st.sample_count, 2);
     }
     #[test]
-    fn capture_without_live_stores_empty_values() {
+    fn capture_without_live_connection_errors() {
         let _lock = reset_for_tests();
         start_session(Some(10.0), Some("honest".into())).unwrap();
-        let s = capture_sample(None).unwrap();
-        assert!(s.values.is_empty(), "must not invent RPM/MAP: {:?}", s.values);
+        let e = capture_sample(None).unwrap_err();
+        assert!(e.contains("No live connection"));
+        assert_eq!(get_samples(None).len(), 0, "nothing recorded");
         let _ = stop_session();
+    }
+    #[test]
+    fn capture_with_no_answers_errors() {
+        let _lock = reset_for_tests();
+        start_session(Some(10.0), None).unwrap();
+        assert!(capture_sample(Some(HashMap::new())).is_err());
+        assert_eq!(get_samples(None).len(), 0);
+        let _ = stop_session();
+    }
+    #[test]
+    fn demo_only_when_enabled_and_flagged() {
+        let _lock = reset_for_tests();
+        start_session(Some(10.0), None).unwrap();
+        assert!(capture_demo_sample().is_err(), "demo off must refuse");
+        assert!(set_demo_mode(true).is_err(), "no toggle mid-session");
+        let _ = stop_session();
+        assert!(set_demo_mode(true).unwrap().demo);
+        start_session(Some(10.0), None).unwrap();
+        let s = capture_demo_sample().unwrap();
+        assert!(s.demo);
+        let mut live = HashMap::new(); live.insert("rpm".into(), 900.0);
+        assert!(capture_sample(Some(live)).is_err(), "real path blocked in demo");
+        let _ = stop_session();
+        assert!(export_csv().unwrap().starts_with("# DEMO DATA"));
+        assert!(!set_demo_mode(false).unwrap().demo);
+    }
+    #[test]
+    fn real_samples_not_demo() {
+        let _lock = reset_for_tests();
+        start_session(Some(10.0), None).unwrap();
+        let mut live = HashMap::new(); live.insert("rpm".into(), 900.0);
+        assert!(!capture_sample(Some(live)).unwrap().demo);
+        let _ = stop_session();
+        assert!(!export_csv().unwrap().contains("DEMO"));
     }
     #[test]
     fn capture_keeps_only_live_enabled_keys() {

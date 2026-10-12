@@ -87,6 +87,9 @@ fn read_ecu_data() -> Result<String, String> {
 #[tauri::command]
 fn log_capture_sample() -> Result<String, String> {
     use crate::pid_decode::*;
+    if logging::get_status().demo {
+        return Ok(serde_json::to_string(&logging::capture_demo_sample()?).unwrap_or_else(|_| "{}".into()));
+    }
     let live_overrides = with_port(|port| {
         let mut map: HashMap<String, f64> = HashMap::new();
         if let Some(d)=pull_mode01(port,0x0C){ if let Some(v)=decode_engine_rpm(&d){ map.insert("rpm".into(), v as f64);} }
@@ -110,6 +113,7 @@ fn log_capture_sample() -> Result<String, String> {
     }).ok();
     Ok(serde_json::to_string(&logging::capture_sample(live_overrides)?).unwrap_or_else(|_| "{}".into()))
 }
+#[tauri::command] fn log_set_demo_mode(enabled: bool) -> Result<String, String> { Ok(serde_json::to_string(&logging::set_demo_mode(enabled)?).unwrap_or_else(|_| "{}".into())) }
 #[tauri::command] fn log_get_samples(limit: Option<usize>) -> Result<String, String> { Ok(serde_json::to_string(&logging::get_samples(limit)).unwrap_or_else(|_| "[]".into())) }
 #[tauri::command] fn log_clear() -> Result<String, String> { Ok(serde_json::to_string(&logging::clear_samples()?).unwrap_or_else(|_| "{}".into())) }
 #[tauri::command] fn log_export_csv() -> Result<String, String> { logging::export_csv() }
@@ -127,7 +131,7 @@ fn compute_seed_key(seed_hex: String, family: Option<String>, level: Option<Stri
         seed.push(u8::from_str_radix(pair, 16).map_err(|e| format!("bad hex: {}", e))?);
         i += 2;
     }
-    let fam = family.unwrap_or_else(|| "P01_0411".into());
+    let fam = family.filter(|f| !f.trim().is_empty()).ok_or_else(|| "ECU family required for seed/key (no P01 default).".to_string())?;
     let fam_up = fam.to_ascii_uppercase();
     let lvl = level.unwrap_or_else(|| "1".into());
 

@@ -122,7 +122,7 @@ pub fn run() {
             list_serial_ports, get_connection_health, connect_ecu, disconnect_ecu, auto_detect_protocol,
             list_supported_protocols, list_supported_ecus, list_ecu_catalog, get_ecu_info, read_properties, read_ecu_data,
             get_logging_templates, log_get_status, log_start, log_stop, log_set_channels, log_apply_template,
-            log_capture_sample, log_get_samples, log_clear, log_export_csv, log_import_csv,
+            log_capture_sample, log_set_demo_mode, log_get_samples, log_clear, log_export_csv, log_import_csv,
             compute_seed_key, gm_key_table_info, compare_p01_gm_seed, read_dtcs_cmd, read_freeze_frame_cmd, clear_dtcs_cmd, dtc::explain_dtcs_cmd,
             validate_bin_checksums_summary_cmd, validate_checksums_cmd, correct_bin_checksums,
             xdf::parse_xdf_definitions, xdf::extract_table_from_bin, xdf::patch_table_into_bin, xdf::table_delta_cmd,

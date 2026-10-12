@@ -232,7 +232,7 @@ mod tests {
         values.insert("rpm".into(), rpm);
         values.insert("map".into(), map);
         values.insert("stft".into(), stft);
-        LogSample { timestamp_ms: ms, values }
+        LogSample { timestamp_ms: ms, values, demo: false }
     }
 
     #[test]

@@ -839,6 +839,7 @@ async function refreshLogStatus() {
     const meta = document.getElementById('log-session-meta');
     if (meta) meta.textContent = `Session: ${st.session_name || '—'} | Rate: ${st.rate_hz} Hz | Enabled: ${(st.channels || []).filter((c) => c.enabled).length}`;
     renderChannelList(st.channels || []);
+    renderDemoBadge(!!st.demo);
     if (st.last_sample) updateLogKpis(st.last_sample);
     return st;
   } catch (e) {
@@ -921,6 +922,7 @@ async function logPollTick() {
   try {
     const raw = await invokeCmd('log_capture_sample');
     const sample = parseMaybe(raw);
+    if (sample && sample.demo) renderDemoBadge(true);
     updateLogKpis(sample);
     appendLogRow(sample);
     await refreshLogStatus();
@@ -930,8 +932,33 @@ async function logPollTick() {
   }
 }
 
+// Demo mode: simulated samples only. Always shows a visible DEMO badge.
+let logDemoMode = false;
+function renderDemoBadge(on) {
+  logDemoMode = on;
+  let badge = document.getElementById('log-demo-badge');
+  if (!badge) {
+    badge = document.createElement('div');
+    badge.id = 'log-demo-badge';
+    badge.textContent = 'DEMO MODE: simulated data, not from an ECU';
+    badge.style.cssText = 'position:fixed;top:8px;right:8px;z-index:9999;background:#c62828;color:#fff;font-weight:700;padding:6px 10px;border-radius:4px;';
+    document.body.appendChild(badge);
+  }
+  badge.style.display = on ? 'block' : 'none';
+}
+async function setLogDemoMode(enabled) {
+  try {
+    const st = parseMaybe(await invokeCmd('log_set_demo_mode', { enabled: !!enabled }));
+    renderDemoBadge(!!st.demo);
+    await refreshLogStatus();
+  } catch (e) {
+    alert('Demo mode: ' + e);
+  }
+}
+window.setLogDemoMode = setLogDemoMode;
+
 async function startLogging() {
-  if (!(await requireConnected('live logging'))) return;
+  if (!logDemoMode && !(await requireConnected('live logging'))) return;
   const rate = parseFloat(document.getElementById('log-rate')?.value || '10');
   try {
     await invokeCmd('log_start', { rate_hz: rate, session_name: 'session_' + Date.now() });
@@ -2117,7 +2144,7 @@ function setupAll() {
   pollHealth();
   if (healthTimer) clearInterval(healthTimer);
   healthTimer = setInterval(pollHealth, 2500);
-  console.log('TuneItVerse UI v3.38.0');
+  console.log('TuneItVerse UI v3.40.0');
 }
 
 setupNav();
