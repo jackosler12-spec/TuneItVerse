@@ -210,6 +210,7 @@ fn tables_from_addrs(entry: &EcuDbEntry, addrs: &serde_json::Value, tables: &mut
                 category: Some((*cat).into()),
                 row_major: true,
                 msb: true,
+                family: Some(fam.to_string()),
                 ..Default::default()
             });
         }

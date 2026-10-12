@@ -68,3 +68,7 @@ Build your own. No bullshit prices.
 - Identify: P01 stores its OS ID as a binary u32 at 0x504, so the ASCII search missed it and the 512KB Honda size collision left family unresolved. The binary ID is now used when the OS checksum validates.
 - APP_VERSION now comes from Cargo.toml.
 - Optional real-image tests: set TIV_P01_BIN=/path/to/read.bin (skipped when unset). Never commit the image.
+
+## P01 CVN (CS2) + table offsets (2026-10-12)
+- CS2 per reference/P01-P59.xml: Checksum2Method=crc16, CS2Address empty (the value is not stored in the image; it is the CVN, CVN=2), CS2SwapBytes=true, CS2Blocks OS 0-3FFF+20000-@510 and each cal segment whole (covers the CS1 word). The XML doesn't name the CRC variant; CRC-16/ARC (0xA001 reflected, init 0) reproduces the stock CVN 717A for OS 12225074 BF in reference/stockcvn.xml, so that is what is used. Correction fixes CS1 first, then recomputes and reports CVNs. Reports compare against stockcvn.xml where the PN/segment is listed.
+- Table addresses: removed the +0x20000 "cal base" applied to non-TableSeek tables on images >=160KB (XDF tables on P01, ME7/EDC catalog tables were all read 0x20000 too high). All addresses are file offsets. Honda catalog addresses have no authoritative base in the repo and are refused (extract notes it, patch refuses).

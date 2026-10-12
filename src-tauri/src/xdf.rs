@@ -44,6 +44,9 @@ pub struct TableDef {
     pub extra_name: Option<String>,
     #[serde(default)]
     pub extra_description: Option<String>,
+    /// ECU family the address belongs to (catalog tables). Drives offset rules.
+    #[serde(default)]
+    pub family: Option<String>,
 }
 
 /// Lightweight result for a single table's physical values (already math-applied).
@@ -204,11 +207,6 @@ fn sanitize_id(name: &str, i: usize) -> String {
     s
 }
 
-/// Compute the calibration base offset for a loaded image (matches lib.rs / checksum.rs).
-pub fn cal_base_for_bytes(len: usize) -> usize {
-    if len >= 0x28000 { 0x20000 } else { 0 }
-}
-
 pub fn cell_width(data_type: &str) -> usize {
     let u = data_type.to_ascii_uppercase();
     if u.contains("32") || u.contains("LONG") || u.contains("DWORD") { 4 }
@@ -263,16 +261,17 @@ fn write_cell(bin: &mut [u8], off: usize, width: usize, raw: f64, msb: bool) {
 /// Extract physical values for one table from the BIN bytes using *exact* P01 addressing.
 /// This is the core of "real byte extraction from loaded BINs using exact P01 offsets".
 pub fn extract_table(bin: &[u8], def: &TableDef) -> ExtractedTable {
-    let addr = parse_addr(&def.addr);
-    let off = table_file_offset(bin.len(), addr, def.file_offset);
     let rows = def.rows.max(1);
     let cols = def.cols.max(1);
     let width = cell_width(&def.data_type);
     let signed = is_signed_type(&def.data_type);
-    let need = off + rows * cols * width;
-
     let mut values: Vec<Vec<f64>> = vec![vec![0.0; cols]; rows];
     let mut note = None;
+    let off = match resolve_table_offset(def, bin.len()) {
+        Ok(o) => o,
+        Err(e) => return ExtractedTable { id: def.id.clone(), values, axes_x: vec![], axes_y: vec![], note: Some(e) },
+    };
+    let need = off + rows * cols * width;
 
     if need > bin.len() {
         note = Some("Address out of range for this BIN (full vs cal image?)".into());
@@ -300,9 +299,10 @@ pub fn extract_table(bin: &[u8], def: &TableDef) -> ExtractedTable {
 /// Patch new physical values back into a copy of the BIN at the exact address.
 /// Returns the patched bytes (caller can then correct checksums).
 pub fn patch_table(mut bin: Vec<u8>, def: &TableDef, new_values: &[Vec<f64>]) -> Vec<u8> {
-    let addr = parse_addr(&def.addr);
-    let mut off = table_file_offset(bin.len(), addr, def.file_offset);
+    let Ok(mut off) = resolve_table_offset(def, bin.len()) else { return bin };
     let width = cell_width(&def.data_type);
+    let cells: usize = new_values.iter().map(|r| r.len()).sum();
+    if off + cells * width > bin.len() { return bin; }
 
     for row in new_values {
         for phys in row {
@@ -319,17 +319,27 @@ pub fn parse_addr(a: &str) -> usize {
     usize::from_str_radix(t, 16).unwrap_or(0)
 }
 
-/// TableSeek addresses are file offsets. Legacy catalog tables are cal-relative (P01 +0x20000).
-pub fn table_file_offset(bin_len: usize, addr: usize, file_offset: bool) -> usize {
-    if file_offset {
-        return addr;
+/// File offset for a table address. All supported definitions (TableSeek, XDF,
+/// P01 and catalog entries) use file offsets. There is no "+0x20000" base: for
+/// P01 0x20000 is the start of the OS segment (reference/P01-P59.xml), not cal.
+/// Honda catalog addresses are flagged "starting hints only" in
+/// reference/ecu_database/honda_keihin.json with no base defined anywhere in the
+/// repo, so they are refused rather than guessed.
+pub fn resolve_table_offset(def: &TableDef, bin_len: usize) -> Result<usize, String> {
+    let fam = def.family.as_deref().unwrap_or("").to_ascii_uppercase();
+    if fam.contains("HONDA") || fam.contains("KEIHIN") {
+        return Err(format!("Table '{}': Honda map addresses are unverified hints with no authoritative offset base. Refused.", def.name));
     }
-    let base = cal_base_for_bytes(bin_len);
-    if base.saturating_add(addr) < bin_len {
-        base + addr
-    } else {
-        addr
+    let addr = parse_addr_strict(&def.addr).ok_or_else(|| format!("Table '{}': bad address '{}'", def.name, def.addr))?;
+    if addr >= bin_len {
+        return Err(format!("Table '{}': address 0x{:X} beyond {}-byte BIN", def.name, addr, bin_len));
     }
+    Ok(addr)
+}
+
+fn parse_addr_strict(a: &str) -> Option<usize> {
+    let t = a.trim().trim_start_matches("0x").trim_start_matches("0X");
+    usize::from_str_radix(t, 16).ok()
 }
 
 fn apply_math(raw: f64, expr: &str) -> f64 {
@@ -390,7 +400,7 @@ pub fn extract_table_from_bin(bin_bytes: Vec<u8>, table: TableDef) -> Result<Ext
 #[tauri::command]
 pub fn patch_table_into_bin(req: PatchRequest) -> Result<PatchResult, String> {
     let addr = parse_addr(&req.table.addr);
-    let off = table_file_offset(req.bin_bytes.len(), addr, req.table.file_offset);
+    let off = resolve_table_offset(&req.table, req.bin_bytes.len()).map_err(|e| format!("Refuse patch: {}", e))?;
     let esz = cell_width(&req.table.data_type);
     let rows = req.new_values.len();
     let cols = req.new_values.first().map(|r| r.len()).unwrap_or(0);
@@ -496,5 +506,51 @@ mod delta_tests {
         let r = table_delta(&stock, &tuned, &table).unwrap();
         assert_eq!(r.changed, 1);
         assert!((r.samples[0].delta - 5.0).abs() < 1e-6);
+    }
+}
+
+#[cfg(test)]
+mod offset_tests {
+    use super::*;
+    fn def(addr: &str, fam: Option<&str>) -> TableDef {
+        TableDef { id: "t".into(), name: "t".into(), rows: 1, cols: 1, addr: addr.into(), data_type: "UBYTE".into(), math: "X".into(), msb: true, family: fam.map(Into::into), ..Default::default() }
+    }
+    #[test]
+    fn p01_and_xdf_addresses_are_file_offsets_no_0x20000_base() {
+        let mut bin = vec![0u8; 0x80000];
+        bin[0x8021] = 24; bin[0x28021] = 99;
+        for f in [None, Some("P01_0411")] {
+            let d = def("0x8021", f);
+            assert_eq!(resolve_table_offset(&d, bin.len()).unwrap(), 0x8021);
+            assert_eq!(extract_table(&bin, &d).values[0][0], 24.0);
+        }
+        // 1MB / 2MB catalog tables are file offsets too (was +0x20000).
+        assert_eq!(resolve_table_offset(&def("0x1C000", Some("ME7_COMMON")), 0x100000).unwrap(), 0x1C000);
+        assert_eq!(resolve_table_offset(&def("0x80000", Some("EDC16C41")), 0x200000).unwrap(), 0x80000);
+    }
+    #[test]
+    fn honda_catalog_addresses_refused() {
+        let bin = vec![0u8; 0x80000];
+        let d = def("0x8000", Some("HONDA_KEIHIN"));
+        assert!(resolve_table_offset(&d, bin.len()).unwrap_err().contains("Honda"));
+        assert!(extract_table(&bin, &d).note.unwrap().contains("Honda"));
+        assert_eq!(patch_table(bin.clone(), &d, &[vec![5.0]]), bin, "patch must not write");
+    }
+    #[test]
+    fn out_of_range_and_bad_addr_refused() {
+        assert!(resolve_table_offset(&def("0x90000", None), 0x80000).is_err());
+        assert!(resolve_table_offset(&def("zz", None), 0x80000).is_err());
+        let bin = vec![0u8; 16];
+        assert_eq!(patch_table(bin.clone(), &def("0xF", None), &[vec![1.0, 2.0]]), bin, "overrun refused");
+    }
+    #[test]
+    fn honda_catalog_tables_tagged_and_refused() {
+        let t = crate::ecu_database::get_tables_for_bin_size(0x80000);
+        assert!(!t.is_empty());
+        let bin = vec![0u8; 0x80000];
+        for d in &t {
+            assert_eq!(d.family.as_deref(), Some("HONDA_KEIHIN"));
+            assert!(extract_table(&bin, d).note.unwrap_or_default().contains("Honda"));
+        }
     }
 }

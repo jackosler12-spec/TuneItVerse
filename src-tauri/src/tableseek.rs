@@ -373,6 +373,7 @@ fn seek_to_def(bin: &[u8], t: &CompiledSeek, index: &[Vec<usize>]) -> Option<Tab
         file_offset: true,
         extra_name: if t.extra_name.trim().is_empty() { None } else { Some(t.extra_name.clone()) },
         extra_description: if t.extra_description.trim().is_empty() { None } else { Some(t.extra_description.clone()) },
+        family: Some("P01_0411".into()),
     })
 }
 
