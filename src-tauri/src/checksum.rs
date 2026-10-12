@@ -25,6 +25,21 @@ pub struct ChecksumReport {
     pub all_valid: bool,
     pub ecu_family: String,
     pub method_used: String,
+    /// GM CVNs (CS2, CRC16) per segment. Computed after CS1; not stored in the image.
+    #[serde(default)]
+    pub cvns: Vec<SegmentCvn>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct SegmentCvn {
+    pub name: String,
+    pub segment_nr: u8,
+    pub part_number: u32,
+    pub version: String,
+    pub cvn: String,
+    /// Stock CVN from reference/stockcvn.xml for (PN, segment), if listed.
+    pub stock_cvn: Option<String>,
+    pub matches_stock: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -228,10 +243,72 @@ pub fn p01_binary_os_id(data: &[u8]) -> Option<u32> {
     read_u32_be(data, 0x504)
 }
 
+// ── GM CS2 / CVN ───────────────────────────────────────────────────────────
+// reference/P01-P59.xml: Checksum2Method=crc16, CS2Address empty (not stored),
+// CS2SwapBytes=true, CVN=2 (CS2 is the CVN). CS2Blocks: OS 0-3FFF,20000-@510;
+// each cal segment @514.. (whole segment incl. its CS1 word). So CS1 must be
+// final before CS2 is computed. The CRC variant is not named in the XML; it was
+// identified as CRC-16/ARC (poly 0x8005 reflected = 0xA001, init 0, xorout 0)
+// because it reproduces the stock CVN 717A for OS 12225074 ver BF listed in
+// reference/stockcvn.xml (line ~68300).
+
+pub fn crc16_arc(chunks: &[&[u8]]) -> u16 {
+    let mut c: u16 = 0;
+    for ch in chunks {
+        for &b in *ch {
+            c ^= b as u16;
+            for _ in 0..8 { c = if c & 1 != 0 { (c >> 1) ^ 0xA001 } else { c >> 1 }; }
+        }
+    }
+    c
+}
+
+fn stock_cvns() -> &'static std::collections::HashMap<(u32, u8), String> {
+    static M: std::sync::OnceLock<std::collections::HashMap<(u32, u8), String>> = std::sync::OnceLock::new();
+    M.get_or_init(|| {
+        let xml = include_str!("../../reference/stockcvn.xml");
+        let mut m = std::collections::HashMap::new();
+        for rec in xml.split("<CVN>").skip(1) {
+            let tag = |t: &str| rec.split(&format!("<{}>", t)).nth(1).and_then(|r| r.split(&format!("</{}>", t)).next()).map(|v| v.trim().to_string());
+            if let (Some(pn), Some(nr), Some(cvn)) = (tag("PN"), tag("SegmentNr"), tag("cvn")) {
+                if let (Ok(pn), Ok(nr)) = (pn.parse::<u32>(), nr.parse::<u8>()) {
+                    m.entry((pn, nr)).or_insert(cvn.to_ascii_uppercase());
+                }
+            }
+        }
+        m
+    })
+}
+
+/// CVN (CS2) for every P01 segment, with stock comparison where known.
+pub fn p01_cvns(data: &[u8]) -> Result<Vec<SegmentCvn>, String> {
+    let segs = p01_segments(data)?;
+    let mut out = vec![];
+    for (i, seg) in segs.iter().enumerate() {
+        let (crc, base) = if i == 0 {
+            let end = seg.blocks[2].1;
+            (crc16_arc(&[&data[0..0x4000], &data[0x20000..=end]]), 0x500usize)
+        } else {
+            let start = seg.cs_addr;
+            let end = seg.blocks[0].1;
+            (crc16_arc(&[&data[start..=end]]), start)
+        };
+        let cvn = crc.swap_bytes(); // CS2SwapBytes=true
+        let segment_nr = data[base + 3];
+        let part_number = read_u32_be(data, base + 4).unwrap_or(0);
+        let version = String::from_utf8_lossy(&data[base + 8..base + 10]).to_string();
+        let cvn_s = format!("{:04X}", cvn);
+        let stock = stock_cvns().get(&(part_number, segment_nr)).cloned();
+        let matches_stock = stock.as_ref().map(|s| s == &cvn_s);
+        out.push(SegmentCvn { name: seg.name.to_string(), segment_nr, part_number, version, cvn: cvn_s, stock_cvn: stock, matches_stock });
+    }
+    Ok(out)
+}
+
 fn validate_p01_checksums(data: &[u8]) -> Result<ChecksumReport, String> {
     let segs = match p01_segments(data) {
         Ok(s) => s,
-        Err(e) => return Ok(ChecksumReport { regions: vec![], valid_count: 0, fixed_count: 0, failed_count: 0, all_valid: false, ecu_family: "P01_0411".into(), method_used: format!("report-only: {}", e) }),
+        Err(e) => return Ok(ChecksumReport { regions: vec![], valid_count: 0, fixed_count: 0, failed_count: 0, all_valid: false, ecu_family: "P01_0411".into(), method_used: format!("report-only: {}", e), cvns: vec![] }),
     };
     let mut regions = vec![];
     let (mut valid_count, mut failed_count) = (0, 0);
@@ -241,7 +318,8 @@ fn validate_p01_checksums(data: &[u8]) -> Result<ChecksumReport, String> {
         if ok { valid_count += 1 } else { failed_count += 1 }
         regions.push(RegionResult { name: seg.name.to_string(), block: i as u8, cs_offset: seg.cs_addr, original_cs: cs as u32, corrected_cs: cs as u32, was_valid: ok, is_valid: ok, method: "GM Wordsum16 (2's complement)".into() });
     }
-    Ok(ChecksumReport { regions, valid_count, fixed_count: 0, failed_count, all_valid: failed_count == 0, ecu_family: "P01_0411".into(), method_used: "GM P01 segment wordsum (reference/P01-P59.xml)".into() })
+    let cvns = p01_cvns(data).unwrap_or_default();
+    Ok(ChecksumReport { regions, valid_count, fixed_count: 0, failed_count, all_valid: failed_count == 0, ecu_family: "P01_0411".into(), method_used: "GM P01 segment wordsum CS1 + CRC16 CVN CS2 (reference/P01-P59.xml)".into(), cvns })
 }
 
 fn correct_p01_checksums(data: &[u8]) -> Result<CorrectedCal, String> {
@@ -256,9 +334,10 @@ fn correct_p01_checksums(data: &[u8]) -> Result<CorrectedCal, String> {
         if was_valid { valid_count += 1 } else { write_u16_be(&mut buf, seg.cs_addr, want); fixed_count += 1; }
         regions.push(RegionResult { name: seg.name.to_string(), block: i as u8, cs_offset: seg.cs_addr, original_cs: cs as u32, corrected_cs: want as u32, was_valid, is_valid: true, method: "GM Wordsum16 (2's complement)".into() });
     }
+    // CS1 words are final; CVNs (CS2) are recomputed over them (they cover the CS1 word).
     let post = validate_p01_checksums(&buf)?;
     if !post.all_valid { return Err("P01 post-correction verify failed".into()); }
-    Ok(CorrectedCal { data: buf, report: ChecksumReport { regions, valid_count, fixed_count, failed_count: 0, all_valid: true, ecu_family: "P01_0411".into(), method_used: post.method_used } })
+    Ok(CorrectedCal { data: buf, report: ChecksumReport { regions, valid_count, fixed_count, failed_count: 0, all_valid: true, ecu_family: "P01_0411".into(), method_used: post.method_used, cvns: post.cvns } })
 }
 
 fn validate_edc16_crc32(data: &[u8]) -> Result<ChecksumReport, String> {
@@ -272,7 +351,7 @@ fn validate_edc16_crc32(data: &[u8]) -> Result<ChecksumReport, String> {
         if was_valid { valid_count += 1; } else { failed_count += 1; }
         regions.push(RegionResult { name: region.name.to_string(), block: 0, cs_offset: region.cs_offset, original_cs, corrected_cs: original_cs, was_valid, is_valid: was_valid, method: "CRC32".to_string() });
     }
-    Ok(ChecksumReport { regions, valid_count, fixed_count: 0, failed_count, all_valid: failed_count == 0, ecu_family: "EDC16C41".to_string(), method_used: "CRC32 multipoint".to_string() })
+    Ok(ChecksumReport { regions, valid_count, fixed_count: 0, failed_count, all_valid: failed_count == 0, ecu_family: "EDC16C41".to_string(), method_used: "CRC32 multipoint".to_string(), cvns: vec![] })
 }
 
 fn correct_edc16_crc32(data: &[u8]) -> Result<CorrectedCal, String> {
@@ -295,7 +374,7 @@ fn correct_edc16_crc32(data: &[u8]) -> Result<CorrectedCal, String> {
         };
         results.push(RegionResult { name: region.name.to_string(), block: 0, cs_offset: region.cs_offset, original_cs, corrected_cs, was_valid, is_valid, method: "CRC32".to_string() });
     }
-    Ok(CorrectedCal { data: buf, report: ChecksumReport { regions: results, valid_count, fixed_count, failed_count, all_valid: failed_count == 0, ecu_family: "EDC16C41".to_string(), method_used: "CRC32 multipoint".to_string() } })
+    Ok(CorrectedCal { data: buf, report: ChecksumReport { regions: results, valid_count, fixed_count, failed_count, all_valid: failed_count == 0, ecu_family: "EDC16C41".to_string(), method_used: "CRC32 multipoint".to_string(), cvns: vec![] } })
 }
 
 pub fn validate_checksums(data: &[u8]) -> Result<ChecksumReport, String> {
@@ -307,7 +386,7 @@ pub fn validate_checksums(data: &[u8]) -> Result<ChecksumReport, String> {
             failed_count: 0,
             all_valid: false,
             ecu_family: "HONDA_KEIHIN".into(),
-            method_used: "report-only: Honda OS on P01-sized image — P01 additive blocked".into(),
+            method_used: "report-only: Honda OS on P01-sized image — P01 additive blocked".into(), cvns: vec![],
         });
     }
     if crate::cs_guard::p59_blocks_p01_corrector(data) {
@@ -318,7 +397,7 @@ pub fn validate_checksums(data: &[u8]) -> Result<ChecksumReport, String> {
             failed_count: 0,
             all_valid: false,
             ecu_family: "GM_P59".into(),
-            method_used: "report-only: P59 OS on P01-sized image — P01 additive blocked".into(),
+            method_used: "report-only: P59 OS on P01-sized image — P01 additive blocked".into(), cvns: vec![],
         });
     }
     if is_p01_size(data.len()) { validate_p01_checksums(data) }
@@ -332,6 +411,7 @@ pub fn validate_checksums(data: &[u8]) -> Result<ChecksumReport, String> {
             all_valid: false,
             ecu_family: "UNKNOWN".into(),
             method_used: format!("report-only: no verified corrector for {} bytes", data.len()),
+            cvns: vec![],
         })
     }
 }
@@ -356,7 +436,7 @@ pub fn correct_and_validate_checksums(data: &[u8]) -> Result<CorrectedCal, Strin
             report: ChecksumReport {
                 regions: pre.regions.into_iter().map(|mut r| { r.corrected_cs = r.original_cs; r }).collect(),
                 valid_count: pre.valid_count, fixed_count: 0, failed_count: 0, all_valid: true,
-                ecu_family: pre.ecu_family, method_used: pre.method_used,
+                ecu_family: pre.ecu_family, method_used: pre.method_used, cvns: pre.cvns,
             },
         });
     }
@@ -437,6 +517,33 @@ pub(crate) mod tests {
         let fixed = correct_checksums(&dirty).unwrap();
         let diffs: Vec<usize> = (0..orig.len()).filter(|&i| fixed.data[i] != orig[i]).collect();
         assert!(diffs.iter().all(|&i| i == 0x30000 || i == 0x500 || i == 0x501), "{:X?}", diffs);
+    }
+    #[test]
+    fn crc16_arc_check_value() {
+        // Standard CRC-16/ARC check value for "123456789".
+        assert_eq!(crc16_arc(&[b"123456789"]), 0xBB3D);
+        assert_eq!(crc16_arc(&[b"1234", b"56789"]), 0xBB3D);
+    }
+    #[test]
+    fn stock_cvn_table_has_12225074() {
+        assert_eq!(stock_cvns().get(&(12225074, 1)).map(String::as_str), Some("717A"));
+    }
+    #[test]
+    fn cvn_covers_cs1_and_follows_correction() {
+        let orig = synthetic_p01();
+        let before = p01_cvns(&orig).unwrap();
+        assert_eq!(before.len(), 8);
+        let mut dirty = orig.clone();
+        dirty[0x9000] ^= 0x5A;
+        let fixed = correct_checksums(&dirty).unwrap();
+        // Report CVNs equal CVNs recomputed on the final image (computed after CS1).
+        assert_eq!(fixed.report.cvns, p01_cvns(&fixed.data).unwrap());
+        assert_ne!(fixed.report.cvns[1].cvn, before[1].cvn, "EngineCal CVN changes");
+        assert_eq!(fixed.report.cvns[2..], before[2..], "other segments unchanged");
+        // CVN covers the CS1 word: changing only CS1 changes the CVN.
+        let mut cs_only = fixed.data.clone();
+        cs_only[0x8001] ^= 1;
+        assert_ne!(p01_cvns(&cs_only).unwrap()[1].cvn, fixed.report.cvns[1].cvn);
     }
     #[test]
     fn p01_bad_table_refuses_correction() {

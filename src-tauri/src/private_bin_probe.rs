@@ -34,6 +34,15 @@ mod tests {
     }
 
     #[test]
+    fn real_p01_cvns() {
+        let Some(img) = load() else { return };
+        let cvns = crate::checksum::p01_cvns(&img).unwrap();
+        for c in &cvns { eprintln!("CVN {} seg{} pn{} ver{} cvn={} stock={:?}", c.name, c.segment_nr, c.part_number, c.version, c.cvn, c.stock_cvn); }
+        assert_eq!(cvns[0].cvn, "717A");
+        assert!(cvns.iter().all(|c| c.matches_stock != Some(false)), "pristine CVN mismatch vs stockcvn.xml");
+    }
+
+    #[test]
     fn real_p01_segments_and_slice() {
         let Some(img) = load() else { return };
         let segs = crate::checksum::p01_segments(&img).unwrap();
