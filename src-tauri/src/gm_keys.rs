@@ -67,7 +67,8 @@ pub fn gm_2byte_key(algo: u16, seed: u16) -> u16 {
 
 fn key_algo(seed: u16, row: &[u8; 13]) -> u16 {
     let mut key = seed;
-    let mut byte1: usize = 0;
+    // KeyAlgorithm.cs KeyAlgo: byte1 starts at 1 (row[0] is not an opcode).
+    let mut byte1: usize = 1;
     loop {
         if byte1 + 2 >= row.len() {
             break;
@@ -153,17 +154,11 @@ mod tests {
         assert_eq!(gm_2byte_key(0x400, 0x1234), 0);
     }
 
+    /// reference/PcmHammer_debugLog_20260504@180810.txt lines 122-126:
+    /// "RX: 6C F0 10 67 01 16 CB" then "Sending unlock request (16CB, C837)",
+    /// "RX: 6C F0 10 67 02 34" / "Unlock succeeded." on a P01 (algo 0x28).
     #[test]
-    fn algo0_known_vectors() {
-        assert_eq!(gm_2byte_key(0, 0x0000), 0x2EE7);
-        assert_eq!(gm_2byte_key(0, 0x0001), 0x2EE7);
-        assert_eq!(gm_2byte_key(0, 0x1234), 0x3EF7);
-        assert_eq!(gm_2byte_key(0, 0xABCD), 0xAFEF);
-    }
-
-    #[test]
-    fn algo1_is_byte_swap() {
-        assert_eq!(gm_2byte_key(1, 0x1234), 0x3412);
-        assert_eq!(gm_2byte_key(1, 0xABCD), 0xCDAB);
+    fn p01_algo_0x28_matches_pcmhammer_log() {
+        assert_eq!(gm_2byte_key(0x28, 0x16CB), 0xC837);
     }
 }

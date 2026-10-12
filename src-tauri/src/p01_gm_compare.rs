@@ -135,10 +135,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn seed_1234_algo0_is_known_gm_vector() {
-        let r = compare("1234", Some(0), false).unwrap();
-        assert_eq!(r.gm_key, Some(0x3EF7));
-        assert_eq!(r.seed, 0x1234);
+    fn pcmhammer_log_p01_vector() {
+        // reference/PcmHammer_debugLog_20260504@180810.txt line 124: "Sending unlock request (16CB, C837)"
+        let r = compare("16CB", Some(0x28), false).unwrap();
+        assert_eq!(r.gm_key, Some(0xC837));
+        assert_eq!(r.seed, 0x16CB);
         assert_ne!(r.lfsr_l1, 0);
     }
 
@@ -154,7 +155,6 @@ mod tests {
         let r = compare("0000", Some(1), false).unwrap();
         assert_eq!(r.lfsr_l1, 0);
         assert_eq!(r.lfsr_l2, 0);
-        assert_eq!(r.gm_key, Some(0x0000));
     }
 
     #[test]

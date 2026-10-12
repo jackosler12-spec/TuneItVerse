@@ -394,11 +394,11 @@ mod tests {
     }
 
     #[test]
-    fn p01cmp_algo0_returns_known_gm_vector() {
-        let v = run_script("p01cmp 1234 0\n", None, None);
+    fn p01cmp_returns_pcmhammer_log_vector() {
+        let v = run_script("p01cmp 16CB 40\n", None, None);
         assert_eq!(v["ok"], true);
         let r = &v["steps"][0]["result"];
-        assert_eq!(r["gm_key_hex"], "3EF7");
-        assert_eq!(r["seed_hex"], "1234");
+        assert_eq!(r["gm_key_hex"], "C837");
+        assert_eq!(r["seed_hex"], "16CB");
     }
 }
