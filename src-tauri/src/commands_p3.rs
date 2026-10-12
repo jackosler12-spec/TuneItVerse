@@ -54,30 +54,34 @@ fn guided_flash_pipeline(app: tauri::AppHandle, request_json: String) -> Result<
         Ok(serde_json::to_string(&result).unwrap_or_else(|_| "{}".into()))
     }).or_else(|e| Ok(json!({"success":false,"steps_completed":[],"logs":[format!("Fail-closed: not connected ({})", e)],"verified_live":false,"error":format!("Not connected: {}", e)}).to_string()))
 }
-fn family_from_bin_or_state(file_bytes: &[u8]) -> Result<String, String> {
-    match crate::v29_tools::resolved_family(file_bytes) {
-        Ok(f) => {
-            if let Ok(mut guard) = STATE.lock() {
-                guard.last_family = Some(f.clone());
-            }
-            Ok(f)
-        }
-        Err(ident_err) => {
-            let guard = STATE.lock().map_err(|e| e.to_string())?;
-            if let Some(f) = guard.last_family.clone() { return Ok(f); }
-            if let Some(os) = guard.last_os_id.clone() {
-                if let Some(e) = crate::ecu_database::get_ecu_by_os_id(&os) {
-                    return Ok(e.ecu_family);
-                }
-            }
-            Err(format!("Family unresolved: {}", ident_err))
-        }
+/// Pick the family for live compare/verify. A family requested by the UI must
+/// agree with the one identified from the BIN; with no BIN match, the request
+/// (then session state) is used. Nothing → explicit error, never a default.
+fn pick_live_family(from_bin: Result<String, String>, requested: Option<String>, from_state: Option<String>) -> Result<String, String> {
+    let req = requested.map(|r| r.trim().to_string()).filter(|r| !r.is_empty());
+    match (from_bin, req) {
+        (Ok(b), Some(r)) if !b.eq_ignore_ascii_case(&r) => Err(format!(
+            "Family mismatch: BIN identifies as {} but {} was requested. Refusing.", b, r
+        )),
+        (Ok(b), _) => Ok(b),
+        (Err(_), Some(r)) => Ok(r),
+        (Err(e), None) => from_state.ok_or_else(|| format!("ECU family unknown ({}). Identify the BIN or pick a family.", e)),
     }
 }
 
+fn family_for_live(file_bytes: &[u8], requested: Option<String>) -> Result<String, String> {
+    let bin = crate::v29_tools::resolved_family(file_bytes);
+    let state = if bin.is_err() {
+        STATE.lock().ok().and_then(|g| g.last_family.clone().or_else(|| {
+            g.last_os_id.clone().and_then(|os| crate::ecu_database::get_ecu_by_os_id(&os).map(|e| e.ecu_family))
+        }))
+    } else { None };
+    pick_live_family(bin, requested, state)
+}
+
 #[tauri::command]
-fn compare_bin_to_ecu(file_bytes: Vec<u8>) -> Result<String, String> {
-    let fam = family_from_bin_or_state(&file_bytes)?;
+fn compare_bin_to_ecu(file_bytes: Vec<u8>, family: Option<String>) -> Result<String, String> {
+    let fam = family_for_live(&file_bytes, family)?;
     with_port(|port| {
         let mut logs = Vec::new();
         let windows = match crate::live_verify::probe_live_windows(port, &fam, file_bytes.len(), &mut logs) {
@@ -91,10 +95,10 @@ fn compare_bin_to_ecu(file_bytes: Vec<u8>) -> Result<String, String> {
     }).or_else(|e| Ok(json!({"success":false,"error":format!("Not connected: {}", e)}).to_string()))
 }
 #[tauri::command]
-fn verify_after_write(expected_bytes: Option<Vec<u8>>) -> Result<String, String> {
+fn verify_after_write(expected_bytes: Option<Vec<u8>>, family: Option<String>) -> Result<String, String> {
     let data = expected_bytes.unwrap_or_default();
     if data.is_empty() { return Err("No expected image provided".into()); }
-    let fam = family_from_bin_or_state(&data)?;
+    let fam = family_for_live(&data, family)?;
     with_port(|port| {
         match flash::verify_after_write(port, &fam, &data, &mut vec![]) {
             Ok((crc, matched)) => Ok(format!("Live CRC 0x{:08X} matched={} family={}", crc, matched, fam)),
@@ -106,7 +110,8 @@ fn verify_after_write(expected_bytes: Option<Vec<u8>>) -> Result<String, String>
 #[tauri::command] fn unlock_level2() -> Result<String, String> { with_port(|port| Ok(serde_json::to_string(&security::unlock_level2(port)?).unwrap_or_else(|_| "{}".into()))) }
 #[tauri::command]
 fn bosch_uds_unlock(family: Option<String>, level: Option<String>) -> Result<String, String> {
-    let fam = family.unwrap_or_else(|| "EDC16C41".into());
+    let fam = family.map(|f| f.trim().to_string()).filter(|f| !f.is_empty())
+        .ok_or_else(|| "ECU family required for Bosch UDS unlock (no default).".to_string())?;
     let lvl = security::BoschSecurityLevel::from_str(&level.unwrap_or_else(|| "programming".into()));
     with_port(|port| security::bosch_uds_unlock_full(port, &fam, lvl))
         .or_else(|e| Ok(json!({"success":false,"message":"Bosch UDS unlock refused offline. Connect an adapter.","family":fam,"error":e}).to_string()))
@@ -146,4 +151,25 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running TuneItVerse");
+}
+
+#[cfg(test)]
+mod live_family_tests {
+    use super::*;
+    #[test]
+    fn bin_family_wins_and_mismatch_refused() {
+        assert_eq!(pick_live_family(Ok("P01_0411".into()), None, None).unwrap(), "P01_0411");
+        assert_eq!(pick_live_family(Ok("P01_0411".into()), Some("p01_0411".into()), None).unwrap(), "P01_0411");
+        assert!(pick_live_family(Ok("P01_0411".into()), Some("EDC16C41".into()), None).unwrap_err().contains("mismatch"));
+    }
+    #[test]
+    fn unresolved_bin_uses_request_then_state_else_errors() {
+        assert_eq!(pick_live_family(Err("x".into()), Some("EDC16C41".into()), Some("P01_0411".into())).unwrap(), "EDC16C41");
+        assert_eq!(pick_live_family(Err("x".into()), Some("  ".into()), Some("P01_0411".into())).unwrap(), "P01_0411");
+        assert!(pick_live_family(Err("x".into()), None, None).unwrap_err().contains("unknown"));
+    }
+    #[test]
+    fn bosch_unlock_requires_family() {
+        assert!(bosch_uds_unlock(None, None).unwrap_err().contains("family required"));
+    }
 }

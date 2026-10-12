@@ -70,9 +70,18 @@
       if (out) out.textContent = 'GM algo must be 0-1023 (or 0x000-0x3FF).';
       return;
     }
+    let family;
+    try {
+      const picked = document.getElementById('seed-family') ? document.getElementById('seed-family').value : '';
+      family = typeof window.requireEcuFamily === 'function' ? window.requireEcuFamily(picked) : (picked || '').trim();
+      if (!family) throw new Error('ECU family unknown. Identify the BIN or pick a family first.');
+    } catch (e) {
+      if (out) out.textContent = 'Error: ' + (e.message || e);
+      return;
+    }
     const args = {
       seed_hex: document.getElementById('seed-hex') ? document.getElementById('seed-hex').value : '',
-      family: document.getElementById('seed-family') ? document.getElementById('seed-family').value : 'P01_0411',
+      family: family,
       level: document.getElementById('seed-level') ? document.getElementById('seed-level').value : '1'
     };
     if (parsed !== null) args.algo = parsed;

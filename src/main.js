@@ -690,6 +690,16 @@ function identifiedFamily() {
   return null;
 }
 
+// ECU family for seed/key, unlock, compare and verify. Explicit choice first,
+// then the identified BIN. Never a default family: unknown is an error.
+const FAMILY_UNKNOWN_MSG = 'ECU family unknown. Identify the BIN (Tables) or pick a family first.';
+function requireEcuFamily(explicit) {
+  const f = (explicit || '').trim() || identifiedFamily();
+  if (!f) throw new Error(FAMILY_UNKNOWN_MSG);
+  return f;
+}
+window.requireEcuFamily = requireEcuFamily;
+
 // ---------- Connect ----------
 async function refreshPorts() {
   const sel = document.getElementById('port-select');
@@ -791,10 +801,10 @@ async function doAutoDetect() {
 
 async function computeSeedKeyUi() {
   const seed = document.getElementById('seed-hex')?.value || '';
-  const family = document.getElementById('seed-family')?.value || 'P01_0411';
   const level = document.getElementById('seed-level')?.value || '1';
   const out = document.getElementById('seed-result');
   try {
+    const family = requireEcuFamily(document.getElementById('seed-family')?.value);
     const raw = await invokeCmd('compute_seed_key', { seed_hex: seed, family, level });
     const obj = parseMaybe(raw);
     if (out) out.textContent = typeof obj === 'string' ? obj : JSON.stringify(obj, null, 2);
@@ -1956,7 +1966,9 @@ async function compareBinToEcuUi() {
     return;
   }
   try {
-    const res = await invokeCmd('compare_bin_to_ecu', { file_bytes: binBytes(currentBin) });
+    if (!identifiedFamily()) await identifyCurrentBin();
+    const family = requireEcuFamily();
+    const res = await invokeCmd('compare_bin_to_ecu', { file_bytes: binBytes(currentBin), family });
     if (pre) pre.textContent = typeof res === 'string' ? res : JSON.stringify(res, null, 2);
   } catch (e) {
     if (pre) pre.textContent = 'Compare error: ' + e;
@@ -1972,7 +1984,9 @@ async function verifyAfterWriteUi() {
   }
   try {
     if (!currentBin || !currentBin.length) throw new Error('Load a .BIN in Tables first.');
-    const res = await invokeCmd('verify_after_write', { expected_bytes: binBytes(currentBin) });
+    if (!identifiedFamily()) await identifyCurrentBin();
+    const family = requireEcuFamily();
+    const res = await invokeCmd('verify_after_write', { expected_bytes: binBytes(currentBin), family });
     if (pre) pre.textContent = typeof res === 'string' ? res : JSON.stringify(res, null, 2);
   } catch (e) {
     if (pre) pre.textContent = 'Verify error: ' + e;

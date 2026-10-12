@@ -226,7 +226,13 @@
     bind('btn-unlock-l1', function () { return flashCmd('unlock_level1', {}, 'Unlock L1'); });
     bind('btn-unlock-l2', function () { return flashCmd('unlock_level2', {}, 'Unlock L2'); });
     bind('btn-bosch-unlock', function () {
-      const fam = (window.lastIdentify && window.lastIdentify.family) || document.getElementById('seed-family')?.value || 'EDC16C41';
+      let fam;
+      try {
+        fam = window.requireEcuFamily(document.getElementById('seed-family')?.value);
+      } catch (e) {
+        alert(String(e.message || e));
+        return;
+      }
       return flashCmd('bosch_uds_unlock', { family: fam, level: 'programming' }, 'Bosch UDS unlock');
     });
     bind('btn-run-script', runBenchScript);
