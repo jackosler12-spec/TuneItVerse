@@ -59,6 +59,12 @@
     "low_level_reflash": "Support uploading recovery kernel to RAM and performing low-level full OS reflash, bypassing normal calibration locks where hardware allows."
   },
   "notes": "Already heavily integrated in Rust backend (vpw.rs, security.rs, checksum.rs, flash.rs, pid_decode.rs, dtc.rs). This DB entry centralizes metadata so frontend/app can auto-detect P01 on connect (VIN/OS ID), load correct checksum routine + seedkey, and reference XDF/maps. Enhanced with public recovery procedures scraped from tuning community resources for the safe guided flashing pipeline. Use with affordable open tools like PCMHammer patterns.",
-  "flash_write_address": "0x00020000",
-  "flash_write_address_note": "Calibration download start address used by guided flash and live verify. Carried over from the previous hardcoded flash.rs value; not bench-verified."
+  "flash_write_segment": {
+    "name": "Calibration",
+    "start": "0x00008000",
+    "length": "0x00018000",
+    "image_size": 524288,
+    "source": "reference/PcmHammer_debugLog_20260504@180810.txt line 7716: '008000-01FFFF ... Calibration' (OS 12225074, Intel 28F400B 512KB). 0x20000-0x7FFFF is OperatingSystem per the same log (lines 7158/7366/7563).",
+    "note": "Not bench-verified with this app."
+  }
 }

@@ -92,6 +92,46 @@ pub fn verify_after_write(port: &mut Box<dyn SerialPort + Send>, ecu_family: &st
     crate::live_verify::compare_windows(written, &windows, logs)
 }
 
+/// Check a VPW response frame `[prio, tool, pcm, SID+0x40, ...]` for a positive answer to `sid`.
+pub fn check_vpw_positive(resp: &[u8], sid: u8) -> Result<(), String> {
+    match resp.get(3) {
+        None => Err(format!("Mode 0x{:02X}: short/empty response {:02X?}", sid, resp)),
+        Some(&b) if b == sid | 0x40 => Ok(()),
+        Some(0x7F) => Err(format!("Mode 0x{:02X} rejected (7F) {:02X?}", sid, resp)),
+        Some(&b) => Err(format!("Mode 0x{:02X}: unexpected response SID 0x{:02X}", sid, b)),
+    }
+}
+
+pub const GM_VPW_CHUNK: usize = 128;
+
+/// GM VPW Mode 34/36/37 segment write over a transport closure.
+/// Unlock must succeed before anything is sent; every step needs a positive reply.
+pub fn gm_vpw_write_segment<X, U, P>(xfer: &mut X, unlock: U, addr: u32, data: &[u8], mut on_chunk: P) -> Result<FlashWriteResult, String>
+where
+    X: FnMut(&[u8]) -> Result<Vec<u8>, String>,
+    U: FnOnce() -> Result<(), String>,
+    P: FnMut(usize) -> Result<(), String>,
+{
+    if data.is_empty() { return Err("Nothing to write".into()); }
+    unlock().map_err(|e| format!("Level-2 security unlock failed: {}. Nothing erased or written.", e))?;
+    let r = xfer(&build_mode34_request(addr, data.len() as u32)).map_err(|e| format!("Mode 34 request failed: {}. Nothing written.", e))?;
+    check_vpw_positive(&r, 0x34).map_err(|e| format!("{}. Nothing written.", e))?;
+    let mut done = 0usize;
+    for chunk in data.chunks(GM_VPW_CHUNK) {
+        let r = xfer(&build_mode36_chunk(chunk)).map_err(|e| format!("Mode 36 transfer failed at {} bytes: {}", done, e))?;
+        check_vpw_positive(&r, 0x36).map_err(|e| format!("{} at {} bytes", e, done))?;
+        done += chunk.len();
+        on_chunk(done)?;
+    }
+    let r = xfer(&build_mode37_request()).map_err(|e| format!("Mode 37 exit failed: {}", e))?;
+    check_vpw_positive(&r, 0x37)?;
+    Ok(FlashWriteResult {
+        bytes_written: data.len() as u32,
+        blocks_written: ((data.len() + GM_VPW_CHUNK - 1) / GM_VPW_CHUNK) as u32,
+        crc32_written: crc32_ieee(data),
+    })
+}
+
 /// Only a full flash-image backup may proceed to write. Partial window probes and failures stay blocked.
 pub fn backup_quality_allows_write(quality: &BackupQuality) -> bool {
     matches!(quality, BackupQuality::FullImage)
@@ -142,7 +182,10 @@ where F: FnMut(FlashProgress),
     if request.auto_correct_checksum {
         match crate::checksum::correct_checksums(&image) {
             Ok(corrected) => { result.checksum_report = Some(corrected.report.clone()); image = corrected.data; }
-            Err(e) => { result.logs.push(format!("Checksum correct skipped: {}", e)); }
+            Err(e) => {
+                result.error = Some(format!("Checksum correction requested but failed: {}. Refusing write of an uncorrected image.", e));
+                return Ok(result);
+            }
         }
     }
     if !request.perform_backup {
@@ -185,24 +228,31 @@ where F: FnMut(FlashProgress),
         result.error = Some(format!("No verified write path for family {}", family));
         return Ok(result);
     }
-    // Address comes from the ECU database before any unlock or erase.
-    let cal_addr = match crate::ecu_database::flash_cal_address(&family) {
-        Ok(a) => a,
+    // Segment comes from the ECU database before any unlock or erase; the BIN
+    // size must match the family and only the segment bytes are written.
+    let seg = match crate::ecu_database::flash_segment(&family) {
+        Ok(s) => s,
         Err(e) => { result.error = Some(e); return Ok(result); }
     };
+    let cal_addr = seg.start;
+    let write_data: Vec<u8> = match seg.slice(&image) {
+        Ok(d) => d.to_vec(),
+        Err(e) => { result.error = Some(e); return Ok(result); }
+    };
+    result.logs.push(format!("Write segment 0x{:06X}..0x{:06X} ({} bytes of {}-byte image)", seg.start, seg.start + seg.length - 1, write_data.len(), image.len()));
     if bosch_uds {
         let lvl = crate::security::BoschSecurityLevel::from_str("programming");
         match crate::security::bosch_uds_unlock_full(port, &family, lvl) {
             Ok(msg) => result.logs.push(format!("Bosch UDS unlock: {}", msg)),
             Err(e) => { result.error = Some(format!("Bosch UDS unlock failed: {}", e)); return Ok(result); }
         }
-        result.logs.push(format!("UDS 0x34/36/37 download at 0x{:06X} ({} bytes)", cal_addr, image.len()));
+        result.logs.push(format!("UDS 0x34/36/37 download at 0x{:06X} ({} bytes)", cal_addr, write_data.len()));
         result.logs.push("Mid-write supply monitor: J2534 Vbatt only. Serial PID 0x42 is not sent during the transfer.".into());
         let write = crate::uds::download_image(
             port,
             crate::uds::Alfi::ADDR4_SIZE4,
             cal_addr,
-            &image,
+            &write_data,
             true,
             |done, total| {
                 let voltage_warn = sample_supply(min_v, &mut supply)?;
@@ -221,32 +271,35 @@ where F: FnMut(FlashProgress),
             result.error = Some(e);
             return Ok(result);
         }
-        if let Ok(v) = enforce_voltage_gate(port, min_v, &mut result.logs) {
-            result.logs.push(format!("Post-write voltage {:.2} V", v));
+        match enforce_voltage_gate(port, min_v, &mut result.logs) {
+            Ok(v) => result.logs.push(format!("Post-write voltage {:.2} V", v)),
+            Err(e) => result.logs.push(format!("WARNING post-write voltage check failed: {}", e)),
         }
         result.flash_write_result = Some(FlashWriteResult {
-            bytes_written: image.len() as u32,
-            blocks_written: ((image.len() + 0x401) / 0x400) as u32,
-            crc32_written: crc32_ieee(&image),
+            bytes_written: write_data.len() as u32,
+            blocks_written: ((write_data.len() + 0x3FF) / 0x400) as u32,
+            crc32_written: crc32_ieee(&write_data),
         });
     } else {
-        let _ = unlock_level2(port);
-        if let Err(e) = send_frame(port, &build_mode34_request(cal_addr, image.len() as u32)) { result.error = Some(e); return Ok(result); }
         result.logs.push("Mid-write supply monitor: J2534 Vbatt only. Serial PID 0x42 is not sent during the transfer.".into());
-        let timing = AdaptiveTiming::for_vpw(); timing.sleep();
-        let chunk_size = 128; let total = image.len();
-        for (i, chunk) in image.chunks(chunk_size).enumerate() {
-            if let Err(e) = send_frame(port, &build_mode36_chunk(chunk)) { result.error = Some(e); stamp_supply(&mut result, &supply); return Ok(result); }
-            let done = ((i + 1) * chunk_size).min(total);
-            let voltage_warn = match sample_supply(min_v, &mut supply) {
-                Ok(w) => w,
-                Err(e) => { result.voltage_aborted = true; result.error = Some(e); stamp_supply(&mut result, &supply); return Ok(result); }
-            };
-            on_progress(FlashProgress { bytes_done: done as u32, bytes_total: total as u32, percent: ((done * 100) / total.max(1)) as u8, voltage_warn });
-            timing.sleep();
+        let timing = AdaptiveTiming::for_vpw();
+        let total = write_data.len();
+        let mut aborted_v = false;
+        let write = {
+            let port_cell = std::cell::RefCell::new(&mut *port);
+            let mut xfer = |f: &[u8]| request_response(&mut **port_cell.borrow_mut(), f);
+            let unlock = || unlock_level2(&mut **port_cell.borrow_mut()).map(|_| ());
+            gm_vpw_write_segment(&mut xfer, unlock, cal_addr, &write_data, |done| {
+                let voltage_warn = sample_supply(min_v, &mut supply).map_err(|e| { aborted_v = true; e })?;
+                on_progress(FlashProgress { bytes_done: done as u32, bytes_total: total as u32, percent: ((done * 100) / total.max(1)) as u8, voltage_warn });
+                timing.sleep();
+                Ok(())
+            })
+        };
+        match write {
+            Ok(w) => result.flash_write_result = Some(w),
+            Err(e) => { result.voltage_aborted = aborted_v; result.error = Some(e); stamp_supply(&mut result, &supply); return Ok(result); }
         }
-        let _ = send_frame(port, &build_mode37_request());
-        result.flash_write_result = Some(FlashWriteResult { bytes_written: image.len() as u32, blocks_written: ((image.len() + chunk_size - 1) / chunk_size) as u32, crc32_written: crc32_ieee(&image) });
     }
     match verify_after_write(port, &family, &image, &mut result.logs) {
         Ok((crc, matched)) => { result.verification_crc = Some(crc); result.verified_live = matched; result.success = matched; }
@@ -298,6 +351,48 @@ mod tests {
         assert!(!crate::ecu_database::write_path_live("EDC17_COMMON"));
         assert!(!crate::ecu_database::write_path_live("MED17_COMMON"));
         assert!(!crate::ecu_database::write_path_live("TRANSTRON_4HK1"));
+    }
+    fn ok(sid: u8) -> Vec<u8> { vec![0x6C, 0xF0, 0x10, sid | 0x40] }
+
+    #[test] fn gm_unlock_failure_sends_nothing() {
+        let mut sent: Vec<Vec<u8>> = vec![];
+        let mut x = |f: &[u8]| { sent.push(f.to_vec()); Ok(ok(f[3])) };
+        let e = gm_vpw_write_segment(&mut x, || Err("NRC 0x35".into()), 0x8000, &[1; 300], |_| Ok(())).unwrap_err();
+        assert!(e.contains("unlock failed") && e.contains("Nothing erased"));
+        assert!(sent.is_empty());
+    }
+    #[test] fn gm_mode34_rejection_stops_before_data() {
+        let mut sent: Vec<Vec<u8>> = vec![];
+        let mut x = |f: &[u8]| { sent.push(f.to_vec()); Ok(vec![0x6C, 0xF0, 0x10, 0x7F, 0x34, 0x22]) };
+        assert!(gm_vpw_write_segment(&mut x, || Ok(()), 0x8000, &[1; 300], |_| Ok(())).is_err());
+        assert_eq!(sent.len(), 1);
+    }
+    #[test] fn gm_happy_path_writes_segment_at_address() {
+        let mut sent: Vec<Vec<u8>> = vec![];
+        let mut x = |f: &[u8]| { sent.push(f.to_vec()); Ok(ok(f[3])) };
+        let mut progress = vec![];
+        let w = gm_vpw_write_segment(&mut x, || Ok(()), 0x8000, &[7; 300], |d| { progress.push(d); Ok(()) }).unwrap();
+        assert_eq!(w.bytes_written, 300);
+        assert_eq!(sent[0], build_mode34_request(0x8000, 300));
+        assert_eq!(sent.len(), 1 + 3 + 1);
+        assert_eq!(sent[4], build_mode37_request());
+        assert_eq!(progress, vec![128, 256, 300]);
+    }
+    #[test] fn gm_chunk_nack_or_empty_aborts() {
+        let mut n = 0;
+        let mut x = |f: &[u8]| { n += 1; if n == 3 { Ok(vec![]) } else { Ok(ok(f[3])) } };
+        let e = gm_vpw_write_segment(&mut x, || Ok(()), 0x8000, &[1; 400], |_| Ok(())).unwrap_err();
+        assert!(e.contains("Mode 0x36") && e.contains("128 bytes"));
+    }
+    #[test] fn gm_voltage_abort_propagates() {
+        let mut x = |f: &[u8]| Ok(ok(f[3]));
+        assert!(gm_vpw_write_segment(&mut x, || Ok(()), 0x8000, &[1; 400], |_| Err("sag".into())).is_err());
+    }
+    #[test] fn real_p01_bin_segment_slice() {
+        let img = std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/../reference/LS1 PCM P01 12225074.bin")).unwrap();
+        let seg = crate::ecu_database::flash_segment("P01_0411").unwrap();
+        let w = seg.slice(&img).unwrap();
+        assert_eq!(w, &img[0x8000..0x20000]);
     }
     #[test] fn partial_or_failed_backup_blocks_write() {
         assert!(!backup_quality_allows_write(&BackupQuality::PartialDidOnly));

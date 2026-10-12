@@ -53,7 +53,5 @@
       "start_of_injection": "0xCC000"
     }
   },
-  "notes": "Matches and expands the REFERENCE_INDEX.md entry. 23710-VS43B is the specific hardware/part for GU V Wagon variant. DB entry enables auto-identification. Rust support added: CAN (ELM/ISO-TP), KWP2000, Nissan Consult II for live data + commands. Use protocol selector in UI. **Multipoint CRC32 now primary** for EDC16C41. v1.2.0 expanded maps for industry-leading coverage.",
-  "flash_write_address": "0x00080000",
-  "flash_write_address_note": "Calibration download start address used by guided flash and live verify. Carried over from the previous hardcoded flash.rs value; not bench-verified."
+  "notes": "Matches and expands the REFERENCE_INDEX.md entry. 23710-VS43B is the specific hardware/part for GU V Wagon variant. DB entry enables auto-identification. Rust support added: CAN (ELM/ISO-TP), KWP2000, Nissan Consult II for live data + commands. Use protocol selector in UI. **Multipoint CRC32 now primary** for EDC16C41. v1.2.0 expanded maps for industry-leading coverage."
 }

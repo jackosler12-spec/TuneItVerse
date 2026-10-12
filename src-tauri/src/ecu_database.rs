@@ -49,9 +49,44 @@ pub struct EcuDbEntry {
     pub maps_and_xdf: MapsXdfInfo,
     pub communication_kernels: Option<Vec<String>>,
     pub notes: String,
-    /// Calibration download/verify start address (hex string, e.g. "0x00020000").
+    /// Calibration segment that guided flash may write (from authoritative repo data only).
     #[serde(default)]
-    pub flash_write_address: Option<String>,
+    pub flash_write_segment: Option<FlashSegmentRaw>,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug, Default)]
+pub struct FlashSegmentRaw {
+    pub name: String,
+    pub start: String,
+    pub length: String,
+    pub image_size: usize,
+    pub source: String,
+    #[serde(default)]
+    pub note: Option<String>,
+}
+
+/// Parsed calibration segment: flash address == file offset in a full image.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FlashSegment {
+    pub start: u32,
+    pub length: u32,
+    pub image_size: usize,
+}
+
+impl FlashSegment {
+    /// Validate the image size and return the bytes to write.
+    pub fn slice<'a>(&self, image: &'a [u8]) -> Result<&'a [u8], String> {
+        if image.len() != self.image_size {
+            return Err(format!(
+                "BIN size {} does not match family image size {}. Refusing write.",
+                image.len(), self.image_size
+            ));
+        }
+        let s = self.start as usize;
+        let e = s.checked_add(self.length as usize).filter(|&e| e <= image.len())
+            .ok_or_else(|| "Segment exceeds image. Refusing write.".to_string())?;
+        Ok(&image[s..e])
+    }
 }
 
 const P01_JSON: &str = include_str!("../../reference/ecu_database/p01_0411.json");
@@ -97,14 +132,24 @@ pub fn list_supported_ecu_families() -> Vec<String> {
     load_ecu_database().into_iter().map(|e| e.ecu_family).collect()
 }
 
-/// Calibration flash/verify start address for `family` from the ECU database.
-/// Errors when the family is unknown or has no `flash_write_address` entry.
-pub fn flash_cal_address(family: &str) -> Result<u32, String> {
+/// Writable calibration segment for `family` from the ECU database.
+/// Errors when the family is unknown or has no `flash_write_segment`.
+pub fn flash_segment(family: &str) -> Result<FlashSegment, String> {
     let e = get_ecu_by_family(family)
-        .ok_or_else(|| format!("ECU family {} not in database; no flash address. Refusing.", family))?;
-    let raw = e.flash_write_address
-        .ok_or_else(|| format!("ECU database has no flash_write_address for {}. Refusing.", e.ecu_family))?;
-    parse_hex_u32(&raw).ok_or_else(|| format!("Bad flash_write_address '{}' for {}", raw, e.ecu_family))
+        .ok_or_else(|| format!("ECU family {} not in database; no flash segment. Refusing.", family))?;
+    let raw = e.flash_write_segment
+        .ok_or_else(|| format!("ECU database has no flash_write_segment for {}. Refusing.", e.ecu_family))?;
+    let start = parse_hex_u32(&raw.start).ok_or_else(|| format!("Bad segment start '{}'", raw.start))?;
+    let length = parse_hex_u32(&raw.length).ok_or_else(|| format!("Bad segment length '{}'", raw.length))?;
+    if length == 0 || start as usize + length as usize > raw.image_size {
+        return Err(format!("Segment for {} is outside its image size. Refusing.", e.ecu_family));
+    }
+    Ok(FlashSegment { start, length, image_size: raw.image_size })
+}
+
+/// Calibration start address (segment start) for flash/live verify.
+pub fn flash_cal_address(family: &str) -> Result<u32, String> {
+    flash_segment(family).map(|s| s.start)
 }
 
 fn parse_hex_u32(s: &str) -> Option<u32> {
@@ -281,17 +326,33 @@ mod tests {
     use super::*;
 
     #[test]
-    fn flash_addresses_match_previous_hardcoded_values() {
-        assert_eq!(flash_cal_address("P01_0411").unwrap(), 0x0002_0000);
-        assert_eq!(flash_cal_address("EDC16C41").unwrap(), 0x0008_0000);
-        assert_eq!(flash_cal_address("p01_0411").unwrap(), 0x0002_0000);
+    fn p01_segment_is_pcmhammer_calibration() {
+        // reference/PcmHammer_debugLog_20260504@180810.txt: 008000-01FFFF Calibration
+        let seg = flash_segment("P01_0411").unwrap();
+        assert_eq!(seg, FlashSegment { start: 0x8000, length: 0x18000, image_size: 0x80000 });
+        assert_eq!(flash_cal_address("p01_0411").unwrap(), 0x8000);
+        // Old hardcoded 0x20000 was the start of the OperatingSystem segment.
+        assert_ne!(seg.start, 0x20000);
     }
 
     #[test]
-    fn flash_address_refused_without_db_entry() {
-        assert!(flash_cal_address("ME7_COMMON").unwrap_err().contains("no flash_write_address"));
-        assert!(flash_cal_address("EDC17_COMMON").is_err());
-        assert!(flash_cal_address("NOT_A_FAMILY").unwrap_err().contains("not in database"));
+    fn segment_refused_without_authoritative_entry() {
+        // EDC16C41: no segment boundaries in repo data → refused.
+        assert!(flash_segment("EDC16C41").unwrap_err().contains("no flash_write_segment"));
+        assert!(flash_segment("ME7_COMMON").is_err());
+        assert!(flash_segment("EDC17_COMMON").is_err());
+        assert!(flash_segment("NOT_A_FAMILY").unwrap_err().contains("not in database"));
+    }
+
+    #[test]
+    fn segment_slice_checks_size() {
+        let seg = flash_segment("P01_0411").unwrap();
+        let mut img = vec![0u8; 0x80000];
+        img[0x8000] = 0xAA; img[0x1FFFF] = 0xBB;
+        let w = seg.slice(&img).unwrap();
+        assert_eq!(w.len(), 0x18000);
+        assert_eq!((w[0], w[w.len() - 1]), (0xAA, 0xBB));
+        assert!(seg.slice(&vec![0u8; 0x20000]).unwrap_err().contains("does not match"));
     }
 
     #[test]

@@ -147,8 +147,9 @@ mod family_plan_tests {
     }
     #[test]
     fn known_families_plan() {
-        assert_eq!(live_address_plan("P01_0411").unwrap(), (0x20000, LiveProto::GmVpw));
-        assert_eq!(live_address_plan("EDC16C41").unwrap(), (0x80000, LiveProto::BoschUdsKwp));
+        assert_eq!(live_address_plan("P01_0411").unwrap(), (0x8000, LiveProto::GmVpw));
+        // No authoritative EDC16C41 segment in the repo → refused.
+        assert!(live_address_plan("EDC16C41").is_err());
         // No DB address entry → refused (was hardcoded 0x18000).
         assert!(live_address_plan("ME7_COMMON").is_err());
     }
