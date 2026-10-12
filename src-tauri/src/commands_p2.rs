@@ -116,7 +116,7 @@ fn log_capture_sample() -> Result<String, String> {
 #[tauri::command] fn log_import_csv(csv: String) -> Result<String, String> { Ok(serde_json::to_string(&logging::import_csv(&csv)?).unwrap_or_else(|_| "{}".into())) }
 
 #[tauri::command]
-pub(crate) fn compute_seed_key(seed_hex: String, family: Option<String>, level: Option<String>, algo: Option<u32>) -> Result<String, String> {
+fn compute_seed_key(seed_hex: String, family: Option<String>, level: Option<String>, algo: Option<u32>) -> Result<String, String> {
     let cleaned: String = seed_hex.chars().filter(|c| c.is_ascii_hexdigit()).collect();
     if cleaned.is_empty() || cleaned.len() % 2 != 0 { return Err("seed_hex must be an even-length hex string".into()); }
     let mut seed = Vec::new();

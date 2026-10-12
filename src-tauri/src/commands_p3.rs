@@ -1,5 +1,5 @@
 #[tauri::command]
-pub(crate) fn compare_p01_gm_seed(seed_hex: String, algo: Option<u32>, scan: Option<bool>) -> Result<String, String> {
+fn compare_p01_gm_seed(seed_hex: String, algo: Option<u32>, scan: Option<bool>) -> Result<String, String> {
     let a = algo.map(|v| v as u16);
     let r = crate::p01_gm_compare::compare(&seed_hex, a, scan.unwrap_or(false))?;
     Ok(serde_json::to_string(&r).unwrap_or_else(|_| "{}".into()))

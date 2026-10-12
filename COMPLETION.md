@@ -33,3 +33,8 @@ Write path remains **P01_0411** and **EDC16C41** only. Community correctors are 
 Never flash without a verified backup and stable power. Personal dumps only.
 
 Build your own. No bullshit prices.
+
+## Security access hardening (2026-10-12)
+- `bosch_uds_unlock_full` is strict ISO 14229: seed must be `67 <level> <seed…>`, key ack must be exactly `67 <level+1>`. Empty, garbled, wrong SID/level = failure. NRC 0x35/0x36/0x37 give explicit errors; 0x78 on seed re-requests (max 3); 0x78 on key fails without resending the key. All-zero seed = already unlocked only inside a valid positive response.
+- Starter/placeholder key algebra (EDC17, MED17, generic EDC16, generic Bosch) removed. These return `KeyError::KeyAlgorithmUnverified` and unlock refuses before any bus traffic. Only EDC16C41 (4-byte) and GM P01/P59 LFSR remain. Write stays limited to `ecu_database::write_path_live` (P01_0411, EDC16C41).
+- Not bench-verified on hardware. The ELM/raw ISO-TP transport has no "wait for next frame" call, so key-step 0x78 is treated as locked.

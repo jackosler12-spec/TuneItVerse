@@ -388,153 +388,260 @@ pub struct BoschKeyResult {
     pub note: String,
 }
 
-/// Key derivation dispatcher for Bosch EDC / MED families.
-///
-/// Only EDC16C41 4-byte is a measured algorithm. EDC17 / MED17 / generic
-/// rotate-xor paths are labelled unverified and must not be sent on-wire.
-pub fn bosch_key_result(seed: &[u8], family_hint: &str) -> BoschKeyResult {
+/// Error returned when no measured key algorithm exists for a family.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum KeyError {
+    /// Family has no measured/verified seed→key algorithm. Never send a key.
+    KeyAlgorithmUnverified { family: String },
+    /// Seed shape does not fit the verified algorithm (e.g. EDC16C41 needs 4 bytes).
+    BadSeedLength { family: String, got: usize, need: usize },
+    EmptySeed,
+}
+
+impl std::fmt::Display for KeyError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            KeyError::KeyAlgorithmUnverified { family } => write!(
+                f,
+                "KeyAlgorithmUnverified: no measured seed/key algorithm for {}. Unlock and write refused.",
+                family
+            ),
+            KeyError::BadSeedLength { family, got, need } => {
+                write!(f, "{} seed must be {} bytes, got {}", family, need, got)
+            }
+            KeyError::EmptySeed => write!(f, "Empty seed — no key."),
+        }
+    }
+}
+
+/// Strict Bosch key computation. Only EDC16C41 (4-byte) is measured.
+/// EDC17 / MED17 / generic EDC16 / anything else → `KeyAlgorithmUnverified`.
+/// No placeholder algebra is computed for unverified families.
+pub fn bosch_compute_key(seed: &[u8], family_hint: &str) -> Result<Vec<u8>, KeyError> {
     if seed.is_empty() {
-        return BoschKeyResult {
+        return Err(KeyError::EmptySeed);
+    }
+    let fam = family_hint.to_ascii_uppercase();
+    if fam.contains("EDC16C41") {
+        if seed.len() != 4 {
+            return Err(KeyError::BadSeedLength { family: "EDC16C41".into(), got: seed.len(), need: 4 });
+        }
+        return Ok(edc16c41_key_from_seed_bytes(seed).expect("len checked").to_vec());
+    }
+    Err(KeyError::KeyAlgorithmUnverified { family: family_hint.to_string() })
+}
+
+/// True only for Bosch families with a measured key algorithm.
+pub fn bosch_key_algorithm_verified(family_hint: &str) -> bool {
+    family_hint.to_ascii_uppercase().contains("EDC16C41")
+}
+
+/// Key derivation report for the UI. Unverified families return an empty key.
+pub fn bosch_key_result(seed: &[u8], family_hint: &str) -> BoschKeyResult {
+    match bosch_compute_key(seed, family_hint) {
+        Ok(key) => BoschKeyResult {
+            key,
+            verified: true,
+            algo: "edc16c41_4byte".into(),
+            note: "Measured EDC16C41 4-byte algorithm.".into(),
+        },
+        Err(e) => BoschKeyResult {
             key: vec![],
             verified: false,
-            algo: "empty".into(),
-            note: "Empty seed — no key.".into(),
-        };
+            algo: match e {
+                KeyError::EmptySeed => "empty".into(),
+                KeyError::BadSeedLength { .. } => "bad_seed_length".into(),
+                KeyError::KeyAlgorithmUnverified { .. } => "unverified".into(),
+            },
+            note: e.to_string(),
+        },
     }
-
-    let fam = family_hint.to_ascii_uppercase();
-    let is_edc16c41 = fam.contains("EDC16C41");
-    let is_edc16 = is_edc16c41 || fam.contains("EDC16");
-
-    if is_edc16 && seed.len() >= 4 {
-        if let Some(key) = edc16c41_key_from_seed_bytes(seed) {
-            return BoschKeyResult {
-                key: key.to_vec(),
-                verified: true,
-                algo: "edc16c41_4byte".into(),
-                note: "Measured EDC16C41 4-byte algorithm.".into(),
-            };
-        }
-    }
-
-    let unverified = |key: Vec<u8>, algo: &str, note: &str| BoschKeyResult {
-        key,
-        verified: false,
-        algo: algo.into(),
-        note: note.into(),
-    };
-
-    if seed.len() >= 2 {
-        let s0 = seed[0];
-        let s1 = seed[1];
-        if is_edc16 {
-            let k0 = s0.wrapping_add(0x5A).rotate_left(3) ^ 0xA5;
-            let k1 = s1.wrapping_add(0x3C).rotate_right(2) ^ 0x5A;
-            return unverified(vec![k0, k1], "edc16_2byte_starter", "Unverified 2-byte starter. Not a measured key. Unlock/flash refused.");
-        }
-        if fam.contains("EDC17") {
-            let k0 = s0.wrapping_mul(0x11).wrapping_add(0x7B) ^ s1;
-            let k1 = s1.rotate_left(4).wrapping_add(s0) ^ 0xC3;
-            return unverified(vec![k0, k1], "edc17_starter", "EDC17 starter algebra is not a measured key. Provide a personal dump table before unlock.");
-        }
-        if fam.contains("MED17") {
-            let k0 = s0 ^ 0xC3;
-            let k1 = s1.wrapping_add(s0).wrapping_mul(0x11);
-            return unverified(vec![k0, k1], "med17_starter", "MED17 starter algebra is not a measured key. Unlock/flash refused.");
-        }
-        return unverified(
-            vec![s0 ^ 0xFF, s1.wrapping_add(1) ^ 0xAA],
-            "generic_starter",
-            "No measured algorithm for this family. Unlock/flash refused.",
-        );
-    }
-
-    unverified(seed.to_vec(), "passthrough", "Seed too short and family unverified.")
 }
 
 /// Verified-key bytes only. Unverified families return an empty vec.
 #[inline]
 pub fn bosch_key_from_seed(seed: &[u8], family_hint: &str) -> Vec<u8> {
-    let r = bosch_key_result(seed, family_hint);
-    if r.verified { r.key } else { vec![] }
+    bosch_compute_key(seed, family_hint).unwrap_or_default()
 }
 
-/// High-level Bosch UDS unlock helper (payload only — call via can::uds_request or j2534).
-/// Returns the key bytes that should be sent after receiving the seed.
 #[inline]
 pub fn bosch_compute_key_for_seed(seed: &[u8], family: &str) -> Vec<u8> {
     bosch_key_from_seed(seed, family)
 }
 
-/// Extract seed bytes from a positive UDS SecurityAccess response (`67 XX <seed…>`).
-pub fn bosch_parse_seed_from_response(resp: &[u8]) -> Result<Vec<u8>, String> {
-    if resp.len() < 3 || resp[0] != 0x67 {
-        if !resp.is_empty() && resp[0] == 0x7F {
-            return Err(format!("Negative response NRC 0x{:02X}", resp.get(2).copied().unwrap_or(0)));
+// ─────────────────────────────────────────────────────────────────────────────
+// Strict UDS 0x27 response parsing
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SecurityAccessError {
+    Empty,
+    /// 7F 27 35
+    InvalidKey,
+    /// 7F 27 36
+    ExceededAttempts,
+    /// 7F 27 37
+    TimeDelayNotExpired,
+    /// 7F 27 78 — caller may wait for the final response.
+    ResponsePending,
+    OtherNrc(u8),
+    /// Negative response for a different SID.
+    WrongNegativeSid(u8),
+    WrongSid(u8),
+    WrongLevel { got: u8, expected: u8 },
+    /// Positive seed response carried no seed bytes.
+    NoSeed,
+    /// Positive key response carried trailing bytes (not spec-conform).
+    TrailingBytes(usize),
+    Garbled(Vec<u8>),
+}
+
+impl std::fmt::Display for SecurityAccessError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use SecurityAccessError::*;
+        match self {
+            Empty => write!(f, "Empty response from ECU"),
+            InvalidKey => write!(f, "NRC 0x35 invalidKey — key rejected"),
+            ExceededAttempts => write!(f, "NRC 0x36 exceededNumberOfAttempts — ECU locked out, wait for delay timer"),
+            TimeDelayNotExpired => write!(f, "NRC 0x37 requiredTimeDelayNotExpired — wait (often 10 s+) before retrying"),
+            ResponsePending => write!(f, "NRC 0x78 responsePending"),
+            OtherNrc(n) => write!(f, "NRC 0x{:02X} {}", n, crate::uds::nrc_text(*n)),
+            WrongNegativeSid(s) => write!(f, "Negative response for unexpected SID 0x{:02X}", s),
+            WrongSid(s) => write!(f, "Unexpected response SID 0x{:02X} (expected 0x67)", s),
+            WrongLevel { got, expected } => write!(f, "Sub-function mismatch: got 0x{:02X}, expected 0x{:02X}", got, expected),
+            NoSeed => write!(f, "Positive seed response carried no seed bytes"),
+            TrailingBytes(n) => write!(f, "Key response has {} unexpected trailing bytes", n),
+            Garbled(b) => write!(f, "Garbled response: {:02X?}", b),
         }
-        return Err("Not a positive SecurityAccess seed response".into());
     }
-    Ok(resp[2..].to_vec())
+}
+
+fn classify_negative(resp: &[u8]) -> SecurityAccessError {
+    if resp.len() != 3 {
+        return SecurityAccessError::Garbled(resp.to_vec());
+    }
+    if resp[1] != 0x27 {
+        return SecurityAccessError::WrongNegativeSid(resp[1]);
+    }
+    match resp[2] {
+        0x35 => SecurityAccessError::InvalidKey,
+        0x36 => SecurityAccessError::ExceededAttempts,
+        0x37 => SecurityAccessError::TimeDelayNotExpired,
+        0x78 => SecurityAccessError::ResponsePending,
+        n => SecurityAccessError::OtherNrc(n),
+    }
+}
+
+/// Parse `67 <seed_subfn> <seed…>`. Returns seed bytes (≥1).
+pub fn parse_uds_seed_response(resp: &[u8], seed_subfn: u8) -> Result<Vec<u8>, SecurityAccessError> {
+    match resp.first() {
+        None => Err(SecurityAccessError::Empty),
+        Some(0x7F) => Err(classify_negative(resp)),
+        Some(0x67) => {
+            let lvl = *resp.get(1).ok_or_else(|| SecurityAccessError::Garbled(resp.to_vec()))?;
+            if lvl != seed_subfn {
+                return Err(SecurityAccessError::WrongLevel { got: lvl, expected: seed_subfn });
+            }
+            if resp.len() < 3 {
+                return Err(SecurityAccessError::NoSeed);
+            }
+            Ok(resp[2..].to_vec())
+        }
+        Some(&s) => Err(SecurityAccessError::WrongSid(s)),
+    }
+}
+
+/// Parse `67 <key_subfn>` exactly.
+pub fn parse_uds_key_response(resp: &[u8], key_subfn: u8) -> Result<(), SecurityAccessError> {
+    match resp.first() {
+        None => Err(SecurityAccessError::Empty),
+        Some(0x7F) => Err(classify_negative(resp)),
+        Some(0x67) => {
+            let lvl = *resp.get(1).ok_or_else(|| SecurityAccessError::Garbled(resp.to_vec()))?;
+            if lvl != key_subfn {
+                return Err(SecurityAccessError::WrongLevel { got: lvl, expected: key_subfn });
+            }
+            if resp.len() > 2 {
+                return Err(SecurityAccessError::TrailingBytes(resp.len() - 2));
+            }
+            Ok(())
+        }
+        Some(&s) => Err(SecurityAccessError::WrongSid(s)),
+    }
+}
+
+/// Legacy helper — strict now: requires `67 01 <seed…>`-style shape with any level.
+pub fn bosch_parse_seed_from_response(resp: &[u8]) -> Result<Vec<u8>, String> {
+    let lvl = resp.get(1).copied().unwrap_or(0);
+    if resp.first() == Some(&0x67) && lvl % 2 == 0 {
+        return Err(SecurityAccessError::WrongLevel { got: lvl, expected: lvl.wrapping_sub(1) }.to_string());
+    }
+    parse_uds_seed_response(resp, lvl).map_err(|e| e.to_string())
+}
+
+/// Max seed re-requests when the ECU answers 0x78 responsePending.
+const SEED_PENDING_RETRIES: usize = 3;
+
+/// Transport-agnostic unlock core. `xfer` sends a full UDS payload (SID first)
+/// and returns the full response (SID first).
+pub fn bosch_uds_unlock_with<F>(mut xfer: F, family: &str, level: BoschSecurityLevel) -> Result<String, String>
+where
+    F: FnMut(&[u8]) -> Result<Vec<u8>, String>,
+{
+    // Refuse before touching the bus if no measured key algorithm exists.
+    if !bosch_key_algorithm_verified(family) {
+        return Err(KeyError::KeyAlgorithmUnverified { family: family.into() }.to_string());
+    }
+
+    // 1. RequestSeed (re-request on 0x78; requesting a seed costs no attempt).
+    let seed_req = bosch_uds_request_seed(level);
+    let mut seed = None;
+    for _ in 0..=SEED_PENDING_RETRIES {
+        let resp = xfer(&seed_req).map_err(|e| format!("Seed request failed: {}", e))?;
+        match parse_uds_seed_response(&resp, level.seed_subfn()) {
+            Ok(s) => { seed = Some(s); break; }
+            Err(SecurityAccessError::ResponsePending) => continue,
+            Err(e) => return Err(format!("Seed request rejected: {}", e)),
+        }
+    }
+    let seed = seed.ok_or_else(|| "Seed request: ECU stayed in responsePending (0x78)".to_string())?;
+
+    // 2. All-zero seed in a strictly valid positive response = level already unlocked (ISO 14229-1).
+    if seed.iter().all(|&b| b == 0) {
+        return Ok(format!(
+            r#"{{"success":true,"level":"{:?}","message":"Already unlocked (zero seed in valid 67 {:02X} response)","family":"{}"}}"#,
+            level, level.seed_subfn(), family
+        ));
+    }
+
+    let key = bosch_compute_key(&seed, family).map_err(|e| e.to_string())?;
+
+    // 3. SendKey — sent exactly once. On 0x78 we do NOT resend (would burn an attempt).
+    let key_payload = bosch_uds_send_key(level, &key);
+    let resp = xfer(&key_payload).map_err(|e| format!("Send key failed: {}", e))?;
+    match parse_uds_key_response(&resp, level.key_subfn()) {
+        Ok(()) => Ok(format!(
+            r#"{{"success":true,"level":"{:?}","message":"Bosch UDS SecurityAccess unlocked","family":"{}","seed_len":{},"key_len":{}}}"#,
+            level, family, seed.len(), key.len()
+        )),
+        Err(SecurityAccessError::ResponsePending) => Err(
+            "Key response pending (0x78) and transport cannot wait for the final frame; key not resent. Treat as locked.".into(),
+        ),
+        Err(e) => Err(format!("Key rejected: {}", e)),
+    }
 }
 
 /// Full end-to-end Bosch UDS SecurityAccess unlock over an open serial/CAN port.
-/// Uses `can::uds_request` for transport. Returns a JSON-ready status string.
 pub fn bosch_uds_unlock_full(
     port: &mut Box<dyn SerialPort + Send>,
     family: &str,
     level: BoschSecurityLevel,
 ) -> Result<String, String> {
-    // 1. Request seed
-    let seed_req = bosch_uds_request_seed(level);
-    let seed_resp = crate::can::uds_request(port, 0x27, &seed_req[1..], true)
-        .map_err(|e| format!("Seed request failed: {}", e))?;
-
-    // uds_request may return the full positive response or just the payload
-    let seed_bytes = if seed_resp.first() == Some(&0x67) {
-        bosch_parse_seed_from_response(&seed_resp)?
-    } else if seed_resp.len() >= 2 {
-        seed_resp
-    } else {
-        return Err(format!("Unexpected seed response: {:02X?}", seed_resp));
-    };
-
-    if seed_bytes.iter().all(|&b| b == 0) {
-        return Ok(format!(
-            r#"{{"success":true,"level":"{:?}","message":"Already unlocked or zero-seed (no key required)","family":"{}"}}"#,
-            level, family
-        ));
-    }
-
-    let derived = bosch_key_result(&seed_bytes, family);
-    if !derived.verified {
-        return Err(format!(
-            "Refusing Bosch UDS unlock for {}: {} (algo={})",
-            family, derived.note, derived.algo
-        ));
-    }
-    let key = derived.key;
-
-    // 3. Send key
-    let key_payload = bosch_uds_send_key(level, &key);
-    let key_resp = crate::can::uds_request(port, 0x27, &key_payload[1..], true)
-        .map_err(|e| format!("Send key failed: {}", e))?;
-
-    // 4. Validate positive response
-    let ok = key_resp.first() == Some(&0x67)
-        || key_resp.is_empty()
-        || key_resp.iter().any(|&b| b == 0x67);
-
-    if !ok && key_resp.first() == Some(&0x7F) {
-        let nrc = key_resp.get(2).copied().unwrap_or(0);
-        return Err(format!(
-            "Key rejected NRC 0x{:02X} — check family hint or seed length", nrc
-        ));
-    }
-
-    Ok(format!(
-        r#"{{"success":true,"level":"{:?}","message":"Bosch UDS SecurityAccess unlocked successfully","family":"{}","seed_len":{},"key_len":{}}}"#,
-        level, family, seed_bytes.len(), key.len()
-    ))
+    bosch_uds_unlock_with(
+        |payload| crate::can::uds_request(port, payload[0], &payload[1..], true),
+        family,
+        level,
+    )
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -680,10 +787,11 @@ mod tests {
     }
 
     #[test]
-    fn bosch_key_from_seed_edc16_family_also_uses_real_algo() {
+    fn bosch_key_from_seed_generic_edc16_is_unverified() {
         let seed = [0x00, 0x00, 0x00, 0x01];
-        let key = bosch_key_from_seed(&seed, "EDC16");
-        assert_eq!(key, edc16c41_calculate_key(0x0000_0001).to_be_bytes().to_vec());
+        // EDC16C41 algorithm is measured for C41 only; do not generalise to all EDC16.
+        assert!(bosch_key_from_seed(&seed, "EDC16").is_empty());
+        assert!(matches!(bosch_compute_key(&seed, "EDC16"), Err(KeyError::KeyAlgorithmUnverified { .. })));
     }
 
     #[test]
@@ -700,7 +808,8 @@ mod tests {
         let seed = [0x12, 0x34];
         let r = bosch_key_result(&seed, "EDC17_COMMON");
         assert!(!r.verified);
-        assert!(r.note.contains("not a measured key"));
+        assert!(r.note.contains("KeyAlgorithmUnverified"));
+        assert!(r.key.is_empty(), "no placeholder key bytes may be produced");
         assert!(bosch_key_from_seed(&seed, "EDC17_COMMON").is_empty());
     }
 
@@ -721,4 +830,103 @@ mod tests {
             .fold(0u8, |a, &b| a.wrapping_add(b));
         expected == frame[frame.len() - 1]
     }
+
+    // ── strict UDS 0x27 parsing ─────────────────────────────────────────
+    #[test]
+    fn uds_seed_positive() {
+        assert_eq!(parse_uds_seed_response(&[0x67, 0x03, 1, 2, 3, 4], 0x03).unwrap(), vec![1, 2, 3, 4]);
+    }
+    #[test]
+    fn uds_seed_empty_wrong_sid_wrong_level_noseed() {
+        assert_eq!(parse_uds_seed_response(&[], 3), Err(SecurityAccessError::Empty));
+        assert_eq!(parse_uds_seed_response(&[0x62, 0x03, 1], 3), Err(SecurityAccessError::WrongSid(0x62)));
+        assert_eq!(parse_uds_seed_response(&[0x67, 0x01, 1], 3), Err(SecurityAccessError::WrongLevel { got: 1, expected: 3 }));
+        assert_eq!(parse_uds_seed_response(&[0x67, 0x03], 3), Err(SecurityAccessError::NoSeed));
+        assert!(matches!(parse_uds_seed_response(&[0x67], 3), Err(SecurityAccessError::Garbled(_))));
+        // 0x67 buried inside garbage is not success
+        assert_eq!(parse_uds_seed_response(&[0x00, 0x67, 0x03, 1], 3), Err(SecurityAccessError::WrongSid(0)));
+    }
+    #[test]
+    fn uds_nrc_cases() {
+        assert_eq!(parse_uds_key_response(&[0x7F, 0x27, 0x35], 4), Err(SecurityAccessError::InvalidKey));
+        assert_eq!(parse_uds_key_response(&[0x7F, 0x27, 0x36], 4), Err(SecurityAccessError::ExceededAttempts));
+        assert_eq!(parse_uds_key_response(&[0x7F, 0x27, 0x37], 4), Err(SecurityAccessError::TimeDelayNotExpired));
+        assert_eq!(parse_uds_seed_response(&[0x7F, 0x27, 0x78], 3), Err(SecurityAccessError::ResponsePending));
+        assert_eq!(parse_uds_key_response(&[0x7F, 0x27, 0x22], 4), Err(SecurityAccessError::OtherNrc(0x22)));
+        assert_eq!(parse_uds_key_response(&[0x7F, 0x10, 0x35], 4), Err(SecurityAccessError::WrongNegativeSid(0x10)));
+        assert!(matches!(parse_uds_key_response(&[0x7F, 0x27], 4), Err(SecurityAccessError::Garbled(_))));
+    }
+    #[test]
+    fn uds_key_positive_and_strict() {
+        assert_eq!(parse_uds_key_response(&[0x67, 0x04], 4), Ok(()));
+        assert_eq!(parse_uds_key_response(&[], 4), Err(SecurityAccessError::Empty));
+        assert_eq!(parse_uds_key_response(&[0x67, 0x03], 4), Err(SecurityAccessError::WrongLevel { got: 3, expected: 4 }));
+        assert_eq!(parse_uds_key_response(&[0x67, 0x04, 0x00], 4), Err(SecurityAccessError::TrailingBytes(1)));
+        assert_eq!(parse_uds_key_response(&[0x00, 0x67, 0x04], 4), Err(SecurityAccessError::WrongSid(0)));
+    }
+
+    // ── unlock flow over a scripted transport ───────────────────────────
+    fn scripted(resps: Vec<Vec<u8>>) -> (impl FnMut(&[u8]) -> Result<Vec<u8>, String>, std::rc::Rc<std::cell::RefCell<Vec<Vec<u8>>>>) {
+        let sent = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+        let s2 = sent.clone();
+        let mut it = resps.into_iter();
+        (move |p: &[u8]| { s2.borrow_mut().push(p.to_vec()); it.next().ok_or_else(|| "no more".to_string()) }, sent)
+    }
+    #[test]
+    fn unlock_edc16c41_happy_path() {
+        let seed = [0x12, 0x34, 0x56, 0x78];
+        let (x, sent) = scripted(vec![vec![0x67, 0x03, 0x12, 0x34, 0x56, 0x78], vec![0x67, 0x04]]);
+        assert!(bosch_uds_unlock_with(x, "EDC16C41", BoschSecurityLevel::Programming).is_ok());
+        let mut expect = vec![0x27, 0x04];
+        expect.extend(edc16c41_key_from_seed_bytes(&seed).unwrap());
+        assert_eq!(sent.borrow()[1], expect);
+    }
+    #[test]
+    fn unlock_empty_key_response_fails() {
+        let (x, _) = scripted(vec![vec![0x67, 0x03, 1, 2, 3, 4], vec![]]);
+        assert!(bosch_uds_unlock_with(x, "EDC16C41", BoschSecurityLevel::Programming).is_err());
+    }
+    #[test]
+    fn unlock_invalid_key_fails_and_not_retried() {
+        let (x, sent) = scripted(vec![vec![0x67, 0x03, 1, 2, 3, 4], vec![0x7F, 0x27, 0x35]]);
+        let e = bosch_uds_unlock_with(x, "EDC16C41", BoschSecurityLevel::Programming).unwrap_err();
+        assert!(e.contains("0x35"));
+        assert_eq!(sent.borrow().len(), 2);
+    }
+    #[test]
+    fn unlock_key_pending_not_resent() {
+        let (x, sent) = scripted(vec![vec![0x67, 0x03, 1, 2, 3, 4], vec![0x7F, 0x27, 0x78]]);
+        assert!(bosch_uds_unlock_with(x, "EDC16C41", BoschSecurityLevel::Programming).is_err());
+        assert_eq!(sent.borrow().len(), 2);
+    }
+    #[test]
+    fn unlock_seed_pending_then_ok() {
+        let (x, _) = scripted(vec![vec![0x7F, 0x27, 0x78], vec![0x67, 0x03, 1, 2, 3, 4], vec![0x67, 0x04]]);
+        assert!(bosch_uds_unlock_with(x, "EDC16C41", BoschSecurityLevel::Programming).is_ok());
+    }
+    #[test]
+    fn unlock_zero_seed_only_when_valid() {
+        let (x, sent) = scripted(vec![vec![0x67, 0x03, 0, 0, 0, 0]]);
+        assert!(bosch_uds_unlock_with(x, "EDC16C41", BoschSecurityLevel::Programming).is_ok());
+        assert_eq!(sent.borrow().len(), 1);
+        let (x, _) = scripted(vec![vec![0x67, 0x01, 0, 0, 0, 0]]);
+        assert!(bosch_uds_unlock_with(x, "EDC16C41", BoschSecurityLevel::Programming).is_err());
+        let (x, _) = scripted(vec![vec![]]);
+        assert!(bosch_uds_unlock_with(x, "EDC16C41", BoschSecurityLevel::Programming).is_err());
+    }
+    #[test]
+    fn unlock_refuses_unverified_families_without_bus_traffic() {
+        for fam in ["EDC17_COMMON", "MED17_COMMON", "EDC16", "ME7", "BOSCH", "DELPHI_DCM"] {
+            let (x, sent) = scripted(vec![vec![0x67, 0x03, 1, 2, 3, 4], vec![0x67, 0x04]]);
+            let e = bosch_uds_unlock_with(x, fam, BoschSecurityLevel::Programming).unwrap_err();
+            assert!(e.contains("KeyAlgorithmUnverified"), "{fam}: {e}");
+            assert!(sent.borrow().is_empty(), "{fam} touched the bus");
+            assert!(matches!(bosch_compute_key(&[1, 2, 3, 4], fam), Err(KeyError::KeyAlgorithmUnverified { .. })));
+        }
+    }
+    #[test]
+    fn edc16c41_wrong_seed_len_rejected() {
+        assert!(matches!(bosch_compute_key(&[1, 2], "EDC16C41"), Err(KeyError::BadSeedLength { .. })));
+    }
+
 }

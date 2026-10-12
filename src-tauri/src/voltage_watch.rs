@@ -81,9 +81,10 @@ mod tests {
 
     #[test]
     fn classifies_band() {
-        assert_eq!(classify(12.6, 12.5), SupplyClass::Ok);
-        assert_eq!(classify(12.7, 12.5), SupplyClass::Ok);
-        assert_eq!(classify(12.6, 12.5), SupplyClass::Ok);
+        // Warn band is 0.4 V above min_v (classify's conservative margin).
+        assert_eq!(classify(12.9, 12.5), SupplyClass::Ok);
+        assert_eq!(classify(13.2, 12.5), SupplyClass::Ok);
+        assert_eq!(classify(12.6, 12.5), SupplyClass::Warn);
         assert_eq!(classify(12.55, 12.5), SupplyClass::Warn);
         assert_eq!(classify(12.4, 12.5), SupplyClass::Abort);
         assert_eq!(classify(0.0, 12.5), SupplyClass::Ok);
