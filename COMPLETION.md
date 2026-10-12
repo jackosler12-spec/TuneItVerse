@@ -44,3 +44,10 @@ Build your own. No bullshit prices.
 - Live logging: no connection → "No live connection" error; connected but no PID answered → error; nothing recorded. Simulation only via explicit Demo mode (`log_set_demo_mode`), samples flagged `demo:true`, CSV export headed `# DEMO DATA`, red DEMO badge in UI. Demo cannot be toggled mid-session and clears the buffer.
 - J2534: unbound connect/write/read and ISO15765 filter return `NotImplemented` instead of fake Ok; `j2534_connect` no longer reports success when PassThruConnect fails.
 - Versions synced to 3.40.0 (tauri.conf.json, Inno installer, UI console banner).
+
+## J2534 filter, DB flash addresses, family plumbing, Demo toggle (2026-10-12)
+- J2534: `PassThruStartMsgFilter` FLOW_CONTROL_FILTER for ISO15765 (mask 0x7FF / 0x1FFFFFFF, pattern = ECU rx id, FC = tester tx id, FC padded); real filter id returned and tracked; `PassThruStopMsgFilter` on disconnect/close. `j2534_connect` installs 0x7E8/0x7E0 or fails. Still `NotImplemented` without a loaded DLL. Not tested on a real device.
+- Flash/verify address comes from `flash_write_address` in reference/ecu_database (P01_0411 0x20000, EDC16C41 0x80000, same as before). Families without an entry (ME7, EDC17, …) are refused before unlock.
+- Frontend never defaults a family; unknown family shows an explicit error. Backend compare/verify refuse a family that contradicts the BIN.
+- Logging screen gets a Demo mode checkbox (disabled while logging).
+- KNOWN BLOCKER: src/index.html on main is a 14-line placeholder (no markup, no script tags) since the history-rewrite commit 21e4535. The UI does not load main.js at all until the real index.html is restored.

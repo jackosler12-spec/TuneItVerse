@@ -850,6 +850,7 @@ async function refreshLogStatus() {
     if (meta) meta.textContent = `Session: ${st.session_name || '—'} | Rate: ${st.rate_hz} Hz | Enabled: ${(st.channels || []).filter((c) => c.enabled).length}`;
     renderChannelList(st.channels || []);
     renderDemoBadge(!!st.demo);
+    renderDemoToggle(!!st.demo, !!st.running);
     if (st.last_sample) updateLogKpis(st.last_sample);
     return st;
   } catch (e) {
@@ -966,6 +967,34 @@ async function setLogDemoMode(enabled) {
   }
 }
 window.setLogDemoMode = setLogDemoMode;
+
+// Visible Demo toggle on the logging screen. Disabled while a session runs
+// (the backend refuses mid-session changes too).
+function renderDemoToggle(on, running) {
+  let wrap = document.getElementById('log-demo-toggle-wrap');
+  if (!wrap) {
+    wrap = document.createElement('label');
+    wrap.id = 'log-demo-toggle-wrap';
+    wrap.style.cssText = 'display:inline-flex;align-items:center;gap:6px;margin:6px 0;font-weight:600;';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.id = 'log-demo-toggle';
+    cb.addEventListener('change', () => setLogDemoMode(cb.checked));
+    const txt = document.createElement('span');
+    txt.id = 'log-demo-toggle-text';
+    wrap.appendChild(cb);
+    wrap.appendChild(txt);
+    const anchor = document.getElementById('log-status');
+    if (anchor && anchor.parentNode) anchor.parentNode.insertBefore(wrap, anchor.nextSibling);
+    else (document.getElementById('log-section') || document.body).appendChild(wrap);
+  }
+  const cb = document.getElementById('log-demo-toggle');
+  const txt = document.getElementById('log-demo-toggle-text');
+  cb.checked = on;
+  cb.disabled = running;
+  txt.textContent = running ? 'Demo mode (stop logging to change)' : 'Demo mode (simulated data)';
+}
+window.renderDemoToggle = renderDemoToggle;
 
 async function startLogging() {
   if (!logDemoMode && !(await requireConnected('live logging'))) return;
