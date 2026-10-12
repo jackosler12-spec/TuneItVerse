@@ -1,7 +1,7 @@
 // TuneItVerse lib.rs — Tauri entry + command surface (v3.39.0)
 #![allow(unused_imports, dead_code, non_snake_case)]
 
-pub const APP_VERSION: &str = "3.39.0";
+pub const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 mod a2l;
 mod bin_inspect;
@@ -33,6 +33,7 @@ mod uds;
 mod vpw;
 mod xdf;
 mod v29_tools;
+mod private_bin_probe;
 mod transport;
 mod v312;
 mod voltage_watch;

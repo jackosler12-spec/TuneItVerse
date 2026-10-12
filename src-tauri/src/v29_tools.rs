@@ -89,11 +89,22 @@ pub fn identify_bin(data: &[u8]) -> serde_json::Value {
         }
     }
     let strings = printable_strings(data, 5, 64);
-    let os_hits = match_os_ids(&strings);
+    let mut os_hits = match_os_ids(&strings);
+    // GM P01 stores the OS ID as a binary u32, not ASCII. Trust it only when the
+    // OS segment checksum validates.
+    let p01_bin_os = crate::checksum::p01_binary_os_id(data);
+    if let Some(os) = p01_bin_os {
+        let tok = os.to_string();
+        if let Some(e) = ecu_database::get_ecu_by_family("P01_0411") {
+            if e.part_numbers_or_os_ids.iter().any(|id| id.trim() == tok) {
+                os_hits.insert(0, json!({"family": e.ecu_family, "matched": tok, "display_name": e.display_name, "source": "binary OS ID @0x504, OS checksum valid"}));
+            }
+        }
+    }
     let family_by_os = os_hits.first().and_then(|h| h.get("family").and_then(|v| v.as_str()).map(|s| s.to_string()));
     let family_by_size = size_matches.first().map(|e| e.ecu_family.clone());
     let honda_os = crate::cs_guard::looks_like_honda(data);
-    let gm_p01_os = crate::cs_guard::looks_like_gm_p01(data);
+    let gm_p01_os = crate::cs_guard::looks_like_gm_p01(data) || p01_bin_os.is_some();
     let gm_p59_os = crate::cs_guard::looks_like_gm_p59(data);
     let size_collision = size_matches.len() > 1;
     let family = if honda_os && !gm_p01_os {
@@ -132,6 +143,7 @@ pub fn identify_bin(data: &[u8]) -> serde_json::Value {
         "printable_strings": strings.into_iter().take(24).collect::<Vec<_>>(),
         "honda_os": honda_os,
         "gm_p01_os": gm_p01_os,
+        "p01_binary_os_id": p01_bin_os,
         "gm_p59_os": gm_p59_os,
         "size_collision": size_collision,
         "correction_safe": correction_safe,
@@ -293,6 +305,21 @@ pub(crate) fn analyze_log() -> Result<serde_json::Value, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn p01_binary_os_id_resolves_despite_size_collision() {
+        let mut d = crate::checksum::tests::synthetic_p01();
+        d[0x504..0x508].copy_from_slice(&12225074u32.to_be_bytes());
+        let d = crate::checksum::correct_checksums(&d).unwrap().data;
+        let v = identify_bin(&d);
+        assert_eq!(v["family"], "P01_0411", "{}", v);
+        assert_eq!(v["p01_binary_os_id"], 12225074);
+        assert_eq!(resolved_family(&d).unwrap(), "P01_0411");
+        // Same OS id but broken OS checksum → not trusted.
+        let mut bad = d.clone();
+        bad[0x30000] ^= 1;
+        assert!(identify_bin(&bad)["p01_binary_os_id"].is_null());
+    }
 
     #[test]
     fn workspace_export_uses_crate_version() {

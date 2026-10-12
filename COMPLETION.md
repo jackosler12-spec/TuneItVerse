@@ -62,3 +62,9 @@ Build your own. No bullshit prices.
 - BIN size must equal the DB image size (512KB for P01). EDC16C41 has no authoritative segment data in the repo, so its write and live verify are refused until one is added.
 - Failed checksum correction now refuses the write instead of flashing the uncorrected image.
 - Diagnostics: DTC lookup input `#dtc-lookup` + Explain button; output HTML-escaped. DEMO badge moved inline into the page header.
+
+## P01 checksum + identify fixed against a real read (2026-10-12)
+- The old P01 checksum regions (8 per 64KB block, CS at block+0x3FFE etc.) were invented: on a real 512KB OS 12225074 read all 64 "regions" failed, and correction would have written 64 words, many inside OS code. Replaced with the GM layout from reference/P01-P59.xml: OS wordsum (CS @0x500; 0-4FF, 502-3FFF, 20000-[@0x510]) plus 7 cal segments read from the table at 0x514, CS word at each segment start, 16-bit two's-complement wordsum. The table is read from the image and sanity-checked; otherwise correction refuses. Cal-only 128KB files are report-only (no table).
+- Identify: P01 stores its OS ID as a binary u32 at 0x504, so the ASCII search missed it and the 512KB Honda size collision left family unresolved. The binary ID is now used when the OS checksum validates.
+- APP_VERSION now comes from Cargo.toml.
+- Optional real-image tests: set TIV_P01_BIN=/path/to/read.bin (skipped when unset). Never commit the image.

@@ -45,17 +45,6 @@ pub struct RegionDescriptor {
     pub cs_offset: usize,
 }
 
-pub const P01_REGIONS: [RegionDescriptor; 8] = [
-    RegionDescriptor { name: "Main cal", start: 0x0000, end: 0x3FFF, cs_offset: 0x3FFE },
-    RegionDescriptor { name: "Fuel tables", start: 0x4000, end: 0x7FFF, cs_offset: 0x7FFE },
-    RegionDescriptor { name: "Spark tables", start: 0x8000, end: 0xBFFF, cs_offset: 0xBFFE },
-    RegionDescriptor { name: "Idle/misc", start: 0xC000, end: 0xEFFF, cs_offset: 0xEFFE },
-    RegionDescriptor { name: "Sensor scaling", start: 0xF000, end: 0xF3FF, cs_offset: 0xF3FE },
-    RegionDescriptor { name: "Transmission", start: 0xF400, end: 0xF7FF, cs_offset: 0xF7FE },
-    RegionDescriptor { name: "Security patch", start: 0xF800, end: 0xFBFF, cs_offset: 0xFBFE },
-    RegionDescriptor { name: "Header/ID", start: 0xFC00, end: 0xFFFF, cs_offset: 0xFFFE },
-];
-
 pub const EDC16_CRC32_REGIONS: [RegionDescriptor; 7] = [
     RegionDescriptor { name: "Bootloader / Low OS", start: 0x00000, end: 0x1FFFF, cs_offset: 0x1FFFC },
     RegionDescriptor { name: "Main Program Code", start: 0x20000, end: 0x7FFFF, cs_offset: 0x7FFFC },
@@ -171,59 +160,105 @@ fn correct_additive_region(block: &mut [u8], region: &RegionDescriptor) -> Resul
     Ok(new_cs)
 }
 
-fn validate_p01_checksums(data: &[u8]) -> Result<ChecksumReport, String> {
-    let blocks = p01_block_count(data.len())?;
-    let mut regions = vec![];
-    let mut valid_count = 0;
-    let mut failed_count = 0;
-    for block_idx in 0..blocks {
-        let block_offset = block_idx * BLOCK_SIZE;
-        let block = &data[block_offset..block_offset + BLOCK_SIZE];
-        for region in &P01_REGIONS {
-            let cs_abs = block_offset + region.cs_offset;
-            let original_cs = read_u16_be(data, cs_abs) as u32;
-            let was_valid = validate_additive_region(block, region);
-            if was_valid { valid_count += 1; } else { failed_count += 1; }
-            regions.push(RegionResult {
-                name: region.name.to_string(), block: block_idx as u8, cs_offset: cs_abs,
-                original_cs, corrected_cs: original_cs, was_valid, is_valid: was_valid,
-                method: "Additive16".to_string(),
-            });
-        }
+// ── GM P01 (512KB) segment checksums ───────────────────────────────────────
+// Layout source: reference/P01-P59.xml (UniversalPatcher SegmentConfig):
+//   OS:   wordsum, two's complement (CS1Complement=2), CS word at 0x500,
+//         blocks 0x0-0x4FF, 0x502-0x3FFF, 0x20000-[u32 end @0x510]
+//   Cal:  7 segments, [u32 start, u32 end] pairs at 0x514 + 8*i
+//         (EngineCal, EngineDiag, TransCal, TransDiag, Fuel, System, Speedometer);
+//         CS word at segment offset 0, wordsum two's complement over the rest.
+// Ranges are inclusive. Big-endian 16-bit words.
+
+pub const P01_OS_CS_ADDR: usize = 0x500;
+pub const P01_OS_END_PTR: usize = 0x510;
+pub const P01_SEG_TABLE: usize = 0x514;
+pub const P01_CAL_SEGMENT_NAMES: [&str; 7] = ["EngineCal", "EngineDiag", "TransCal", "TransDiag", "Fuel", "System", "Speedometer"];
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct P01Segment {
+    pub name: &'static str,
+    pub cs_addr: usize,
+    /// Inclusive byte ranges summed (excluding the CS word).
+    pub blocks: Vec<(usize, usize)>,
+}
+
+fn read_u32_be(d: &[u8], o: usize) -> Option<u32> {
+    d.get(o..o + 4).map(|b| u32::from_be_bytes([b[0], b[1], b[2], b[3]]))
+}
+
+/// Read the P01 segment layout from the image's own OS tables. Errors if the
+/// table is missing or not sane (no guessing).
+pub fn p01_segments(data: &[u8]) -> Result<Vec<P01Segment>, String> {
+    if data.len() != P01_FULL_IMAGE_SIZE {
+        return Err(format!("P01 segment checksums need the full 512KB image (got {} bytes); a cal-only file has no segment table.", data.len()));
     }
-    Ok(ChecksumReport { regions, valid_count, fixed_count: 0, failed_count, all_valid: failed_count == 0, ecu_family: "P01_0411".to_string(), method_used: "Additive16".to_string() })
+    let os_end = read_u32_be(data, P01_OS_END_PTR).unwrap() as usize;
+    if !(0x20000..data.len()).contains(&os_end) {
+        return Err(format!("P01 OS end pointer @0x510 = 0x{:X} is not sane. Not a P01 OS layout.", os_end));
+    }
+    let mut segs = vec![P01Segment { name: "OS", cs_addr: P01_OS_CS_ADDR, blocks: vec![(0x0, 0x4FF), (0x502, 0x3FFF), (0x20000, os_end)] }];
+    let mut prev_end = 0x7FFFusize;
+    for (i, name) in P01_CAL_SEGMENT_NAMES.iter().enumerate() {
+        let o = P01_SEG_TABLE + 8 * i;
+        let start = read_u32_be(data, o).unwrap() as usize;
+        let end = read_u32_be(data, o + 4).unwrap() as usize;
+        if start <= prev_end || end <= start + 2 || end >= 0x20000 || start % 2 != 0 || (end + 1) % 2 != 0 {
+            return Err(format!("P01 segment table entry {} ({}) @0x{:X} = 0x{:X}-0x{:X} is not sane.", i, name, o, start, end));
+        }
+        segs.push(P01Segment { name, cs_addr: start, blocks: vec![(start + 2, end)] });
+        prev_end = end;
+    }
+    Ok(segs)
+}
+
+fn seg_sum(data: &[u8], seg: &P01Segment) -> u16 {
+    seg.blocks.iter().fold(0u16, |acc, &(a, b)| acc.wrapping_add(region_sum16(data, a, b)))
+}
+
+fn p01_expected_cs(data: &[u8], seg: &P01Segment) -> u16 {
+    0u16.wrapping_sub(seg_sum(data, seg))
+}
+
+/// GM P01 OS part number (u32 BE @0x504, PNAddr in reference/P01-P59.xml), only
+/// when the image's OS segment checksum validates — otherwise None.
+pub fn p01_binary_os_id(data: &[u8]) -> Option<u32> {
+    let segs = p01_segments(data).ok()?;
+    let os = &segs[0];
+    if read_u16_be(data, os.cs_addr) != p01_expected_cs(data, os) { return None; }
+    read_u32_be(data, 0x504)
+}
+
+fn validate_p01_checksums(data: &[u8]) -> Result<ChecksumReport, String> {
+    let segs = match p01_segments(data) {
+        Ok(s) => s,
+        Err(e) => return Ok(ChecksumReport { regions: vec![], valid_count: 0, fixed_count: 0, failed_count: 0, all_valid: false, ecu_family: "P01_0411".into(), method_used: format!("report-only: {}", e) }),
+    };
+    let mut regions = vec![];
+    let (mut valid_count, mut failed_count) = (0, 0);
+    for (i, seg) in segs.iter().enumerate() {
+        let cs = read_u16_be(data, seg.cs_addr);
+        let ok = cs == p01_expected_cs(data, seg);
+        if ok { valid_count += 1 } else { failed_count += 1 }
+        regions.push(RegionResult { name: seg.name.to_string(), block: i as u8, cs_offset: seg.cs_addr, original_cs: cs as u32, corrected_cs: cs as u32, was_valid: ok, is_valid: ok, method: "GM Wordsum16 (2's complement)".into() });
+    }
+    Ok(ChecksumReport { regions, valid_count, fixed_count: 0, failed_count, all_valid: failed_count == 0, ecu_family: "P01_0411".into(), method_used: "GM P01 segment wordsum (reference/P01-P59.xml)".into() })
 }
 
 fn correct_p01_checksums(data: &[u8]) -> Result<CorrectedCal, String> {
-    let blocks = p01_block_count(data.len())?;
+    let segs = p01_segments(data)?;
     let mut buf = data.to_vec();
-    let mut results = vec![];
-    let mut valid_count = 0;
-    let mut fixed_count = 0;
-    let mut failed_count = 0;
-    for block_idx in 0..blocks {
-        let block_offset = block_idx * BLOCK_SIZE;
-        for region in &P01_REGIONS {
-            let cs_abs = block_offset + region.cs_offset;
-            let original_cs = read_u16_be(&buf, cs_abs) as u32;
-            let block_slice = &buf[block_offset..block_offset + BLOCK_SIZE];
-            let was_valid = validate_additive_region(block_slice, region);
-            let (corrected_cs, is_valid) = if was_valid {
-                valid_count += 1; (original_cs, true)
-            } else {
-                let block_mut = &mut buf[block_offset..block_offset + BLOCK_SIZE];
-                match correct_additive_region(block_mut, region) {
-                    Ok(new_cs) => { fixed_count += 1; (new_cs as u32, true) }
-                    Err(e) => { failed_count += 1; return Err(format!("Block {} region '{}': {}", block_idx, region.name, e)); }
-                }
-            };
-            results.push(RegionResult {
-                name: region.name.to_string(), block: block_idx as u8, cs_offset: cs_abs,
-                original_cs, corrected_cs, was_valid, is_valid, method: "Additive16".to_string(),
-            });
-        }
+    let mut regions = vec![];
+    let (mut valid_count, mut fixed_count) = (0, 0);
+    for (i, seg) in segs.iter().enumerate() {
+        let cs = read_u16_be(&buf, seg.cs_addr);
+        let want = p01_expected_cs(&buf, seg);
+        let was_valid = cs == want;
+        if was_valid { valid_count += 1 } else { write_u16_be(&mut buf, seg.cs_addr, want); fixed_count += 1; }
+        regions.push(RegionResult { name: seg.name.to_string(), block: i as u8, cs_offset: seg.cs_addr, original_cs: cs as u32, corrected_cs: want as u32, was_valid, is_valid: true, method: "GM Wordsum16 (2's complement)".into() });
     }
-    Ok(CorrectedCal { data: buf, report: ChecksumReport { regions: results, valid_count, fixed_count, failed_count, all_valid: failed_count == 0, ecu_family: "P01_0411".to_string(), method_used: "Additive16".to_string() } })
+    let post = validate_p01_checksums(&buf)?;
+    if !post.all_valid { return Err("P01 post-correction verify failed".into()); }
+    Ok(CorrectedCal { data: buf, report: ChecksumReport { regions, valid_count, fixed_count, failed_count: 0, all_valid: true, ecu_family: "P01_0411".into(), method_used: post.method_used } })
 }
 
 fn validate_edc16_crc32(data: &[u8]) -> Result<ChecksumReport, String> {
@@ -342,9 +377,21 @@ pub fn validate_bin_checksums_summary(data: &[u8]) -> Result<String, String> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
-    fn zero_image_p01() -> Vec<u8> { vec![0u8; CAL_IMAGE_SIZE] }
+    /// Synthetic 512KB P01-layout fixture (no real calibration data).
+    pub(crate) fn synthetic_p01() -> Vec<u8> {
+        let mut d = vec![0u8; P01_FULL_IMAGE_SIZE];
+        for (i, b) in d.iter_mut().enumerate() { *b = (i.wrapping_mul(31) ^ (i >> 7)) as u8; }
+        d[0x510..0x514].copy_from_slice(&0x7FFFDu32.to_be_bytes());
+        let segs: [(u32, u32); 7] = [(0x8000, 0x13FFF), (0x14000, 0x16DFF), (0x16E00, 0x1BDFF), (0x1BE00, 0x1C7FF), (0x1C800, 0x1E51F), (0x1E520, 0x1EE9F), (0x1EEA0, 0x1EF9F)];
+        for (i, (a, b)) in segs.iter().enumerate() {
+            let o = 0x514 + 8 * i;
+            d[o..o + 4].copy_from_slice(&a.to_be_bytes());
+            d[o + 4..o + 8].copy_from_slice(&b.to_be_bytes());
+        }
+        correct_checksums(&d).unwrap().data
+    }
     #[test]
     fn validate_unknown_size_is_report_only() {
         let r = validate_checksums(&vec![0u8; 100]).expect("unknown size must report, not error");
@@ -353,29 +400,52 @@ mod tests {
         assert!(correct_checksums(&vec![0u8; 100]).is_err());
     }
     #[test]
-    fn p01_512kb_is_supported() {
-        let img = vec![0u8; P01_FULL_IMAGE_SIZE];
-        let report = validate_checksums(&img).expect("512KB P01 must be accepted");
-        assert_eq!(report.regions.len(), 64);
-        assert!(report.all_valid);
-        let mut dirty = img;
-        dirty[0x3FFE] = 0x12; dirty[0x3FFF] = 0x34;
-        let fixed = correct_checksums(&dirty).unwrap();
-        assert!(fixed.report.all_valid);
-        assert!(fixed.report.fixed_count >= 1);
-        assert_eq!(fixed.data.len(), P01_FULL_IMAGE_SIZE);
+    fn p01_layout_from_image_tables() {
+        let d = synthetic_p01();
+        let segs = p01_segments(&d).unwrap();
+        assert_eq!(segs.len(), 8);
+        assert_eq!(segs[0].cs_addr, 0x500);
+        assert_eq!(segs[0].blocks, vec![(0, 0x4FF), (0x502, 0x3FFF), (0x20000, 0x7FFFD)]);
+        assert_eq!(segs[1].cs_addr, 0x8000);
+        assert_eq!(segs[7].blocks, vec![(0x1EEA2, 0x1EF9F)]);
     }
     #[test]
-    fn correct_makes_valid_p01() {
-        let img = zero_image_p01();
-        let corrected = correct_checksums(&img).unwrap();
-        assert!(corrected.report.all_valid);
-        assert_eq!(corrected.report.regions.len(), 16);
-        let mut dirty = img;
-        dirty[0x3FFE] = 0x12; dirty[0x3FFF] = 0x34;
+    fn p01_pristine_validates_all_eight() {
+        let r = validate_checksums(&synthetic_p01()).unwrap();
+        assert!(r.all_valid, "{:?}", r);
+        assert_eq!(r.valid_count, 8);
+    }
+    #[test]
+    fn p01_cal_edit_changes_only_that_cs_word() {
+        let orig = synthetic_p01();
+        let mut dirty = orig.clone();
+        dirty[0x9000] ^= 0x5A; // EngineCal
+        let v = validate_checksums(&dirty).unwrap();
+        assert_eq!(v.failed_count, 1);
+        assert!(!v.regions[1].was_valid);
         let fixed = correct_checksums(&dirty).unwrap();
-        assert!(fixed.report.all_valid);
-        assert!(fixed.report.fixed_count >= 1);
+        assert!(validate_checksums(&fixed.data).unwrap().all_valid);
+        let diffs: Vec<usize> = (0..orig.len()).filter(|&i| fixed.data[i] != orig[i]).collect();
+        assert!(diffs.iter().all(|&i| i == 0x9000 || i == 0x8000 || i == 0x8001), "{:X?}", diffs);
+        assert_eq!(fixed.report.fixed_count, 1);
+    }
+    #[test]
+    fn p01_os_edit_fixes_os_word_only() {
+        let orig = synthetic_p01();
+        let mut dirty = orig.clone();
+        dirty[0x30000] ^= 1;
+        let fixed = correct_checksums(&dirty).unwrap();
+        let diffs: Vec<usize> = (0..orig.len()).filter(|&i| fixed.data[i] != orig[i]).collect();
+        assert!(diffs.iter().all(|&i| i == 0x30000 || i == 0x500 || i == 0x501), "{:X?}", diffs);
+    }
+    #[test]
+    fn p01_bad_table_refuses_correction() {
+        let mut d = synthetic_p01();
+        d[0x514..0x518].copy_from_slice(&0x30000u32.to_be_bytes());
+        assert!(correct_checksums(&d).is_err());
+        assert!(validate_checksums(&d).unwrap().method_used.contains("report-only"));
+        assert!(correct_checksums(&vec![0u8; P01_FULL_IMAGE_SIZE]).is_err(), "zero image has no OS table");
+        assert!(correct_checksums(&vec![0u8; CAL_IMAGE_SIZE]).is_err(), "cal-only has no table");
     }
     #[test]
     fn edc16_size_supported() {
