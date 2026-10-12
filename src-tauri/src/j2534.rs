@@ -29,6 +29,10 @@ pub const J2534_FLAG_ISO15765_FRAME_PAD: c_ulong = 0x0000_0040;
 pub const J2534_FLAG_CAN_ID_BOTH: c_ulong = 0x0000_0800;
 pub const J2534_FLAG_TX_NORMAL: c_ulong = 0x0000_0000;
 
+pub const PASS_FILTER: c_ulong = 0x01;
+pub const BLOCK_FILTER: c_ulong = 0x02;
+pub const FLOW_CONTROL_FILTER: c_ulong = 0x03;
+
 pub const IOCTL_GET_CONFIG: c_ulong = 0x01;
 pub const IOCTL_SET_CONFIG: c_ulong = 0x02;
 pub const IOCTL_READ_VBATT: c_ulong = 0x03;
@@ -130,6 +134,8 @@ type PassThruStartMsgFilter = unsafe extern "C" fn(
     *mut c_ulong,
 ) -> c_long;
 #[cfg(target_os = "windows")]
+type PassThruStopMsgFilter = unsafe extern "C" fn(c_ulong, c_ulong) -> c_long;
+#[cfg(target_os = "windows")]
 type PassThruIoctl = unsafe extern "C" fn(c_ulong, c_ulong, *mut c_void, *mut c_void) -> c_long;
 
 #[cfg(target_os = "windows")]
@@ -140,12 +146,16 @@ struct BoundFns {
     disconnect: PassThruDisconnect,
     read: PassThruReadMsgs,
     write: PassThruWriteMsgs,
+    start_filter: PassThruStartMsgFilter,
+    stop_filter: PassThruStopMsgFilter,
     ioctl: PassThruIoctl,
 }
 
 pub struct J2534Device {
     pub device_id: c_ulong,
     pub channel_id: c_ulong,
+    /// Active message filter ids on `channel_id`; stopped on disconnect/close.
+    pub filter_ids: Vec<c_ulong>,
     #[cfg(target_os = "windows")]
     lib: Option<Library>,
     #[cfg(target_os = "windows")]
@@ -159,6 +169,7 @@ impl J2534Device {
         Self {
             device_id: 0,
             channel_id: 0,
+            filter_ids: Vec::new(),
             #[cfg(target_os = "windows")]
             lib: None,
             #[cfg(target_os = "windows")]
@@ -197,6 +208,10 @@ impl J2534Device {
                         lib.get(b"PassThruReadMsgs\0").map_err(|e| e.to_string())?;
                     let write: Symbol<PassThruWriteMsgs> =
                         lib.get(b"PassThruWriteMsgs\0").map_err(|e| e.to_string())?;
+                    let start_filter: Symbol<PassThruStartMsgFilter> =
+                        lib.get(b"PassThruStartMsgFilter\0").map_err(|e| e.to_string())?;
+                    let stop_filter: Symbol<PassThruStopMsgFilter> =
+                        lib.get(b"PassThruStopMsgFilter\0").map_err(|e| e.to_string())?;
                     let ioctl: Symbol<PassThruIoctl> =
                         lib.get(b"PassThruIoctl\0").map_err(|e| e.to_string())?;
 
@@ -217,6 +232,8 @@ impl J2534Device {
                         disconnect: *disconnect,
                         read: *read,
                         write: *write,
+                        start_filter: *start_filter,
+                        stop_filter: *stop_filter,
                         ioctl: *ioctl,
                     });
                     self.lib = Some(lib);
@@ -238,6 +255,7 @@ impl J2534Device {
     }
 
     pub fn close(&mut self) -> Result<(), String> {
+        self.stop_all_filters();
         #[cfg(target_os = "windows")]
         {
             if let Some(ref f) = self.fns {
@@ -282,6 +300,7 @@ impl J2534Device {
     }
 
     pub fn disconnect(&mut self) -> Result<(), String> {
+        self.stop_all_filters();
         #[cfg(target_os = "windows")]
         {
             if let Some(ref f) = self.fns {
@@ -495,18 +514,80 @@ impl J2534Device {
         self.ioctl(IOCTL_CLEAR_TX_BUFFER, ptr::null_mut(), ptr::null_mut())
     }
 
+    /// Install an ISO15765 FLOW_CONTROL_FILTER (J2534-1 §7.3.4).
+    /// `rx_id` = ECU response ID (pattern), `tx_id` = tester request ID (flow control).
+    /// Returns the filter id assigned by the DLL.
     pub fn start_iso15765_filter(
-        &self,
-        can_id: u32,
-        mask: u32,
+        &mut self,
+        rx_id: u32,
+        tx_id: u32,
         is_29bit: bool,
     ) -> Result<c_ulong, String> {
-        let _ = (can_id, mask, is_29bit);
         if self.channel_id == 0 {
             return Err("Connect first".into());
         }
-        Err(not_implemented("PassThruStartMsgFilter (ISO15765 flow-control filter)"))
+        let (mask, pattern, fc) = build_iso15765_fc_filter(rx_id, tx_id, is_29bit)?;
+        #[cfg(target_os = "windows")]
+        {
+            if let Some(ref f) = self.fns {
+                let mut filter_id: c_ulong = 0;
+                let status = unsafe {
+                    (f.start_filter)(self.channel_id, FLOW_CONTROL_FILTER, &mask, &pattern, &fc, &mut filter_id)
+                };
+                if status != 0 {
+                    return Err(format!("PassThruStartMsgFilter status {}", status));
+                }
+                self.filter_ids.push(filter_id);
+                return Ok(filter_id);
+            }
+        }
+        let _ = (mask, pattern, fc);
+        Err(not_implemented("PassThruStartMsgFilter (J2534 DLL not bound)"))
     }
+
+    /// Stop every filter this device started. Errors are ignored (teardown path).
+    pub fn stop_all_filters(&mut self) {
+        let ids = std::mem::take(&mut self.filter_ids);
+        #[cfg(target_os = "windows")]
+        {
+            if let Some(ref f) = self.fns {
+                if self.channel_id != 0 {
+                    for id in &ids {
+                        unsafe { (f.stop_filter)(self.channel_id, *id); }
+                    }
+                }
+            }
+        }
+        let _ = ids;
+    }
+}
+
+fn can_id_msg(id: u32, is_29bit: bool) -> PASSTHRU_MSG {
+    let mut m = PASSTHRU_MSG::default();
+    m.ProtocolID = J2534_PROTOCOL_ISO15765;
+    m.TxFlags = if is_29bit { J2534_FLAG_CAN_29BIT_ID } else { 0 };
+    m.DataSize = 4;
+    m.Data[..4].copy_from_slice(&id.to_be_bytes());
+    m
+}
+
+/// Build (mask, pattern, flowControl) PASSTHRU_MSGs for an ISO15765
+/// FLOW_CONTROL_FILTER. Each carries the 4-byte big-endian CAN ID.
+/// Mask is 0x000007FF (11-bit) or 0x1FFFFFFF (29-bit). The flow-control
+/// message gets ISO15765_FRAME_PAD so FC frames are padded to 8 bytes.
+pub fn build_iso15765_fc_filter(rx_id: u32, tx_id: u32, is_29bit: bool) -> Result<(PASSTHRU_MSG, PASSTHRU_MSG, PASSTHRU_MSG), String> {
+    let max = if is_29bit { 0x1FFF_FFFF } else { 0x7FF };
+    if rx_id > max || tx_id > max {
+        return Err(format!("CAN id out of range for {}-bit (rx=0x{:X}, tx=0x{:X})", if is_29bit { 29 } else { 11 }, rx_id, tx_id));
+    }
+    if rx_id == tx_id {
+        return Err("rx_id and tx_id must differ".into());
+    }
+    let mask = can_id_msg(max, is_29bit);
+    let pattern = can_id_msg(rx_id, is_29bit);
+    let mut fc = can_id_msg(tx_id, is_29bit);
+    fc.TxFlags |= J2534_FLAG_ISO15765_FRAME_PAD;
+    Ok((mask, pattern, fc))
 }
 
 /// Explicit error for J2534 features without a real implementation. Never fake `Ok`.
@@ -560,8 +641,16 @@ pub fn j2534_connect(dll_path: Option<String>) -> Result<String, String> {
                 .connect(J2534_PROTOCOL_ISO15765, J2534_FLAG_CAN_ID_BOTH, 500_000)
                 .is_ok()
             {
+                // Without a flow-control filter ISO15765 receives nothing.
+                let fid = match dev.start_iso15765_filter(0x7E8, 0x7E0, false) {
+                    Ok(id) => id,
+                    Err(e) => {
+                        let _ = dev.close();
+                        return Err(format!("J2534 ISO15765 connected but flow-control filter failed: {}", e));
+                    }
+                };
                 *guard = Some(dev);
-                Ok("J2534 opened + ISO15765 connected (Ioctl bound)".into())
+                Ok(format!("J2534 opened + ISO15765 connected, FC filter id {} (0x7E8/0x7E0)", fid))
             } else {
                 // Do not report success when the protocol channel failed.
                 let _ = dev.close();
@@ -691,7 +780,49 @@ mod tests {
         d.channel_id = 7; // force a channel to reach the stubs
         assert!(d.write_msg(&[1, 2], J2534_PROTOCOL_ISO15765, 0, 10).unwrap_err().starts_with("NotImplemented"));
         assert!(d.read_msgs(1, 10).unwrap_err().starts_with("NotImplemented"));
-        assert!(d.start_iso15765_filter(0x7E0, 0x7FF, false).unwrap_err().starts_with("NotImplemented"));
+        assert!(d.start_iso15765_filter(0x7E8, 0x7E0, false).unwrap_err().starts_with("NotImplemented"));
+        assert!(d.filter_ids.is_empty());
+    }
+
+    #[test]
+    fn fc_filter_11bit_layout() {
+        let (m, p, f) = build_iso15765_fc_filter(0x7E8, 0x7E0, false).unwrap();
+        for x in [&m, &p, &f] {
+            assert_eq!(x.ProtocolID, J2534_PROTOCOL_ISO15765);
+            assert_eq!(x.DataSize, 4);
+        }
+        assert_eq!(&m.Data[..4], &[0x00, 0x00, 0x07, 0xFF]);
+        assert_eq!(&p.Data[..4], &[0x00, 0x00, 0x07, 0xE8]);
+        assert_eq!(&f.Data[..4], &[0x00, 0x00, 0x07, 0xE0]);
+        assert_eq!(m.TxFlags, 0);
+        assert_eq!(p.TxFlags, 0);
+        assert_eq!(f.TxFlags, J2534_FLAG_ISO15765_FRAME_PAD);
+    }
+
+    #[test]
+    fn fc_filter_29bit_layout() {
+        let (m, p, f) = build_iso15765_fc_filter(0x18DAF110, 0x18DA10F1, true).unwrap();
+        assert_eq!(&m.Data[..4], &[0x1F, 0xFF, 0xFF, 0xFF]);
+        assert_eq!(&p.Data[..4], &[0x18, 0xDA, 0xF1, 0x10]);
+        assert_eq!(&f.Data[..4], &[0x18, 0xDA, 0x10, 0xF1]);
+        assert_eq!(p.TxFlags, J2534_FLAG_CAN_29BIT_ID);
+        assert_eq!(f.TxFlags, J2534_FLAG_CAN_29BIT_ID | J2534_FLAG_ISO15765_FRAME_PAD);
+    }
+
+    #[test]
+    fn fc_filter_rejects_bad_ids() {
+        assert!(build_iso15765_fc_filter(0x800, 0x7E0, false).is_err());
+        assert!(build_iso15765_fc_filter(0x7E0, 0x7E0, false).is_err());
+        assert!(build_iso15765_fc_filter(0x2000_0000, 1, true).is_err());
+    }
+
+    #[test]
+    fn filter_constants_match_spec() {
+        assert_eq!(PASS_FILTER, 1);
+        assert_eq!(BLOCK_FILTER, 2);
+        assert_eq!(FLOW_CONTROL_FILTER, 3);
+        assert_eq!(J2534_FLAG_ISO15765_FRAME_PAD, 0x40);
+        assert_eq!(J2534_FLAG_CAN_29BIT_ID, 0x100);
     }
 
     #[test]
