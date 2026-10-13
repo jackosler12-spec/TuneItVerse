@@ -1,24 +1,32 @@
-# TuneItVerse v3.40.0 — version sync + offline polish
+# TuneItVerse v3.41.0 — P01 backup live; write still refused; EDC16 honest
 
-v3.39 community Bosch multipoint CRC32 helper and desk tools stay. This pass synchronizes versions, expands documentation of the operational offline and limited live paths, and confirms fail-closed behavior.
+## v3.41.0 changes (2026-10-13)
 
-## What this pass changed
+1. **P01 kernel write:** not implemented. `reference/PcmHammer_debugLog_20260504@180810.txt` is a read-only session (512× mode-35 reads, then halt). No erase/write frames exist in the repo, so after FullImage backup + unlock + checksum + OS match + voltage gates pass, guided flash returns an explicit refusal rather than inventing protocol bytes.
+2. **EDC16C41:** checksum correction disabled (report-only). `EDC16_CRC32_REGIONS` fails on `NissanPatrol_2010_EDC16C41_392203.bin`, `EDC16C41 working flash`, and the WinOLS-corrected 392203 image. Write path removed from `write_families()`. Seed/key for EDC16C41 remains.
+3. **Offline polish:** binary/encrypted XDF → clear error; grid uses extract `axes_x`/`axes_y` when definition headers are empty; Redo button + Ctrl+Y; duplicate v333/v334 script tags removed (v312 already loads them).
+4. **ECU DB:** statuses rewritten to measured facts; P01 entry documents flash segment + verified flags; EDC16 entry documents what is missing.
+5. Version **3.41.0** everywhere (Cargo.toml, Cargo.lock, tauri.conf, package.json, installer, UI).
 
-1. Version **3.40.0** in package.json and documentation.
-2. COMPLETION.md updated to accurately reflect the current state of the application.
-3. Offline tools (identify, checksum, hex, profile, report, DTC explain, map delta, BIN undo) remain fully operational.
-4. Live write path remains strictly limited to **P01_0411** and **EDC16C41**. All other families are identify/catalog only.
-5. Guided flash, voltage gate, backup quality labeling, and live verify stay fail-closed.
-6. Guided flash now refuses write unless backup quality is FullImage (PartialDidOnly and Failed both block). Backup is mandatory.
+## What is / is not operational
+
+| Area | Status |
+|------|--------|
+| P01 FullImage backup protocol | Implemented (fake-PCM tested). STN link + real PCM untested. |
+| P01 guided write | Refused after gates — no logged kernel erase/write. |
+| EDC16C41 checksum | Report-only. |
+| EDC16C41 write | Off. |
+| Offline map editor / BIN compare / log replay | Present; UI load-tested with mocked invoke. |
+| Hardware (ELM / J2534 / STN) | Not bench-tested on this tree. |
 
 ## Current operational status
 
-- Full offline BIN/XDF/A2L inspection, patching, checksum validation/correction (P01 additive, EDC16 multipoint CRC32), map editing, and export.
-- Catalog of 14+ ECU families with JSON definitions, TableSeek for P01, community map hints.
-- Live diagnostics and logging via ELM/J2534 where hardware is present.
-- Guided flash pipeline with safety gates for supported families only.
+- Offline BIN / text-XDF / A2L inspection and patching; P01 CS1+CVN validation/correction; EDC16 report-only.
+- Catalog of 14 ECU families (most identify/report-only). TableSeek for P01.
+- Live diagnostics/logging code paths exist; not bench-tested here.
+- Guided flash gates stay fail-closed. After a verified FullImage backup, P01 write is still refused (no logged kernel write). No other family has a write path.
 
-Write path remains **P01_0411** and **EDC16C41** only. Community correctors are never auto-applied on the live flash path.
+Never flash without a verified backup and stable power. Personal dumps only.
 
 ## Still needs your bench
 
@@ -26,7 +34,7 @@ Write path remains **P01_0411** and **EDC16C41** only. Community correctors are 
 2. EDC17 / MED17 / ME7 / SID803 / Honda / Simos / T8 / Transtron seed tables from **your** dumps. Put pairs in `seed_tables.json`.
 3. PCM Hammer comparison on your 512 KB P01 OS (`12225074`).
 4. A vendor J2534 DLL on Windows so mid-write Vbatt and the registry walk are live.
-5. A kernel-resident Mode 3C full-image dump. Windowed probes stay PartialDidOnly and now block write until FullImage exists.
+5. A logged P01 kernel erase/write session (the current log is read-only). FullImage backup already exists.
 6. Licensed GM 5-byte keys. We do not ship that library.
 7. Isuzu FRR Transtron dump + protocol notes before any 4HK1 write work.
 
@@ -36,14 +44,14 @@ Build your own. No bullshit prices.
 
 ## Security access hardening (2026-10-12)
 - `bosch_uds_unlock_full` is strict ISO 14229: seed must be `67 <level> <seed…>`, key ack must be exactly `67 <level+1>`. Empty, garbled, wrong SID/level = failure. NRC 0x35/0x36/0x37 give explicit errors; 0x78 on seed re-requests (max 3); 0x78 on key fails without resending the key. All-zero seed = already unlocked only inside a valid positive response.
-- Starter/placeholder key algebra (EDC17, MED17, generic EDC16, generic Bosch) removed. These return `KeyError::KeyAlgorithmUnverified` and unlock refuses before any bus traffic. Only EDC16C41 (4-byte) and GM P01/P59 LFSR remain. Write stays limited to `ecu_database::write_path_live` (P01_0411, EDC16C41).
+- Starter/placeholder key algebra (EDC17, MED17, generic EDC16, generic Bosch) removed. These return `KeyError::KeyAlgorithmUnverified` and unlock refuses before any bus traffic. Only EDC16C41 (4-byte) and GM P01/P59 LFSR remain. Write stays limited to `ecu_database::write_path_live` (P01_0411 only); that path then refuses because the PcmHammer log has no kernel write session.
 - Not bench-verified on hardware. The ELM/raw ISO-TP transport has no "wait for next frame" call, so key-step 0x78 is treated as locked.
 
 ## Honest-failure pass (2026-10-12)
 - No P01/GM default for unknown ECUs: `live_verify::live_address_plan` errors on unknown/unrecognised families; verify/compare/backup refuse. Live windows outside the image are skipped (no offset-0 fallback). `compute_seed_key` and script `seedkey` require a family.
 - Live logging: no connection → "No live connection" error; connected but no PID answered → error; nothing recorded. Simulation only via explicit Demo mode (`log_set_demo_mode`), samples flagged `demo:true`, CSV export headed `# DEMO DATA`, red DEMO badge in UI. Demo cannot be toggled mid-session and clears the buffer.
 - J2534: unbound connect/write/read and ISO15765 filter return `NotImplemented` instead of fake Ok; `j2534_connect` no longer reports success when PassThruConnect fails.
-- Versions synced to 3.40.0 (tauri.conf.json, Inno installer, UI console banner).
+- Versions synced to 3.41.0 (tauri.conf.json, Inno installer, UI console banner).
 
 ## J2534 filter, DB flash addresses, family plumbing, Demo toggle (2026-10-12)
 - J2534: `PassThruStartMsgFilter` FLOW_CONTROL_FILTER for ISO15765 (mask 0x7FF / 0x1FFFFFFF, pattern = ECU rx id, FC = tester tx id, FC padded); real filter id returned and tracked; `PassThruStopMsgFilter` on disconnect/close. `j2534_connect` installs 0x7E8/0x7E0 or fails. Still `NotImplemented` without a loaded DLL. Not tested on a real device.
@@ -53,7 +61,7 @@ Build your own. No bullshit prices.
 - KNOWN BLOCKER: src/index.html on main is a 14-line placeholder (no markup, no script tags) since the history-rewrite commit 21e4535. The UI does not load main.js at all until the real index.html is restored.
 
 ## UI restored (2026-10-12)
-- src/index.html restored from Jack's v3.17.0 copy, version strings set to 3.40.0, and script tags added for the overlays that exist (v312, v333–v337). main.js and styles.css kept (current files are newer supersets of the supplied copies).
+- src/index.html restored from Jack's v3.17.0 copy, version strings set to 3.41.0, and script tags added for the overlays that exist (v312, v333–v337). main.js and styles.css kept (current files are newer supersets of the supplied copies).
 - Headless Chromium load test with a mocked Tauri invoke: 0 console/page errors; all 7 views render; logging Demo toggle + badge, seed/key and unlock controls present.
 - `#dtc-lookup` (used by main.js explainDtcUi) has no element in the restored HTML; DTC explain lookup has no input yet.
 
@@ -85,3 +93,7 @@ Build your own. No bullshit prices.
 - UI: "P01 full backup" button on the flash view (v340.js) shows progress, path, hash, quality.
 - Unverified: STN STPX link (`StnLink`) is not bench-tested; only OS 12225074 / 28F400B are accepted.
   Tests use a scripted fake PCM; `TIV_P01_BIN` runs the same against a private real image.
+
+## v3.41.0 honesty notes
+- Headless Chromium load test (mocked Tauri invoke): 0 console/page errors; all 7 screens open; screenshots under /workspace/ui_audit_*.png on the agent box.
+- Nothing in this pass was tested on a real PCM, STN adapter, ELM, or J2534 device.

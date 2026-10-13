@@ -36,19 +36,17 @@ Scripts page runs the same ideas against the loaded BIN (`identify`, `checksum`,
 
 Data Logging can import a CSV, replay it, and build a clamped STFT/LTFT multiplier preview. Compare lists changed ranges against the working BIN. Neither path writes a calibration.
 
-## Current status (v3.40.0)
+## Current status (v3.41.0)
 
-See [COMPLETION.md](COMPLETION.md) and [PRODUCT.md](PRODUCT.md). Catalog includes P01, P59, EDC16C41, EDC15/17, ME7/9, MED17, Delphi DCM, SID803, Honda Keihin, Simos 18, Trionic 8, Transtron 4HK1. Holden/GM P01 BINs auto-load the Universal Patcher TableSeek pack. Offline BIN/XDF/A2L edit and save. Dashboard Write column and identify write_allowed flag match the live path (P01_0411 and EDC16C41 only). P59/Honda checksum correction and write stay blocked.
+Honest summary — see [COMPLETION.md](COMPLETION.md) for the full log.
 
-Diagnostics can explain a typed SAE code offline (`P0301`, `P0087`). Maps can hold a reference BIN and report cell deltas for the selected table. Clamp, percent, table redo, and BIN undo/redo stay local until you save. None of those flip write_allowed.
+**Operational offline:** BIN/XDF (text)/A2L load and edit, table grid + 3D orbit view, undo/redo, copy/paste, interpolate/smooth, BIN compare, offline DTC explain, CSV log import/export/replay, bench scripts, P01 CS1 + CVN, GM 2-byte seed/key (algo tables). Binary/encrypted TunerPro XDFs get a clear error.
 
-Inspect page reviews a loaded dump: hex+ASCII window, block entropy, markdown tune report. None of those flip write_allowed.
+**P01_0411 (OS 12225074):** FullImage backup protocol is implemented from the PcmHammer read log + Kernel-P01.bin (scripted fake-PCM tests green; STN link and hardware untested). Guided flash still **refuses to write**: the same log has no kernel erase/write frames, so inventing them is not allowed.
 
-GM 2-byte security-access tables (`reference/2byte-keys.txt`) run offline: seed + algo index → key. Measured pairs in `seed_tables.json` win when present. Licensed 5-byte GM keys are not included.
+**EDC16C41:** Identify + measured 4-byte seed/key. Checksum is **report-only** — the old multipoint CRC32 region table fails on every stock and WinOLS-corrected 392203 image in `reference/`. No flash segment, no write.
 
-Live: Mode 01 / VIN / DTCs on ELM ASCII for CAN/UDS; raw VPW only when you pick VPW. J2534 shows Connected when PassThru is open.
-
-Flash: identify → voltage gate → backup → unlock → write, with live `flash-progress` events. Honda and P59 writes stay blocked. Only P01_0411 and EDC16C41 advertise a live write path.
+**Everything else in the catalog:** identify / report-only. No live write. Hardware paths (ELM/J2534/STN) are not bench-tested on this tree.
 
 Build your own. No bullshit prices.
 
