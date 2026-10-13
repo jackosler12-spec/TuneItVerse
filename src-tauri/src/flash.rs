@@ -135,6 +135,9 @@ where
 }
 
 /// Only a full flash-image backup may proceed to write. Partial window probes and failures stay blocked.
+/// Why P01 write stops after all gates pass.
+pub const P01_WRITE_UNSUPPORTED: &str = "P01 kernel write not available: the repo PcmHammer log (reference/PcmHammer_debugLog_20260504@180810.txt) is a read-only session with no kernel erase/write frames. All gates passed; nothing was erased or written.";
+
 pub fn backup_quality_allows_write(quality: &BackupQuality) -> bool {
     matches!(quality, BackupQuality::FullImage)
 }
@@ -230,6 +233,13 @@ where F: FnMut(FlashProgress),
             return Ok(result);
         }
         result.steps_completed.push("Full-image backup captured".into());
+    }
+    if family.eq_ignore_ascii_case("P01_0411") {
+        // reference/PcmHammer_debugLog_20260504@180810.txt is a read session only (no erase,
+        // no write frames; lines 281-6935 are 35-reads, 7846 halt). Without logged kernel
+        // erase/write frames there is nothing to send that is not invented.
+        result.error = Some(P01_WRITE_UNSUPPORTED.into());
+        return Ok(result);
     }
     let fam = family.to_ascii_uppercase();
     if fam.contains("HONDA") || fam.contains("KEIHIN") {
@@ -366,7 +376,7 @@ mod tests {
     }
     #[test] fn write_path_is_fail_closed() {
         assert!(crate::ecu_database::write_path_live("P01_0411"));
-        assert!(crate::ecu_database::write_path_live("EDC16C41"));
+        assert!(!crate::ecu_database::write_path_live("EDC16C41"));
         assert!(!crate::ecu_database::write_path_live("EDC17_COMMON"));
         assert!(!crate::ecu_database::write_path_live("MED17_COMMON"));
         assert!(!crate::ecu_database::write_path_live("TRANSTRON_4HK1"));

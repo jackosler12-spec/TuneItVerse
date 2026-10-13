@@ -340,6 +340,7 @@ fn correct_p01_checksums(data: &[u8]) -> Result<CorrectedCal, String> {
     Ok(CorrectedCal { data: buf, report: ChecksumReport { regions, valid_count, fixed_count, failed_count: 0, all_valid: true, ecu_family: "P01_0411".into(), method_used: post.method_used, cvns: post.cvns } })
 }
 
+#[allow(dead_code)]
 fn validate_edc16_crc32(data: &[u8]) -> Result<ChecksumReport, String> {
     if data.len() != EDC16_FLASH_SIZE { return Err(format!("Expected {} bytes for EDC16C41, got {}", EDC16_FLASH_SIZE, data.len())); }
     let mut regions = vec![];
@@ -354,6 +355,7 @@ fn validate_edc16_crc32(data: &[u8]) -> Result<ChecksumReport, String> {
     Ok(ChecksumReport { regions, valid_count, fixed_count: 0, failed_count, all_valid: failed_count == 0, ecu_family: "EDC16C41".to_string(), method_used: "CRC32 multipoint".to_string(), cvns: vec![] })
 }
 
+#[allow(dead_code)]
 fn correct_edc16_crc32(data: &[u8]) -> Result<CorrectedCal, String> {
     if data.len() != EDC16_FLASH_SIZE { return Err(format!("Expected {} bytes for EDC16, got {}", EDC16_FLASH_SIZE, data.len())); }
     let mut buf = data.to_vec();
@@ -375,6 +377,15 @@ fn correct_edc16_crc32(data: &[u8]) -> Result<CorrectedCal, String> {
         results.push(RegionResult { name: region.name.to_string(), block: 0, cs_offset: region.cs_offset, original_cs, corrected_cs, was_valid, is_valid, method: "CRC32".to_string() });
     }
     Ok(CorrectedCal { data: buf, report: ChecksumReport { regions: results, valid_count, fixed_count, failed_count, all_valid: failed_count == 0, ecu_family: "EDC16C41".to_string(), method_used: "CRC32 multipoint".to_string(), cvns: vec![] } })
+}
+
+/// The EDC16_CRC32_REGIONS table is not authoritative: none of its 7 regions pass on
+/// reference/NissanPatrol_2010_EDC16C41_392203.bin, "EDC16C41 working flash" or the
+/// WinOLS-corrected 392203 image. Correcting with it would corrupt a good image.
+pub const EDC16_CS_UNSUPPORTED: &str = "EDC16C41 checksum layout is unknown: the built-in CRC32 region table fails on every stock and WinOLS-corrected 392203 image in reference/. Report-only; correction refused.";
+
+fn edc16_report_only() -> ChecksumReport {
+    ChecksumReport { regions: vec![], valid_count: 0, fixed_count: 0, failed_count: 0, all_valid: false, ecu_family: "EDC16C41".into(), method_used: format!("report-only: {}", EDC16_CS_UNSUPPORTED), cvns: vec![] }
 }
 
 pub fn validate_checksums(data: &[u8]) -> Result<ChecksumReport, String> {
@@ -401,7 +412,7 @@ pub fn validate_checksums(data: &[u8]) -> Result<ChecksumReport, String> {
         });
     }
     if is_p01_size(data.len()) { validate_p01_checksums(data) }
-    else if data.len() == EDC16_FLASH_SIZE { validate_edc16_crc32(data) }
+    else if data.len() == EDC16_FLASH_SIZE { Ok(edc16_report_only()) }
     else {
         Ok(ChecksumReport {
             regions: vec![],
@@ -424,7 +435,7 @@ pub fn correct_checksums(data: &[u8]) -> Result<CorrectedCal, String> {
         return Err("P59 OS string on this image. P01 additive correction is blocked until measured P59 CS words exist.".into());
     }
     if is_p01_size(data.len()) { correct_p01_checksums(data) }
-    else if data.len() == EDC16_FLASH_SIZE { correct_edc16_crc32(data) }
+    else if data.len() == EDC16_FLASH_SIZE { Err(EDC16_CS_UNSUPPORTED.into()) }
     else { Err(format!("Unsupported size for correction: {}", data.len())) }
 }
 
@@ -471,6 +482,16 @@ pub(crate) mod tests {
             d[o + 4..o + 8].copy_from_slice(&b.to_be_bytes());
         }
         correct_checksums(&d).unwrap().data
+    }
+    #[test]
+    fn edc16_reference_images_are_report_only() {
+        let p = concat!(env!("CARGO_MANIFEST_DIR"), "/../reference/NissanPatrol_2010_EDC16C41_392203.bin");
+        let d = std::fs::read(p).unwrap();
+        let r = validate_checksums(&d).unwrap();
+        assert!(!r.all_valid && r.method_used.starts_with("report-only"));
+        assert!(correct_checksums(&d).is_err());
+        // The old region table really does fail on the stock image.
+        assert!(EDC16_CRC32_REGIONS.iter().all(|reg| !validate_crc32_region(&d, reg)));
     }
     #[test]
     fn validate_unknown_size_is_report_only() {

@@ -160,11 +160,11 @@ fn parse_hex_u32(s: &str) -> Option<u32> {
 
 /// Live write is advertised only for families with a measured corrector + kernel path.
 pub fn write_path_live(family: &str) -> bool {
-    matches!(family.to_ascii_uppercase().as_str(), "P01_0411" | "EDC16C41")
+    family.eq_ignore_ascii_case("P01_0411")
 }
 
 pub fn write_families() -> &'static [&'static str] {
-    &["P01_0411", "EDC16C41"]
+    &["P01_0411"]
 }
 
 pub fn get_ecu_by_bin_size(size: usize) -> Option<EcuDbEntry> {
@@ -378,7 +378,7 @@ mod tests {
         assert_eq!(get_ecu_by_family("SIMOS18").unwrap().bin_size_bytes, 4_194_304);
         assert!(get_ecu_by_family("TRANSTRON_4HK1").is_some());
         assert!(write_path_live("P01_0411"));
-        assert!(write_path_live("edc16c41"));
+        assert!(!write_path_live("edc16c41"));
         assert!(!write_path_live("EDC17_COMMON"));
         assert!(!write_path_live("GM_P59"));
         assert!(!write_path_live("HONDA_KEIHIN"));
