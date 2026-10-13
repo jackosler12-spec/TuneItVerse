@@ -14,19 +14,20 @@
   "protocol": "CAN @ 500 kbps + KWP2000 / UDS (ISO 15765)",
   "bin_size_bytes": 2097152,
   "flash_memory_map": {
-    "full_flash": "~2 MB total (approx 1 MB flash + 2 KB EEPROM for adaptations/immobiliser)",
-    "calibration_region": "Separate working calibration file available in reference"
+    "full_flash": "2 MB (2097152 bytes) \u2014 reference/NissanPatrol_2010_EDC16C41_392203.bin and EDC16C41 working flash",
+    "eeprom": "2 KB \u2014 reference/EDC16C41 working eeprom",
+    "calibration_region": "reference/EDC16C41 working file complete (~521761 bytes). Exact flash segment for live write is unknown; no flash_write_segment in this entry."
   },
   "checksum": {
-    "type": "bosch_edc16_multipoint_crc32 (primary) + additive16 fallback",
-    "description": "Primary: 7 multipoint CRC32 regions (IEEE 0xEDB88320 poly, init/xor 0xFFFFFFFF) aligned to diesel map blocks. CS treated as final 4 bytes of each region. Correction forces region CRC to 0. Secondary: additive 16-bit sum-to-zero retained. Matches WinOLS EDC16 plugin concept (multipoint + compatibility test CS). Exact poly/block tables still proprietary — verify against WinOLS-corrected bin for production use.",
+    "type": "unknown \u2014 report-only",
+    "description": "The previous multipoint CRC32 region table (EDC16_CRC32_REGIONS in checksum.rs) fails on every stock and WinOLS-corrected 392203 image in reference/. Correction is refused. Exact poly/block tables are proprietary; lock them by diffing an original vs WinOLS-corrected pair before enabling correction again.",
     "reference_files": [
       "NissanPatrol_2010_EDC16C41_392203.bin",
       "EDC16C41 working flash",
       "EDC16C41 working file complete (cal region)",
       "WinOLS (Nissan (nissan egr off+fault delete) - 392203).bin"
     ],
-    "notes": "WinOLS EDC16 plugin features: auto-search, multipoint CRC correction, compatibility-test CS (can patch correction value at map end instead of full recompute), manufacturer keys (Nissan Patrol supported since ~2007), EEPROM block handling. To lock exact match: diff original vs WinOLS-corrected pair and update CRC32_REGIONS / target."
+    "notes": "Seed/key for EDC16C41 (4-byte) is measured (Security Access Code.md). There is no flash_write_segment and no logged UDS download session in the repo, so guided write stays off."
   },
   "security_access": {
     "type": "UDS Service 0x27 seed-key",
@@ -39,7 +40,7 @@
   },
   "maps_and_xdf": {
     "has_xdf": false,
-    "description": "No ready XDF in reference. Auto tables use refined community-typical addresses for ZD30CRD (Driver Wish ~0x80000, IQ ~0x82000, Boost ~0xC0000, Rail ~0xC2000, VGT ~0xC4000, smoke, EGR, torque limiter). These are solid starting points; refine with your own bin.",
+    "description": "No ready XDF in reference. Map addresses below are community-typical starting points for ZD30CRD and are marked unverified; refine against your own dump.",
     "eeprom": "EDC16C41 working eeprom (2 KB) - immobiliser, adaptations, coding data",
     "refined_map_addrs": {
       "driver_wish": "0x80000",
@@ -51,7 +52,8 @@
       "egr_map": "0xC8000",
       "torque_limiter": "0xCA000",
       "start_of_injection": "0xCC000"
-    }
+    },
+    "unverified": true
   },
-  "notes": "Matches and expands the REFERENCE_INDEX.md entry. 23710-VS43B is the specific hardware/part for GU V Wagon variant. DB entry enables auto-identification. Rust support added: CAN (ELM/ISO-TP), KWP2000, Nissan Consult II for live data + commands. Use protocol selector in UI. **Multipoint CRC32 now primary** for EDC16C41. v1.2.0 expanded maps for industry-leading coverage."
+  "notes": "Seed/key measured for this family. Checksum layout unknown (report-only). No live write path. Identify/report and offline BIN tools only until a measured CRC table and a logged UDS flash session exist."
 }

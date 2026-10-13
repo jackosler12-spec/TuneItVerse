@@ -389,7 +389,19 @@ fn inverse_math(phys: f64, expr: &str) -> f64 {
 // Tauri command wrappers (registered in lib.rs)
 #[tauri::command]
 pub fn parse_xdf_definitions(xml: String) -> Result<Vec<TableDef>, String> {
-    Ok(parse_table_definitions(&xml))
+    check_xdf_text(&xml)?;
+    let t = parse_table_definitions(&xml);
+    if t.is_empty() { return Err("XDF parsed but contains no <XDFTABLE>/<XDFCONSTANT> definitions.".into()); }
+    Ok(t)
+}
+
+/// Clear error for TunerPro binary/encrypted XDFs (e.g. reference/OS-12225074-512Kb-2001-2004.xdf).
+pub fn check_xdf_text(xml: &str) -> Result<(), String> {
+    let bad = xml.chars().take(4096).filter(|c| *c == '\u{FFFD}' || (c.is_control() && !c.is_whitespace())).count();
+    if !xml.contains("<XDF") || bad > 8 {
+        return Err("This XDF is not text XML (TunerPro binary or encrypted XDF). Re-save it from TunerPro as an uncompressed/unencrypted XDF, or use an A2L / definition pack.".into());
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -552,5 +564,17 @@ mod offset_tests {
             assert_eq!(d.family.as_deref(), Some("HONDA_KEIHIN"));
             assert!(extract_table(&bin, d).note.unwrap_or_default().contains("Honda"));
         }
+    }
+}
+
+#[cfg(test)]
+mod xdf_text_tests {
+    use super::*;
+    #[test]
+    fn binary_xdf_gets_clear_error() {
+        let b = std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/../reference/OS-12225074-512Kb-2001-2004.xdf")).unwrap();
+        let e = parse_xdf_definitions(String::from_utf8_lossy(&b).into_owned()).unwrap_err();
+        assert!(e.contains("not text XML"));
+        assert!(parse_xdf_definitions("<XDFFORMAT></XDFFORMAT>".into()).is_err());
     }
 }

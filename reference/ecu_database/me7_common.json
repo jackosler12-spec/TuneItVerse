@@ -1,14 +1,24 @@
 {
   "ecu_family": "ME7_COMMON",
   "display_name": "Bosch ME7 (VW/Audi 1.8T / early 2.0T community)",
-  "part_numbers_or_os_ids": ["ME7.5", "ME7.1", "8N0 907 551", "06A 906 032"],
-  "vehicles": ["VW Golf/Jetta 1.8T", "Audi A4 1.8T", "early Audi TT", "Skoda Octavia 1.8T"],
+  "part_numbers_or_os_ids": [
+    "ME7.5",
+    "ME7.1",
+    "8N0 907 551",
+    "06A 906 032"
+  ],
+  "vehicles": [
+    "VW Golf/Jetta 1.8T",
+    "Audi A4 1.8T",
+    "early Audi TT",
+    "Skoda Octavia 1.8T"
+  ],
   "hardware": "Bosch ME7.x (Siemens-style 29F400/29F800 flash common)",
   "protocol": "KWP2000 on K-line (primary) / CAN on later variants",
   "bin_size_bytes": 1048576,
   "flash_memory_map": {
     "full_flash": "512KB or 1MB dumps depending on mask",
-    "cal_region": "Confirm against your personal dump — community axis maps vary by SW"
+    "cal_region": "Confirm against your personal dump \u2014 community axis maps vary by SW"
   },
   "checksum": {
     "type": "bosch_me7_block_additive_or_crc16",
@@ -19,7 +29,10 @@
   "security_access": {
     "type": "KWP 0x27 seed/key",
     "reference": "security.rs Bosch family dispatch + 2byte-keys.txt for known public pairs",
-    "levels": ["Level 1 diagnostic", "Level 2 programming"]
+    "levels": [
+      "Level 1 diagnostic",
+      "Level 2 programming"
+    ]
   },
   "maps_and_xdf": {
     "has_xdf": false,
@@ -31,5 +44,16 @@
       "driver_wish": "0x18000"
     }
   },
-  "notes": "Starter family for 1MB ME7 dumps. Confirm OS on your own bench read. Personal dumps only."
+  "notes": "Starter family for 1MB ME7 dumps. Confirm OS on your own bench read. Personal dumps only. Unverified catalog entry. Refusing live write and checksum correction.",
+  "sources": [
+    "Community ME7.x dump size conventions (512KB/1MB); exact CS layout varies by SW \u2014 report-only until a measured table exists.",
+    "No XDF or logged flash session in this repo for ME7."
+  ],
+  "verified": {
+    "identify_by_size": false,
+    "checksum": false,
+    "seed_key": false,
+    "write": false,
+    "hardware_bench": false
+  }
 }

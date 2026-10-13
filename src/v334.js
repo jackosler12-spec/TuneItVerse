@@ -65,6 +65,7 @@
       if (!btn) return;
       if (btn.id === 'btn-run-script') {
         ev.preventDefault();
+        ev.stopPropagation(); // v312 also binds this id; run once.
         Promise.resolve(runScript()).catch(function (e) { console.error(e); });
       }
     }, true);

@@ -19,13 +19,16 @@
     "cal_b": "Calibration block B (64 KB blocks typical)"
   },
   "checksum": {
-    "type": "gm_p01_sum_to_zero_16bit",
-    "description": "Each 64KB cal block summed as 16-bit big-endian words must total 0x0000. Correction value patched in designated location after modifications. Existing Rust implementation in src-tauri/src/checksum.rs (validate_checksums / correct_and_validate_checksums). GM-P01-P59-checksum-plugin.dll is the reference plugin.",
+    "type": "gm_p01_segment_wordsum16_cs1 + crc16_arc_cvn_cs2",
+    "description": "CS1: image's own segment table @0x500/0x510/0x514 (OS + 7 cal segments). CS2/CVN: CRC-16/ARC over CS2 blocks per reference/P01-P59.xml; stock OS CVN 717A for 12225074 matches reference/stockcvn.xml.",
     "reference_files": [
+      "P01-P59.xml",
+      "stockcvn.xml",
+      "LS1 PCM P01 12225074.bin",
       "GM-P01-P59-checksum-plugin.dll",
       "Kernel-P01.bin"
     ],
-    "routine": "Ported and active in checksum.rs - uses CAL_IMAGE_SIZE, CorrectedCal struct"
+    "routine": "checksum.rs validate_p01_checksums / correct_p01_checksums / p01_cvns"
   },
   "security_access": {
     "type": "GM P01 seed-key (two levels)",
@@ -45,12 +48,11 @@
       "9365085.xml",
       "9365095.xml (P01/P59 OS variants)",
       "PidParameters-VPW.XML for PID decode"
-    ]
+    ],
+    "xdf_file_note": "reference/OS-12225074-512Kb-2001-2004.xdf is a TunerPro binary/encrypted XDF; parse_xdf_definitions returns a clear error. Use a text XDF or a definition pack."
   },
   "communication_kernels": [
-    "Kernel-P01.bin",
-    "Kernel-P10.bin",
-    "Kernel-P12.bin (variants)"
+    "Kernel-P01.bin (7890 bytes @ 0xFF8000; read established by PcmHammer log; erase/write missing)"
   ],
   "recovery_paths": {
     "locked_pcm_grounding_hack": "For tuner-locked P01: Apply ground to specific solder pad (public DIY guides) during write/erase phase to bypass lock and allow reflash. Time grounding with 'erasing' stage for success. Safety: Stable power, correct pad identification critical.",
@@ -61,10 +63,26 @@
   "notes": "Already heavily integrated in Rust backend (vpw.rs, security.rs, checksum.rs, flash.rs, pid_decode.rs, dtc.rs). This DB entry centralizes metadata so frontend/app can auto-detect P01 on connect (VIN/OS ID), load correct checksum routine + seedkey, and reference XDF/maps. Enhanced with public recovery procedures scraped from tuning community resources for the safe guided flashing pipeline. Use with affordable open tools like PCMHammer patterns.",
   "flash_write_segment": {
     "name": "Calibration",
-    "start": "0x00008000",
-    "length": "0x00018000",
+    "start": "0x8000",
+    "length": "0x18000",
     "image_size": 524288,
-    "source": "reference/PcmHammer_debugLog_20260504@180810.txt line 7716: '008000-01FFFF ... Calibration' (OS 12225074, Intel 28F400B 512KB). 0x20000-0x7FFFF is OperatingSystem per the same log (lines 7158/7366/7563).",
-    "note": "Not bench-verified with this app."
+    "source": "P01 segment table / OS 12225074; PcmHammer write path notes. Kernel erase/write frames are NOT in reference/PcmHammer_debugLog_20260504@180810.txt (read-only session).",
+    "note": "Guided write still refuses after all gates until a logged kernel write session exists."
+  },
+  "sources": [
+    "reference/PcmHammer_debugLog_20260504@180810.txt (read session)",
+    "reference/P01-P59.xml",
+    "reference/stockcvn.xml",
+    "reference/Kernel-P01.bin",
+    "reference/KeyAlgorithm.cs / GmKeys.cs"
+  ],
+  "verified": {
+    "identify": true,
+    "cs1": true,
+    "cvn_os": true,
+    "seed_key_algo_0x28": true,
+    "full_image_backup_protocol": true,
+    "kernel_write": false,
+    "hardware_bench": false
   }
 }

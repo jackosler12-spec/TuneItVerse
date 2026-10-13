@@ -1336,12 +1336,15 @@ async function loadBinFile() {
 }
 
 async function applyDefinitionText(text, source) {
-  let defs = await invokeCmd('parse_xdf_definitions', { xml: text });
-  let list = Array.isArray(defs) ? defs : parseMaybe(defs);
-  if ((!list || !list.length) && /BEGIN CHARACTERISTIC/i.test(text)) {
-    defs = await invokeCmd('parse_a2l_definitions', { text });
-    list = Array.isArray(defs) ? defs : parseMaybe(defs);
+  let defs, list;
+  try {
+    if (/BEGIN CHARACTERISTIC/i.test(text)) defs = await invokeCmd('parse_a2l_definitions', { text });
+    else defs = await invokeCmd('parse_xdf_definitions', { xml: text });
+  } catch (e) {
+    setTablesStatus((source || 'Definition') + ': ' + e);
+    return;
   }
+  list = Array.isArray(defs) ? defs : parseMaybe(defs);
   if (!list || !list.length) {
     setTablesStatus((source || 'Definition') + ' parsed but no tables found');
     return;
@@ -1516,6 +1519,13 @@ async function selectTable(idx) {
     const extracted = await invokeCmd('extract_table_from_bin', { bin_bytes: binBytes(currentBin), table: currentTable });
     currentValues = extracted.values || extracted;
     if (!Array.isArray(currentValues)) currentValues = null;
+    // Prefer definition headers; else numeric axes from the extract (XDF/A2L).
+    if (currentTable && currentValues) {
+      if (!(currentTable.col_headers || '').trim() && Array.isArray(extracted.axes_x) && extracted.axes_x.length)
+        currentTable.col_headers = extracted.axes_x.map((v) => (typeof v === 'number' ? String(v) : v)).join(',');
+      if (!(currentTable.row_headers || '').trim() && Array.isArray(extracted.axes_y) && extracted.axes_y.length)
+        currentTable.row_headers = extracted.axes_y.map((v) => (typeof v === 'number' ? String(v) : v)).join(',');
+    }
     originalValues = currentValues ? JSON.parse(JSON.stringify(currentValues)) : null;
     renderCurrentEditor();
     updateSidePanel();
@@ -1918,6 +1928,7 @@ function setupTablesUI() {
       else if (e.key === '-' || e.key === '_') { e.preventDefault(); runMath('dec'); }
       else if (e.ctrlKey && e.key.toLowerCase() === 'c') { e.preventDefault(); copySelection(); }
       else if (e.ctrlKey && e.key.toLowerCase() === 'v') { e.preventDefault(); pasteSelection(); }
+      else if (e.ctrlKey && (e.key.toLowerCase() === 'y' || (e.shiftKey && e.key.toLowerCase() === 'z'))) { e.preventDefault(); redoEdit(); }
       else if (e.ctrlKey && e.key.toLowerCase() === 'z') { e.preventDefault(); undoEdit(); }
       else if (e.ctrlKey && e.key.toLowerCase() === 'a') {
         e.preventDefault();

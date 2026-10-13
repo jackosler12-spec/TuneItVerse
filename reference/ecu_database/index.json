@@ -1,22 +1,120 @@
 {
-  "version": "1.20",
-  "updated": "2026-09-30",
+  "version": "1.21",
+  "updated": "2026-10-13",
   "description": "Master index of TuneItVerse ECU database entries.",
   "families": [
-    {"id": "P01_0411", "file": "p01_0411.json", "display_name": "Holden LS1 / GM P01 0411 PCM", "bin_size_bytes": 524288, "primary_protocol": "VPW", "status": "full"},
-    {"id": "EDC16C41", "file": "edc16c41_nissan_patrol.json", "display_name": "Bosch EDC16C41 Nissan Patrol GU V Wagon", "bin_size_bytes": 2097152, "primary_protocol": "CAN/KWP", "status": "full-checksum + maps"},
-    {"id": "GM_P59", "file": "gm_p59.json", "display_name": "GM P59 PCM (Truck/SUV)", "bin_size_bytes": 524288, "primary_protocol": "VPW", "status": "full metadata + checksum path"},
-    {"id": "MED17_COMMON", "file": "med17_common.json", "display_name": "Bosch MED17 (VW/Audi gasoline turbo common)", "bin_size_bytes": 2097152, "primary_protocol": "CAN/UDS", "status": "full protocol + maps community + checksum ready"},
-    {"id": "EDC17_COMMON", "file": "edc17_common.json", "display_name": "Bosch EDC17 (common diesel platforms)", "bin_size_bytes": 2097152, "primary_protocol": "CAN/UDS", "status": "full operational - UDS flash path, multipoint CS, refined start maps"},
-    {"id": "ME7_COMMON", "file": "me7_common.json", "display_name": "Bosch ME7 (VW/Audi 1.8T community)", "bin_size_bytes": 1048576, "primary_protocol": "KWP", "status": "starter catalog + map hints — loader wired"},
-    {"id": "DELPHI_DCM", "file": "delphi_dcm.json", "display_name": "Delphi DCM (common-rail diesel)", "bin_size_bytes": 2097152, "primary_protocol": "CAN/UDS", "status": "starter catalog + diesel map hints — loader wired"},
-    {"id": "SIEMENS_SID803", "file": "siemens_sid803.json", "display_name": "Siemens / Continental SID803", "bin_size_bytes": 1572864, "primary_protocol": "CAN/UDS", "status": "starter catalog — report-only checksum"},
-    {"id": "HONDA_KEIHIN", "file": "honda_keihin.json", "display_name": "Honda Keihin K-series", "bin_size_bytes": 524288, "primary_protocol": "KWP", "status": "starter catalog — size collides with P01, identify by OS string"},
-    {"id": "EDC15_COMMON", "file": "edc15_common.json", "display_name": "Bosch EDC15", "bin_size_bytes": 1048576, "primary_protocol": "KWP", "status": "catalog — report-only checksum"},
-    {"id": "ME9_COMMON", "file": "me9_common.json", "display_name": "Bosch ME9", "bin_size_bytes": 2097152, "primary_protocol": "CAN/KWP", "status": "catalog — size collides with 2MB Bosch"},
-    {"id": "SIMOS18", "file": "simos18.json", "display_name": "Continental Simos 18", "bin_size_bytes": 4194304, "primary_protocol": "CAN/UDS", "status": "catalog — unique 4MB size"},
-    {"id": "TRIONIC8", "file": "trionic8.json", "display_name": "Saab / GM Trionic 8", "bin_size_bytes": 2097152, "primary_protocol": "CAN", "status": "catalog — identify by OS string"},
-    {"id": "TRANSTRON_4HK1", "file": "transtron_4hk1.json", "display_name": "Transtron / Isuzu 4HK1 (FRR class)", "bin_size_bytes": 2097152, "primary_protocol": "CAN/UDS", "status": "catalog only — no write until personal dump"}
+    {
+      "id": "P01_0411",
+      "file": "p01_0411.json",
+      "display_name": "Holden LS1 / GM P01 0411 PCM",
+      "bin_size_bytes": 524288,
+      "primary_protocol": "VPW",
+      "status": "identify + CS1/CVN + full-read backup protocol; kernel write missing (log is read-only)"
+    },
+    {
+      "id": "EDC16C41",
+      "file": "edc16c41_nissan_patrol.json",
+      "display_name": "Bosch EDC16C41 Nissan Patrol GU V Wagon",
+      "bin_size_bytes": 2097152,
+      "primary_protocol": "CAN/KWP",
+      "status": "identify + measured seed/key; checksum report-only (region table fails on reference images); no write"
+    },
+    {
+      "id": "GM_P59",
+      "file": "gm_p59.json",
+      "display_name": "GM P59 PCM (Truck/SUV)",
+      "bin_size_bytes": 524288,
+      "primary_protocol": "VPW",
+      "status": "catalog \u2014 P01 corrector blocked on P59 OS string; no measured P59 CS/kernel"
+    },
+    {
+      "id": "MED17_COMMON",
+      "file": "med17_common.json",
+      "display_name": "Bosch MED17 (VW/Audi gasoline turbo common)",
+      "bin_size_bytes": 2097152,
+      "primary_protocol": "CAN/UDS",
+      "status": "catalog only \u2014 starter keys refused; no measured flash path"
+    },
+    {
+      "id": "EDC17_COMMON",
+      "file": "edc17_common.json",
+      "display_name": "Bosch EDC17 (common diesel platforms)",
+      "bin_size_bytes": 2097152,
+      "primary_protocol": "CAN/UDS",
+      "status": "catalog only \u2014 starter keys refused; no measured flash path"
+    },
+    {
+      "id": "ME7_COMMON",
+      "file": "me7_common.json",
+      "display_name": "Bosch ME7 (VW/Audi 1.8T community)",
+      "bin_size_bytes": 1048576,
+      "primary_protocol": "KWP",
+      "status": "starter catalog + map hints \u2014 loader wired"
+    },
+    {
+      "id": "DELPHI_DCM",
+      "file": "delphi_dcm.json",
+      "display_name": "Delphi DCM (common-rail diesel)",
+      "bin_size_bytes": 2097152,
+      "primary_protocol": "CAN/UDS",
+      "status": "starter catalog + diesel map hints \u2014 loader wired"
+    },
+    {
+      "id": "SIEMENS_SID803",
+      "file": "siemens_sid803.json",
+      "display_name": "Siemens / Continental SID803",
+      "bin_size_bytes": 1572864,
+      "primary_protocol": "CAN/UDS",
+      "status": "starter catalog \u2014 report-only checksum"
+    },
+    {
+      "id": "HONDA_KEIHIN",
+      "file": "honda_keihin.json",
+      "display_name": "Honda Keihin K-series",
+      "bin_size_bytes": 524288,
+      "primary_protocol": "KWP",
+      "status": "starter catalog \u2014 size collides with P01, identify by OS string"
+    },
+    {
+      "id": "EDC15_COMMON",
+      "file": "edc15_common.json",
+      "display_name": "Bosch EDC15",
+      "bin_size_bytes": 1048576,
+      "primary_protocol": "KWP",
+      "status": "catalog \u2014 report-only checksum"
+    },
+    {
+      "id": "ME9_COMMON",
+      "file": "me9_common.json",
+      "display_name": "Bosch ME9",
+      "bin_size_bytes": 2097152,
+      "primary_protocol": "CAN/KWP",
+      "status": "catalog \u2014 size collides with 2MB Bosch"
+    },
+    {
+      "id": "SIMOS18",
+      "file": "simos18.json",
+      "display_name": "Continental Simos 18",
+      "bin_size_bytes": 4194304,
+      "primary_protocol": "CAN/UDS",
+      "status": "catalog \u2014 unique 4MB size"
+    },
+    {
+      "id": "TRIONIC8",
+      "file": "trionic8.json",
+      "display_name": "Saab / GM Trionic 8",
+      "bin_size_bytes": 2097152,
+      "primary_protocol": "CAN",
+      "status": "catalog \u2014 identify by OS string"
+    },
+    {
+      "id": "TRANSTRON_4HK1",
+      "file": "transtron_4hk1.json",
+      "display_name": "Transtron / Isuzu 4HK1 (FRR class)",
+      "bin_size_bytes": 2097152,
+      "primary_protocol": "CAN/UDS",
+      "status": "catalog only \u2014 no write until personal dump"
+    }
   ],
-  "notes": "Add new family JSON + entry here + update loader in ecu_database.rs. Personal dumps only. Honda/P01 collision still enforced; flash/compare refuse unresolved 512KB; EDC17/MED17 starters are not unlock keys. Transtron 4HK1 is catalog-only."
+  "notes": "Statuses describe what is measured in-repo. \"full\" no longer used. Only P01_0411 has a FullImage backup protocol; kernel write still missing. Add new family JSON + entry here + update loader in ecu_database.rs. Personal dumps only."
 }
