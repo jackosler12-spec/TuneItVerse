@@ -36,7 +36,7 @@ Scripts page runs the same ideas against the loaded BIN (`identify`, `checksum`,
 
 Data Logging can import a CSV, replay it, and build a clamped STFT/LTFT multiplier preview. Compare lists changed ranges against the working BIN. Neither path writes a calibration.
 
-## Current status (v3.41.0)
+## Current status (v3.42.0)
 
 Honest summary — see [COMPLETION.md](COMPLETION.md) for the full log.
 

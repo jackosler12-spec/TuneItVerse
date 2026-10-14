@@ -1,8 +1,8 @@
 {
   "name": "tuneitverse",
   "private": true,
-  "version": "3.41.0",
-  "description": "TuneItVerse - open ECU tuning platform. v3.41.0: version consistency and offline polish. P01 FullImage backup protocol live; kernel write refused (log is read-only). EDC16C41 report-only.",
+  "version": "3.42.0",
+  "description": "TuneItVerse - open ECU tuning platform. v3.42.0: experimental P01 kernel write (off by default), flash audit log, ECU DB honesty. EDC16 report-only. Not bench-tested.",
   "type": "module",
   "scripts": {
     "tauri": "tauri",
