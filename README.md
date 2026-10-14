@@ -42,7 +42,7 @@ Honest summary — see [COMPLETION.md](COMPLETION.md) for the full log.
 
 **Operational offline:** BIN/XDF (text)/A2L load and edit, table grid + 3D orbit view, undo/redo, copy/paste, interpolate/smooth, BIN compare, offline DTC explain, CSV log import/export/replay, bench scripts, P01 CS1 + CVN, GM 2-byte seed/key (algo tables). Binary/encrypted TunerPro XDFs get a clear error.
 
-**P01_0411 (OS 12225074):** FullImage backup protocol is implemented from the PcmHammer read log + Kernel-P01.bin (scripted fake-PCM tests green; STN link and hardware untested). Guided flash still **refuses to write**: the same log has no kernel erase/write frames, so inventing them is not allowed.
+**P01_0411 (OS 12225074):** FullImage backup protocol is implemented from the PcmHammer read log + Kernel-P01.bin (scripted fake-PCM tests green; STN link and hardware untested). Experimental kernel calibration write (erase+write+CRC) is behind a Flash checkbox and the typed phrase `WRITE CALIBRATION TO PCM` (OS 12225074 / Intel 28F400B only). Off by default. Protocol from public PcmHammer host source used as spec only. **Not bench-tested.**
 
 **EDC16C41:** Identify + measured 4-byte seed/key. Checksum is **report-only** — the old multipoint CRC32 region table fails on every stock and WinOLS-corrected 392203 image in `reference/`. No flash segment, no write.
 

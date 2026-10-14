@@ -40,7 +40,7 @@
 | Area | Status |
 |------|--------|
 | P01 FullImage backup protocol | Implemented (fake-PCM tested). STN link + real PCM untested. |
-| P01 guided write | Refused after gates — no logged kernel erase/write. |
+| P01 guided write | Experimental kernel cal write behind flag + typed confirm (12225074 / 28F400B). Off by default. Not bench-tested. |
 | EDC16C41 checksum | Report-only. |
 | EDC16C41 write | Off. |
 | Offline map editor / BIN compare / log replay | Present; UI load-tested with mocked invoke. |
@@ -51,7 +51,7 @@
 - Offline BIN / text-XDF / A2L inspection and patching; P01 CS1+CVN validation/correction; EDC16 report-only.
 - Catalog of 14 ECU families (most identify/report-only). TableSeek for P01.
 - Live diagnostics/logging code paths exist; not bench-tested here.
-- Guided flash gates stay fail-closed. After a verified FullImage backup, P01 write is still refused (no logged kernel write). No other family has a write path.
+- Guided flash gates stay fail-closed. After a verified FullImage backup, P01 write stays off unless `experimental_p01_write` is set and the typed confirm phrase matches. No other family has a write path. Experimental write is not bench-tested.
 
 Never flash without a verified backup and stable power. Personal dumps only.
 
@@ -61,7 +61,7 @@ Never flash without a verified backup and stable power. Personal dumps only.
 2. EDC17 / MED17 / ME7 / SID803 / Honda / Simos / T8 / Transtron seed tables from **your** dumps. Put pairs in `seed_tables.json`.
 3. PCM Hammer comparison on your 512 KB P01 OS (`12225074`).
 4. A vendor J2534 DLL on Windows so mid-write Vbatt and the registry walk are live.
-5. A logged P01 kernel erase/write session (the current log is read-only). FullImage backup already exists.
+5. Bench-test the experimental P01 kernel cal write on your STN + PCM (protocol from public PcmHammer host source; still hardware-unverified). FullImage backup already exists.
 6. Licensed GM 5-byte keys. We do not ship that library.
 7. Isuzu FRR Transtron dump + protocol notes before any 4HK1 write work.
 
