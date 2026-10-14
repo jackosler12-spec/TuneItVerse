@@ -52,7 +52,7 @@
     "xdf_file_note": "reference/OS-12225074-512Kb-2001-2004.xdf is a TunerPro binary/encrypted XDF; parse_xdf_definitions returns a clear error. Use a text XDF or a definition pack."
   },
   "communication_kernels": [
-    "Kernel-P01.bin (7890 bytes @ 0xFF8000; read established by PcmHammer log; erase/write missing)"
+    "Kernel-P01.bin (7890 bytes @ 0xFF8000; read + experimental write from PcmHammer protocol; not bench-tested)"
   ],
   "recovery_paths": {
     "locked_pcm_grounding_hack": "For tuner-locked P01: Apply ground to specific solder pad (public DIY guides) during write/erase phase to bypass lock and allow reflash. Time grounding with 'erasing' stage for success. Safety: Stable power, correct pad identification critical.",
@@ -67,14 +67,16 @@
     "length": "0x18000",
     "image_size": 524288,
     "source": "P01 segment table / OS 12225074; PcmHammer write path notes. Kernel erase/write frames are NOT in reference/PcmHammer_debugLog_20260504@180810.txt (read-only session).",
-    "note": "Guided write still refuses after all gates until a logged kernel write session exists."
+    "note": "Experimental kernel cal write (erase+write+CRC) available behind experimental_p01_write + typed confirm. Protocol from public PcmHammer host source used as spec. Not bench-tested."
   },
   "sources": [
     "reference/PcmHammer_debugLog_20260504@180810.txt (read session)",
     "reference/P01-P59.xml",
     "reference/stockcvn.xml",
     "reference/Kernel-P01.bin",
-    "reference/KeyAlgorithm.cs / GmKeys.cs"
+    "reference/KeyAlgorithm.cs / GmKeys.cs",
+    "github.com/PcmHammer/PcmHammer @ 033cb039 Protocol.Kernel.cs / VpwKernelSession.cs / FlashChip.cs / Crc.cs",
+    "Kernels/68k-VPW-C/Kernel-P01.c HandleCrcQuery"
   ],
   "verified": {
     "identify": true,
@@ -82,7 +84,10 @@
     "cvn_os": true,
     "seed_key_algo_0x28": true,
     "full_image_backup_protocol": true,
-    "kernel_write": false,
-    "hardware_bench": false
+    "kernel_write": "experimental_unverified",
+    "hardware_bench": false,
+    "checksum_cs1": true,
+    "checksum_cvn_os": true,
+    "full_backup_protocol": true
   }
 }

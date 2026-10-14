@@ -27,7 +27,8 @@
       "EDC16C41 working file complete (cal region)",
       "WinOLS (Nissan (nissan egr off+fault delete) - 392203).bin"
     ],
-    "notes": "Seed/key for EDC16C41 (4-byte) is measured (Security Access Code.md). There is no flash_write_segment and no logged UDS download session in the repo, so guided write stays off."
+    "notes": "Seed/key for EDC16C41 (4-byte) is measured (Security Access Code.md). There is no flash_write_segment and no logged UDS download session in the repo, so guided write stays off.",
+    "status": "report-only: no public open-source flash multipoint layout; EDC16_CRC32_REGIONS fails on all three 2MB reference images; WinOLS vs stock diffs a 136-byte block at 0x1FDF78-0x1FDFFF"
   },
   "security_access": {
     "type": "UDS Service 0x27 seed-key",
@@ -55,5 +56,12 @@
     },
     "unverified": true
   },
-  "notes": "Seed/key measured for this family. Checksum layout unknown (report-only). No live write path. Identify/report and offline BIN tools only until a measured CRC table and a logged UDS flash session exist."
+  "notes": "Seed/key measured for this family. Checksum layout unknown (report-only). No live write path. Identify/report and offline BIN tools only until a measured CRC table and a logged UDS flash session exist.",
+  "verified": {
+    "identify": true,
+    "seed_key": true,
+    "checksum": "report_only",
+    "write": false,
+    "hardware_bench": false
+  }
 }

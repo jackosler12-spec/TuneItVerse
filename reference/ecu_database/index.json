@@ -1,6 +1,6 @@
 {
-  "version": "1.21",
-  "updated": "2026-10-13",
+  "version": "1.22",
+  "updated": "2026-10-14",
   "description": "Master index of TuneItVerse ECU database entries.",
   "families": [
     {
@@ -9,7 +9,7 @@
       "display_name": "Holden LS1 / GM P01 0411 PCM",
       "bin_size_bytes": 524288,
       "primary_protocol": "VPW",
-      "status": "identify + CS1/CVN + full-read backup protocol; kernel write missing (log is read-only)"
+      "status": "identify + CS1/CVN + full-read backup; experimental kernel cal write (off by default, not bench-tested)"
     },
     {
       "id": "EDC16C41",
@@ -17,7 +17,7 @@
       "display_name": "Bosch EDC16C41 Nissan Patrol GU V Wagon",
       "bin_size_bytes": 2097152,
       "primary_protocol": "CAN/KWP",
-      "status": "identify + measured seed/key; checksum report-only (region table fails on reference images); no write"
+      "status": "identify + measured seed/key; checksum report-only (no public flash CS layout; WinOLS area 0x1FDF78 looks RSA-like); no write"
     },
     {
       "id": "GM_P59",
@@ -116,5 +116,5 @@
       "status": "catalog only \u2014 no write until personal dump"
     }
   ],
-  "notes": "Statuses describe what is measured in-repo. \"full\" no longer used. Only P01_0411 has a FullImage backup protocol; kernel write still missing. Add new family JSON + entry here + update loader in ecu_database.rs. Personal dumps only."
+  "notes": "Statuses describe what is measured in-repo. Only P01_0411 has FullImage backup + experimental kernel write (typed confirm). Add new family JSON + entry here + update loader. Personal dumps only; cite sources; mark unverified."
 }

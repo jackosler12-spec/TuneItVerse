@@ -1,4 +1,17 @@
-# TuneItVerse v3.41.0 — P01 backup live; experimental P01 write behind confirm; EDC16 honest
+# TuneItVerse v3.42.0 — P01 backup live; experimental P01 write behind confirm; EDC16 honest
+
+## v3.42.0 changes (2026-10-14)
+1. Append-only flash/backup audit log + Flash-screen viewer.
+2. Experimental P01 kernel calibration write (erase+write+CRC) behind typed confirm; protocol from public PcmHammer host source used as spec only. **Not bench-tested.**
+3. EDC16C41 checksum stays report-only (no public flash multipoint layout).
+4. ECU DB index 1.22 — verified flags updated for P01/EDC16; README honesty rules.
+5. Bench scripts: full command smoke test on reference P01; Python CLI no longer invents P01 regions.
+6. Version **3.42.0** everywhere.
+
+## EDC16C41 checksum still report-only (2026-10-14)
+- Searched public open-source tools (GitHub motronic-checksum, medc17-checksum-tool, EDC16 eeprom parsers, WinOLS plugin notes). **No published flash multipoint layout for EDC16C41** was found — only proprietary WinOLS Bosch EDC16 plugin (closed) and unrelated EDC16U34 EEPROM / MED17 algorithms.
+- Diff of stock `NissanPatrol_2010_EDC16C41_392203.bin` vs WinOLS-corrected 392203 shows map zeros plus a **136-byte** change at `0x1FDF78–0x1FDFFF`, not the 7×4-byte CRC32 words assumed by `EDC16_CRC32_REGIONS`. That table still fails on all three 2MB reference images.
+- Correction stays refused. Seed/key for EDC16C41 unchanged.
 
 ## Experimental P01 kernel write (2026-10-14)
 - Calibration erase + write + CRC (3D02) for OS 12225074 / Intel 28F400B only, behind `experimental_p01_write` + typed phrase `WRITE CALIBRATION TO PCM`.
