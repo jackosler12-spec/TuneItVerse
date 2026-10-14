@@ -38,6 +38,7 @@ mod transport;
 mod v312;
 mod voltage_watch;
 mod p01_backup;
+mod audit_log;
 
 use tauri::Emitter;
 

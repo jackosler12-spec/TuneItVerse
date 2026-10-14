@@ -66,11 +66,32 @@ fn p01_full_backup(app: tauri::AppHandle, dir: Option<String>) -> Result<String,
     with_port(|port| {
         let mut logs = vec![];
         let mut link = crate::p01_backup::StnLink { port };
-        let (img, os) = crate::p01_backup::read_full_image(&mut link, |p| { let _ = app.emit("p01-backup-progress", &p); }, &mut logs)?;
-        let a = crate::p01_backup::assess_image(&img, os);
-        let saved = crate::p01_backup::save_backup(&dir, &img, &a)?;
-        Ok(json!({"backup": saved, "logs": logs}).to_string())
+        let r = (|| {
+            let (img, os) = crate::p01_backup::read_full_image(&mut link, |p| { let _ = app.emit("p01-backup-progress", &p); }, &mut logs)?;
+            let a = crate::p01_backup::assess_image(&img, os);
+            let saved = crate::p01_backup::save_backup(&dir, &img, &a)?;
+            Ok::<_, String>((saved, a, os))
+        })();
+        let entry = |res: &str, os: Option<u32>, sha: Option<String>, detail: String| crate::audit_log::AuditEntry {
+            ts_unix_ms: crate::audit_log::now_ms(), kind: "backup".into(), family: "P01_0411".into(), os_id: os,
+            image_sha256: None, backup_sha256: sha, gates_passed: vec![], gate_failed: None, result: res.into(), detail };
+        match r {
+            Ok((saved, a, os)) => {
+                let full = a.quality == crate::flash::BackupQuality::FullImage;
+                let mut e = entry(if full { "ok" } else { "failed" }, Some(os), Some(saved.sha256.clone()), format!("quality {:?}; {}", a.quality, a.reasons.join("; ")));
+                if full { e.gates_passed = vec!["all bytes".into(), "OS id".into(), "8 checksums".into()]; } else { e.gate_failed = Some(a.reasons.join("; ")); }
+                let _ = crate::audit_log::append(&e);
+                Ok(json!({"backup": saved, "logs": logs}).to_string())
+            }
+            Err(err) => { let mut e = entry("failed", None, None, err.clone()); e.gate_failed = Some(err.clone()); let _ = crate::audit_log::append(&e); Err(err) }
+        }
     })
+}
+/// Last `limit` audit log entries (newest last) plus the log path.
+#[tauri::command]
+fn audit_log_entries(limit: Option<usize>) -> Result<String, String> {
+    let p = crate::audit_log::audit_path();
+    Ok(json!({"path": p.to_string_lossy(), "entries": crate::audit_log::read_from(&p, limit.unwrap_or(200))}).to_string())
 }
 /// Pick the family for live compare/verify. A family requested by the UI must
 /// agree with the one identified from the BIN; with no BIN match, the request
@@ -141,6 +162,11 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
+        .setup(|app| {
+            use tauri::Manager;
+            if let Ok(d) = app.path().app_data_dir() { crate::audit_log::set_dir(d); }
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             list_serial_ports, get_connection_health, connect_ecu, disconnect_ecu, auto_detect_protocol,
             list_supported_protocols, list_supported_ecus, list_ecu_catalog, get_ecu_info, read_properties, read_ecu_data,
@@ -151,7 +177,7 @@ pub fn run() {
             xdf::parse_xdf_definitions, xdf::extract_table_from_bin, xdf::patch_table_into_bin, xdf::table_delta_cmd,
             a2l::parse_a2l_definitions, a2l::parse_a2l_summary,
             table_tools::table_math_cmd, table_tools::apply_stft_preview_cmd,
-            auto_load_tables_for_bin, get_tuning_advice, guided_flash_pipeline, p01_full_backup, compare_bin_to_ecu, verify_after_write,
+            auto_load_tables_for_bin, get_tuning_advice, guided_flash_pipeline, p01_full_backup, audit_log_entries, compare_bin_to_ecu, verify_after_write,
             unlock_level1, unlock_level2, bosch_uds_unlock,
             scripting::list_script_helpers, scripting::run_bench_script,
             v29_tools::identify_bin_cmd, v29_tools::compare_bins_cmd, v29_tools::map_from_log_cmd, v29_tools::export_workspace_cmd, v29_tools::import_workspace_cmd, v29_tools::patch_bin_bytes_cmd,

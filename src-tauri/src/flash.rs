@@ -142,7 +142,28 @@ pub fn backup_quality_allows_write(quality: &BackupQuality) -> bool {
     matches!(quality, BackupQuality::FullImage)
 }
 
-pub fn orchestrate_guided_flash<F>(port: &mut Box<dyn SerialPort + Send>, request: GuidedFlashRequest, mut on_progress: F) -> Result<GuidedFlashResult, String>
+/// Every guided flash attempt is written to the audit log, whatever the outcome.
+pub fn orchestrate_guided_flash<F>(port: &mut Box<dyn SerialPort + Send>, request: GuidedFlashRequest, on_progress: F) -> Result<GuidedFlashResult, String>
+where F: FnMut(FlashProgress),
+{
+    let image = request.tuned_bin.clone();
+    let family = crate::v29_tools::resolved_family(&image).unwrap_or_else(|_| "unknown".into());
+    let backup_sha = request.backup_path.as_ref().and_then(|p| std::fs::read(p).ok()).map(|b| crate::p01_backup::sha256_hex(&b));
+    let r = orchestrate_guided_flash_inner(port, request, on_progress);
+    let (res, err, gates, detail) = match &r {
+        Ok(g) => (crate::audit_log::result_word(g.success, &g.error), g.error.clone(), g.steps_completed.clone(), g.error.clone().unwrap_or_else(|| "write completed".into())),
+        Err(e) => ("failed", Some(e.clone()), vec![], e.clone()),
+    };
+    let _ = crate::audit_log::append(&crate::audit_log::AuditEntry {
+        ts_unix_ms: crate::audit_log::now_ms(), kind: "flash".into(), family,
+        os_id: crate::checksum::p01_binary_os_id(&image),
+        image_sha256: if image.is_empty() { None } else { Some(crate::p01_backup::sha256_hex(&image)) },
+        backup_sha256: backup_sha, gates_passed: gates, gate_failed: err, result: res.into(), detail,
+    });
+    r
+}
+
+fn orchestrate_guided_flash_inner<F>(port: &mut Box<dyn SerialPort + Send>, request: GuidedFlashRequest, mut on_progress: F) -> Result<GuidedFlashResult, String>
 where F: FnMut(FlashProgress),
 {
     let min_v = request.min_voltage_v.unwrap_or(DEFAULT_MIN_VOLTAGE_V);

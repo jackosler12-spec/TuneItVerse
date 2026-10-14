@@ -1,5 +1,11 @@
 # TuneItVerse v3.41.0 — P01 backup live; write still refused; EDC16 honest
 
+## Flash/backup audit log (2026-10-14)
+- Every guided flash call and every P01 full backup is appended to `<app data>/audit.jsonl` (JSON Lines, opened append-only, never rewritten).
+- Each line: timestamp, kind, family, OS id, image/backup SHA-256, gates passed, the gate that refused, result (`ok`/`refused`/`failed`), detail. No VIN, serials or image bytes.
+- Flash screen → "Flash & backup audit log" panel shows the last 200 entries (read-only).
+- Append-only is by convention: the file is a normal user file and can be edited or deleted outside the app.
+
 ## v3.41.0 changes (2026-10-13)
 
 1. **P01 kernel write:** not implemented. `reference/PcmHammer_debugLog_20260504@180810.txt` is a read-only session (512× mode-35 reads, then halt). No erase/write frames exist in the repo, so after FullImage backup + unlock + checksum + OS match + voltage gates pass, guided flash returns an explicit refusal rather than inventing protocol bytes.
