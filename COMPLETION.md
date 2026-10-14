@@ -1,4 +1,12 @@
-# TuneItVerse v3.41.0 — P01 backup live; write still refused; EDC16 honest
+# TuneItVerse v3.41.0 — P01 backup live; experimental P01 write behind confirm; EDC16 honest
+
+## Experimental P01 kernel write (2026-10-14)
+- Calibration erase + write + CRC (3D02) for OS 12225074 / Intel 28F400B only, behind `experimental_p01_write` + typed phrase `WRITE CALIBRATION TO PCM`.
+- Protocol bytes taken from public PcmHammer host source (GPL-3.0) used **as a specification only** — TuneItVerse code stays MIT. Cited: `Protocol.Kernel.cs` CreateFlashEraseBlockRequest / CreateCrcQuery / CreateExitKernel; `Protocol.ReadWrite.cs` CreateBlockMessage (BlockCopyType.Copy); `FlashChip.cs` case 0x00894471; `Crc.cs` poly 0x04C11DB7; `VpwKernelSession.cs` EraseRange / WriteRange / AfterFailedWrite; `KernelVerifier.cs` CompareRanges; `Kernels/68k-VPW-C/Kernel-P01.c` HandleCrcQuery (7D FF busy). Commit `033cb039` on github.com/PcmHammer/PcmHammer (LegacyNsfw/PcmHacks fork).
+- Write payload size fixed at 0x400 (matches logged STN read blocks). Device-dependent larger sizes are not guessed.
+- On mid-write failure or CRC mismatch, calibration is re-erased (AfterFailedWrite) so the PCM enters recovery mode.
+- **Not bench-tested.** Off by default. All prior gates (FullImage backup, OS match, voltage, checksum correct) still apply.
+- Licence note: PcmHammer host code is GPL-3.0; we reimplemented from the published message layouts and did not copy source. Kernel-P01.bin remains the binary already in `reference/` (PcmHammer redistributes it under its own terms).
 
 ## Flash/backup audit log (2026-10-14)
 - Every guided flash call and every P01 full backup is appended to `<app data>/audit.jsonl` (JSON Lines, opened append-only, never rewritten).

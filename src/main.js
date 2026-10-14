@@ -2076,7 +2076,9 @@ async function runGuidedFlashUi() {
       do_write: true,
       user_confirmed_risks: true,
       backup_path: window.__p01BackupPath || null,
-      accept_unverified_write: !!(document.getElementById('risk-unverified') && document.getElementById('risk-unverified').checked)
+      accept_unverified_write: !!(document.getElementById('risk-unverified') && document.getElementById('risk-unverified').checked),
+      experimental_p01_write: !!(document.getElementById('risk-experimental-p01') && document.getElementById('risk-experimental-p01').checked),
+      experimental_confirm: (document.getElementById('p01-confirm-phrase') && document.getElementById('p01-confirm-phrase').value) || null
     };
     const raw = await invokeCmd('guided_flash_pipeline', { request_json: JSON.stringify(req) });
     const res = parseMaybe(raw) || {};

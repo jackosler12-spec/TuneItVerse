@@ -65,7 +65,7 @@ fn p01_full_backup(app: tauri::AppHandle, dir: Option<String>) -> Result<String,
     };
     with_port(|port| {
         let mut logs = vec![];
-        let mut link = crate::p01_backup::StnLink { port };
+        let mut link = crate::p01_backup::StnLink::new(port);
         let r = (|| {
             let (img, os) = crate::p01_backup::read_full_image(&mut link, |p| { let _ = app.emit("p01-backup-progress", &p); }, &mut logs)?;
             let a = crate::p01_backup::assess_image(&img, os);

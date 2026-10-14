@@ -36,6 +36,10 @@ pub struct GuidedFlashRequest {
     #[serde(default = "default_false")] pub accept_unverified_write: bool,
     /// P01: path of a saved p01_backup image (with .json sidecar) from p01_full_backup.
     #[serde(default)] pub backup_path: Option<String>,
+    /// P01 kernel write is experimental and off by default. Requires typed UI confirmation.
+    #[serde(default = "default_false")] pub experimental_p01_write: bool,
+    /// Must equal EXPERIMENTAL_CONFIRM_PHRASE when experimental_p01_write is set.
+    #[serde(default)] pub experimental_confirm: Option<String>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RecoveryPrompt { pub prompt_type: String, pub message: String, pub steps: Vec<String>, pub kernel_to_upload: Option<String>, pub grounding_required: bool, pub reference_notes: String }
@@ -136,7 +140,9 @@ where
 
 /// Only a full flash-image backup may proceed to write. Partial window probes and failures stay blocked.
 /// Why P01 write stops after all gates pass.
-pub const P01_WRITE_UNSUPPORTED: &str = "P01 kernel write not available: the repo PcmHammer log (reference/PcmHammer_debugLog_20260504@180810.txt) is a read-only session with no kernel erase/write frames. All gates passed; nothing was erased or written.";
+/// Typed confirmation required in the UI before experimental P01 kernel write.
+pub const EXPERIMENTAL_CONFIRM_PHRASE: &str = "WRITE CALIBRATION TO PCM";
+pub const P01_WRITE_NEEDS_FLAG: &str = "P01 kernel write is experimental and off by default. Set experimental_p01_write and type the confirmation phrase in the UI. Frames come from public PcmHammer host source (GPL-3.0 used as protocol spec only; see COMPLETION.md). Not bench-tested.";
 
 pub fn backup_quality_allows_write(quality: &BackupQuality) -> bool {
     matches!(quality, BackupQuality::FullImage)
@@ -256,11 +262,54 @@ where F: FnMut(FlashProgress),
         result.steps_completed.push("Full-image backup captured".into());
     }
     if family.eq_ignore_ascii_case("P01_0411") {
-        // reference/PcmHammer_debugLog_20260504@180810.txt is a read session only (no erase,
-        // no write frames; lines 281-6935 are 35-reads, 7846 halt). Without logged kernel
-        // erase/write frames there is nothing to send that is not invented.
-        result.error = Some(P01_WRITE_UNSUPPORTED.into());
-        return Ok(result);
+        if !request.experimental_p01_write {
+            result.error = Some(P01_WRITE_NEEDS_FLAG.into());
+            return Ok(result);
+        }
+        if request.experimental_confirm.as_deref() != Some(EXPERIMENTAL_CONFIRM_PHRASE) {
+            result.error = Some(format!("Experimental P01 write requires typing exactly: {}", EXPERIMENTAL_CONFIRM_PHRASE));
+            return Ok(result);
+        }
+        // Re-check voltage immediately before the destructive phase.
+        if let Err(e) = enforce_voltage_gate(port, min_v, &mut result.logs) {
+            result.error = Some(e); return Ok(result);
+        }
+        result.logs.push("EXPERIMENTAL P01 kernel calibration write (PcmHammer protocol spec; bench-unverified).".into());
+        result.steps_completed.push("Experimental flag + typed confirm".into());
+        let mut link = crate::p01_backup::StnLink::new(port);
+        let wr = crate::p01_write::write_full(&mut link, &image, |p| {
+            on_progress(FlashProgress { bytes_done: p.bytes_done, bytes_total: p.bytes_total, percent: p.percent, voltage_warn: None });
+        }, &mut result.logs);
+        match wr {
+            Ok(w) if w.success => {
+                result.success = true;
+                result.flash_write_result = Some(FlashWriteResult { bytes_written: w.bytes_written, blocks_written: (w.bytes_written + 0x3FF) / 0x400, crc32_written: w.cal_crc_file });
+                result.verification_crc = w.cal_crc_pcm;
+                result.verified_live = true;
+                result.steps_completed.push("P01 cal erase+write+CRC".into());
+                return Ok(result);
+            }
+            Ok(w) => {
+                result.error = Some(w.notes.clone());
+                if w.recovery_needed {
+                    result.recovery_prompt = Some(RecoveryPrompt {
+                        prompt_type: "p01_cal_recovery".into(),
+                        message: "Calibration write failed or CRC mismatched. Calibration was re-erased to force recovery mode.".into(),
+                        steps: vec![
+                            "Keep power stable.".into(),
+                            "Re-run P01 full backup if possible.".into(),
+                            "Retry experimental write with the known-good FullImage backup BIN.".into(),
+                            "If the PCM will not boot, use recovery/boot-mode flashing with PcmHammer.".into(),
+                        ],
+                        kernel_to_upload: Some("Kernel-P01.bin".into()),
+                        grounding_required: false,
+                        reference_notes: "PcmHammer VpwKernelSession.AfterFailedWrite erases calibration after a failed cal write.".into(),
+                    });
+                }
+                return Ok(result);
+            }
+            Err(e) => { result.error = Some(e); return Ok(result); }
+        }
     }
     let fam = family.to_ascii_uppercase();
     if fam.contains("HONDA") || fam.contains("KEIHIN") {
@@ -448,5 +497,13 @@ mod tests {
         assert!(!backup_quality_allows_write(&BackupQuality::PartialDidOnly));
         assert!(!backup_quality_allows_write(&BackupQuality::Failed));
         assert!(backup_quality_allows_write(&BackupQuality::FullImage));
+    }
+    #[test]
+    fn experimental_p01_write_defaults_off_and_needs_phrase() {
+        let req: GuidedFlashRequest = serde_json::from_str(r#"{"ecu_family":"P01_0411"}"#).unwrap();
+        assert!(!req.experimental_p01_write);
+        assert!(req.experimental_confirm.is_none());
+        assert_eq!(EXPERIMENTAL_CONFIRM_PHRASE, "WRITE CALIBRATION TO PCM");
+        assert!(P01_WRITE_NEEDS_FLAG.contains("experimental"));
     }
 }

@@ -99,6 +99,8 @@ pub fn parse_read_reply(r: &[u8], addr: u32, len: usize) -> Result<Vec<u8>, Stri
 /// One VPW request/response hop. `expect_reply = false` for broadcasts (R:0).
 pub trait VpwLink {
     fn transact(&mut self, frame: &[u8], expect_reply: bool) -> Result<Option<Vec<u8>>, String>;
+    /// Adapter reply timeout (PcmHammer ScanToolDeviceImplementation: STPTO <ms>). Default no-op for fakes.
+    fn set_timeout_ms(&mut self, _ms: u32) -> Result<(), String> { Ok(()) }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -240,9 +242,10 @@ pub fn check_write_os(tuned: &[u8], backup: &SavedBackup) -> Result<(), String> 
 /// "..., L:<payload len>" then the hex payload after a "DATA" reply (lines 319-343).
 /// RX parsing (hex bytes, CR-terminated, '>' prompt) follows ElmDevice.cs ProcessResponse /
 /// ElmDeviceImplementation.cs ReadELMLine. NOT bench-tested.
-pub struct StnLink<'a> { pub port: &'a mut Box<dyn serialport::SerialPort + Send> }
+pub struct StnLink<'a> { pub port: &'a mut Box<dyn serialport::SerialPort + Send>, pub wait_ms: u64 }
 
 impl<'a> StnLink<'a> {
+    pub fn new(port: &'a mut Box<dyn serialport::SerialPort + Send>) -> Self { Self { port, wait_ms: 5000 } }
     fn cmd(&mut self, s: &str) -> Result<String, String> {
         use std::io::{Read, Write};
         self.port.write_all(format!("{}\r", s).as_bytes()).map_err(|e| format!("STN write: {}", e))?;
@@ -250,7 +253,7 @@ impl<'a> StnLink<'a> {
         let mut b = [0u8; 1];
         let start = std::time::Instant::now();
         loop {
-            if start.elapsed() > std::time::Duration::from_secs(5) { return Err("STN: timeout waiting for prompt".into()); }
+            if start.elapsed() > std::time::Duration::from_millis(self.wait_ms) { return Err("STN: timeout waiting for prompt".into()); }
             match self.port.read(&mut b) {
                 Ok(1) => { if b[0] == b'>' { break; } out.push(b[0] as char); if out.ends_with("DATA\r") { break; } }
                 Ok(_) => {}
@@ -265,6 +268,12 @@ impl<'a> StnLink<'a> {
 fn hex(b: &[u8]) -> String { b.iter().map(|x| format!("{:02X}", x)).collect() }
 
 impl<'a> VpwLink for StnLink<'a> {
+    fn set_timeout_ms(&mut self, ms: u32) -> Result<(), String> {
+        let r = self.cmd(&format!("STPTO {}", ms))?;
+        if !r.contains("OK") { return Err(format!("STN: STPTO {} not accepted: {}", ms, r.trim())); }
+        self.wait_ms = ms as u64 + 3000;
+        Ok(())
+    }
     fn transact(&mut self, f: &[u8], expect_reply: bool) -> Result<Option<Vec<u8>>, String> {
         if f.len() < 4 { return Err("frame too short".into()); }
         let head = format!("STPX H:{}, R:{}", hex(&f[..3]), if expect_reply { 1 } else { 0 });
@@ -288,7 +297,7 @@ impl<'a> VpwLink for StnLink<'a> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
 
     /// Scripted fake PCM: answers exactly the logged frames and serves `image`.
