@@ -33,17 +33,6 @@ EDC16 = 2097152
 SID803 = 1572864
 BLOCK = 0x10000
 
-P01_REGIONS = [
-    ("Main cal", 0x0000, 0x3FFF, 0x3FFE),
-    ("Fuel tables", 0x4000, 0x7FFF, 0x7FFE),
-    ("Spark tables", 0x8000, 0xBFFF, 0xBFFE),
-    ("Idle/misc", 0xC000, 0xEFFF, 0xEFFE),
-    ("Sensor scaling", 0xF000, 0xF3FF, 0xF3FE),
-    ("Transmission", 0xF400, 0xF7FF, 0xF7FE),
-    ("Security patch", 0xF800, 0xFBFF, 0xFBFE),
-    ("Header/ID", 0xFC00, 0xFFFF, 0xFFFE),
-]
-
 
 def sum16_be(block: bytes, start: int, end: int) -> int:
     total = 0
@@ -74,37 +63,20 @@ def identify(data: bytes) -> dict:
 
 
 def checksum_report(data: bytes) -> str:
+    """CLI helper only. Authoritative P01 CS1/CVN and EDC16 report-only live in the Rust backend
+    (`cargo test --lib checksum::` / desktop Checksums screen). This script does not invent regions.
+    """
     info = identify(data)
-    lines = [f"size={info['bytes']} family={info['family_by_size']}"]
-    if len(data) in (P01_128, P01_512):
-        blocks = len(data) // BLOCK
-        for b in range(blocks):
-            chunk = data[b * BLOCK : (b + 1) * BLOCK]
-            for name, start, end, _cs in P01_REGIONS:
-                s = sum16_be(chunk, start, end)
-                lines.append(f"  blk{b} {name}: sum16=0x{s:04X} {'OK' if s == 0 else 'BAD'}")
-        if len(data) == P01_512:
-            lines.append("Note: 512KB also matches Honda Keihin. Confirm 37820-* vs 12225074 before using P01 correction.")
-    elif len(data) == 1048576:
-        lines.append("ME7 1MB catalogued. No verified corrector in this CLI — do not invent CS bytes.")
-    elif len(data) == SID803:
-        lines.append("SID803 1.5MB catalogued. Report-only — no invented corrector.")
+    lines = [
+        f"size={info['bytes']} family={info['family_by_size']} sha256={info['sha256'][:16]}…",
+        "Authoritative checksum: use the desktop app or `cargo test --lib` / Tauri `validate_checksums`.",
+    ]
+    if len(data) == P01_512:
+        os_id = int.from_bytes(data[0x504:0x508], "big")
+        lines.append(f"P01 OS ID @0x504 = {os_id} (expect 12225074 for the reference LS1 dump).")
+        lines.append("P01 CS1 uses the image segment table; do not use the old 64KB invented blocks.")
     elif len(data) == EDC16:
-        regions = [
-            (0x00000, 0x1FFFF),
-            (0x20000, 0x7FFFF),
-            (0x80000, 0xBFFFF),
-            (0xC0000, 0xFFFFF),
-            (0x100000, 0x13FFFF),
-            (0x140000, 0x17FFFF),
-            (0x180000, 0x1FFFFF),
-        ]
-        for start, end in regions:
-            crc = zlib.crc32(data[start : end + 1]) & 0xFFFFFFFF
-            lines.append(f"  0x{start:06X}-0x{end:06X} crc32=0x{crc:08X}")
-        lines.append("Note: live correction is in src-tauri/src/checksum.rs")
-    else:
-        lines.append("Unsupported size for correction. Report-only.")
+        lines.append("EDC16C41 flash checksum is report-only in-app (no public multipoint layout).")
     return "\n".join(lines)
 
 

@@ -392,6 +392,64 @@ mod tests {
         assert_eq!(v["ok"], true);
         assert_eq!(v["steps"][0]["result"]["entropy"], 0.0);
     }
+    #[test]
+    fn all_commands_on_reference_p01() {
+        let p = concat!(env!("CARGO_MANIFEST_DIR"), "/../reference/LS1 PCM P01 12225074.bin");
+        let img = std::fs::read(p).expect("reference P01 bin");
+        let stock = img.clone();
+        // help / identify / checksum / tables / profile / hex / report
+        for cmd in ["help
+", "identify
+", "checksum
+", "tables
+", "profile
+", "hex 0x500 16
+", "report
+"] {
+            let v = run_script(cmd, Some(img.clone()), None);
+            assert!(v["ok"].as_bool().unwrap(), "{} => {}", cmd.trim(), v);
+        }
+        // seedkey + p01cmp (no bin needed for p01cmp)
+        let v = run_script("seedkey P01_0411 16CB 1
+", None, None);
+        assert!(v["ok"].as_bool().unwrap(), "{}", v);
+        let v = run_script("p01cmp 16CB 28
+", None, None);
+        assert!(v["ok"].as_bool().unwrap(), "{}", v);
+        // poke + correct round-trip
+        let v = run_script("poke 0x9000 11
+correct
+", Some(img.clone()), None);
+        assert!(v["ok"].as_bool().unwrap(), "poke+correct {}", v);
+        assert!(v["mutated"].as_bool().unwrap());
+        // compare stock vs poked-then-corrected should still differ at poke if correct only fixes CS
+        let mut poked = stock.clone();
+        poked[0x9000] ^= 0x11;
+        let v = run_script("compare
+", Some(poked), Some(stock));
+        assert!(v["ok"].as_bool().unwrap(), "compare {}", v);
+        // maplog may be empty offline — must not panic
+        let v = run_script("maplog
+", None, None);
+        assert!(v["ok"].as_bool().unwrap() || v["error"].is_string(), "maplog {}", v);
+        // unknown stops
+        let v = run_script("nope
+", None, None);
+        assert!(!v["ok"].as_bool().unwrap());
+        // edc16 report-only
+        let ep = concat!(env!("CARGO_MANIFEST_DIR"), "/../reference/NissanPatrol_2010_EDC16C41_392203.bin");
+        if let Ok(e) = std::fs::read(ep) {
+            let v = run_script("checksum
+", Some(e.clone()), None);
+            assert!(v["ok"].as_bool().unwrap(), "edc16 checksum {}", v);
+            let method = v["steps"][0]["result"]["method_used"].as_str().unwrap_or("");
+            assert!(method.contains("report-only"), "expected report-only, got {}", method);
+            let v = run_script("correct
+", Some(e), None);
+            assert!(!v["ok"].as_bool().unwrap(), "edc16 correct must refuse");
+        }
+    }
+
 
     #[test]
     fn p01cmp_returns_pcmhammer_log_vector() {
