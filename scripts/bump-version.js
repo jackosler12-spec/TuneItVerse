@@ -16,7 +16,7 @@ if (!newVersion) {
 const files = [
   { path: 'package.json', key: 'version' },
   { path: 'src-tauri/Cargo.toml', key: 'version', toml: true },
-  { path: 'src-tauri/tauri.conf.json', key: 'version' }
+  { path: 'src-tauri/tauri.conf.json', key: 'version' },
 ];
 
 for (const file of files) {
@@ -34,5 +34,32 @@ for (const file of files) {
   writeFileSync(fullPath, content);
   console.log(`Updated ${file.path} → ${newVersion}`);
 }
+
+// Keep installer + UI banners in lockstep (missed on the 3.43.0 bump).
+const issPath = join(projectRoot, 'installer/TuneItVerse.iss');
+let iss = readFileSync(issPath, 'utf8');
+iss = iss.replace(/^AppVersion=.*$/m, `AppVersion=${newVersion}`);
+writeFileSync(issPath, iss);
+console.log(`Updated installer/TuneItVerse.iss → ${newVersion}`);
+
+const htmlPath = join(projectRoot, 'src/index.html');
+let html = readFileSync(htmlPath, 'utf8');
+html = html.replace(/v\d+\.\d+\.\d+/g, `v${newVersion}`);
+html = html.replace(/(TuneItVerse )\d+\.\d+\.\d+/g, `$1${newVersion}`);
+writeFileSync(htmlPath, html);
+console.log(`Updated src/index.html → ${newVersion}`);
+
+const jsPath = join(projectRoot, 'src/main.js');
+let js = readFileSync(jsPath, 'utf8');
+js = js.replace(/TuneItVerse UI v\d+\.\d+\.\d+/g, `TuneItVerse UI v${newVersion}`);
+writeFileSync(jsPath, js);
+console.log(`Updated src/main.js → ${newVersion}`);
+
+// Window title in tauri.conf
+const tauriPath = join(projectRoot, 'src-tauri/tauri.conf.json');
+let tauri = readFileSync(tauriPath, 'utf8');
+tauri = tauri.replace(/TuneItVerse ECU Tuning Platform v[\d.]+/g, `TuneItVerse ECU Tuning Platform v${newVersion}`);
+writeFileSync(tauriPath, tauri);
+console.log(`Updated src-tauri/tauri.conf.json title → ${newVersion}`);
 
 console.log(`\nVersion successfully bumped to ${newVersion} across all files.`);

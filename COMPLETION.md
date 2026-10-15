@@ -1,4 +1,10 @@
-# TuneItVerse v3.42.0 — P01 backup live; experimental P01 write behind confirm; EDC16 honest
+# TuneItVerse v3.43.0 — EDC16 signature-aware report; UI/installer versions aligned
+
+## v3.43.0 changes (2026-10-15)
+1. EDC16C41 checksum status is signature-aware (report-only RSA-like block at 0x1FDF78 on 392203 images). ECU DB index **1.23**.
+2. README current-status line bumped to **3.43.0**.
+3. UI banners, Inno `AppVersion`, and COMPLETION brought in line with package/Cargo/tauri **3.43.0** (left at 3.42.0 after the earlier bump).
+4. `scripts/bump-version.js` now also updates installer + UI version strings and the tauri window title so the next bump cannot miss them.
 
 ## v3.42.0 changes (2026-10-14)
 1. Append-only flash/backup audit log + Flash-screen viewer.
