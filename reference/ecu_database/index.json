@@ -1,6 +1,6 @@
 {
-  "version": "1.22",
-  "updated": "2026-10-14",
+  "version": "1.23",
+  "updated": "2026-10-15",
   "description": "Master index of TuneItVerse ECU database entries.",
   "families": [
     {
@@ -17,7 +17,7 @@
       "display_name": "Bosch EDC16C41 Nissan Patrol GU V Wagon",
       "bin_size_bytes": 2097152,
       "primary_protocol": "CAN/KWP",
-      "status": "identify + measured seed/key; checksum report-only (no public flash CS layout; WinOLS area 0x1FDF78 looks RSA-like); no write"
+      "status": "identify + measured seed/key; signature block at 0x1FDF78 (report-only, proprietary); no write"
     },
     {
       "id": "GM_P59",
