@@ -36,7 +36,7 @@ Scripts page runs the same ideas against the loaded BIN (`identify`, `checksum`,
 
 Data Logging can import a CSV, replay it, and build a clamped STFT/LTFT multiplier preview. Compare lists changed ranges against the working BIN. Neither path writes a calibration.
 
-## Current status (v3.42.0)
+## Current status (v3.43.0)
 
 Honest summary — see [COMPLETION.md](COMPLETION.md) for the full log.
 
@@ -44,7 +44,7 @@ Honest summary — see [COMPLETION.md](COMPLETION.md) for the full log.
 
 **P01_0411 (OS 12225074):** FullImage backup protocol is implemented from the PcmHammer read log + Kernel-P01.bin (scripted fake-PCM tests green; STN link and hardware untested). Experimental kernel calibration write (erase+write+CRC) is behind a Flash checkbox and the typed phrase `WRITE CALIBRATION TO PCM` (OS 12225074 / Intel 28F400B only). Off by default. Protocol from public PcmHammer host source used as spec only. **Not bench-tested.**
 
-**EDC16C41:** Identify + measured 4-byte seed/key. Checksum is **report-only** — the old multipoint CRC32 region table fails on every stock and WinOLS-corrected 392203 image in `reference/`. No flash segment, no write.
+**EDC16C41:** Identify + measured 4-byte seed/key. Checksum is **report-only** (RSA-like 136-byte signature block at 0x1FDF78 detected on 392203 images). No flash segment, no write.
 
 **Everything else in the catalog:** identify / report-only. No live write. Hardware paths (ELM/J2534/STN) are not bench-tested on this tree.
 
