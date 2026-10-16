@@ -35,6 +35,14 @@ for (const file of files) {
   console.log(`Updated ${file.path} → ${newVersion}`);
 }
 
+// Cargo.lock must match Cargo.toml or CI's `cargo check --locked` fails
+// (missed on the 3.43.0 bump).
+const lockPath = join(projectRoot, 'src-tauri/Cargo.lock');
+let lock = readFileSync(lockPath, 'utf8');
+lock = lock.replace(/(name = "TuneItVerse"\r?\nversion = ")[^"]*(")/, `$1${newVersion}$2`);
+writeFileSync(lockPath, lock);
+console.log(`Updated src-tauri/Cargo.lock → ${newVersion}`);
+
 // Keep installer + UI banners in lockstep (missed on the 3.43.0 bump).
 const issPath = join(projectRoot, 'installer/TuneItVerse.iss');
 let iss = readFileSync(issPath, 'utf8');
