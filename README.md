@@ -30,6 +30,7 @@ python3 python/ecu_scripting.py hex path/to/dump.bin 0 64
 python3 python/ecu_scripting.py report path/to/dump.bin
 python3 python/ecu_scripting.py logsummary path/to/log.csv
 python3 python/ecu_scripting.py dtc P0087
+python3 python/ecu_scripting.py strings path/to/dump.bin
 ```
 
 Scripts page runs the same ideas against the loaded BIN (`identify`, `checksum`, `correct`, `compare`, `seedkey`, `poke`, `tables`, `maplog`, `hex`, `profile`, `report`). No eval, no shell. Scripts → Self-check runs the offline operational check. Maps → Import definition pack loads hint JSON and cannot enable write.
@@ -40,7 +41,7 @@ Data Logging can import a CSV, replay it, and build a clamped STFT/LTFT multipli
 
 Honest summary — see [COMPLETION.md](COMPLETION.md) for the full log.
 
-**Operational offline:** BIN/XDF (text)/A2L load and edit, table grid + 3D orbit view, undo/redo, copy/paste, interpolate/smooth, BIN compare, offline DTC explain, CSV log import/export/replay, bench scripts, P01 CS1 + CVN, GM 2-byte seed/key (algo tables). Binary/encrypted TunerPro XDFs get a clear error.
+**Operational offline:** BIN/XDF (text)/A2L load and edit, table grid + 3D orbit view, undo/redo, copy/paste, interpolate/smooth, BIN compare, offline DTC explain, CSV log import/export/replay, bench scripts (including strings extraction), P01 CS1 + CVN, GM 2-byte seed/key (algo tables). Binary/encrypted TunerPro XDFs get a clear error.
 
 **P01_0411 (OS 12225074):** FullImage backup protocol is implemented from the PcmHammer read log + Kernel-P01.bin (scripted fake-PCM tests green; STN link and hardware untested). Experimental kernel calibration write (erase+write+CRC) is behind a Flash checkbox and the typed phrase `WRITE CALIBRATION TO PCM` (OS 12225074 / Intel 28F400B only). Off by default. Protocol from public PcmHammer host source used as spec only. **Not bench-tested.**
 
