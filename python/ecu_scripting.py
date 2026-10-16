@@ -15,6 +15,7 @@ Usage:
   python3 python/ecu_scripting.py profile path/to/dump.bin
   python3 python/ecu_scripting.py hex path/to/dump.bin 0 256
   python3 python/ecu_scripting.py report path/to/dump.bin
+  python3 python/ecu_scripting.py strings path/to/dump.bin
 """
 
 from __future__ import annotations
@@ -24,7 +25,7 @@ import math
 import pathlib
 import sys
 import hashlib
-import zlib
+import re
 
 
 P01_128 = 131072
@@ -43,6 +44,13 @@ def sum16_be(block: bytes, start: int, end: int) -> int:
     return total
 
 
+def extract_strings(data: bytes, min_len: int = 6) -> list[str]:
+    """Extract printable ASCII strings from a binary dump. Useful for spotting OS IDs, part numbers, calibration tags."""
+    pattern = re.compile(rb"[\x20-\x7e]{" + str(min_len).encode() + rb",}")
+    matches = pattern.findall(data)
+    return [m.decode("ascii", errors="ignore") for m in matches[:200]]  # cap to avoid huge output
+
+
 def identify(data: bytes) -> dict:
     size = len(data)
     family = {
@@ -53,12 +61,15 @@ def identify(data: bytes) -> dict:
         SID803: "SIEMENS_SID803 (1.5MB)",
         4194304: "SIMOS18 (4MB)",
     }.get(size, "unknown")
+    strings = extract_strings(data, 8)
+    interesting = [s for s in strings if any(k in s.upper() for k in ("OS", "CAL", "BOOT", "12225", "392203", "VS43", "MED", "EDC", "SID", "HONDA"))]
     return {
         "bytes": size,
         "family_by_size": family,
         "sha256": hashlib.sha256(data).hexdigest(),
         "sha256_head_4k": hashlib.sha256(data[:4096]).hexdigest() if data else None,
         "sha256_tail_4k": hashlib.sha256(data[-4096:]).hexdigest() if data else None,
+        "interesting_strings": interesting[:12],
     }
 
 
@@ -77,6 +88,8 @@ def checksum_report(data: bytes) -> str:
         lines.append("P01 CS1 uses the image segment table; do not use the old 64KB invented blocks.")
     elif len(data) == EDC16:
         lines.append("EDC16C41 flash checksum is report-only in-app (no public multipoint layout).")
+    if info.get("interesting_strings"):
+        lines.append("Interesting strings: " + ", ".join(info["interesting_strings"][:6]))
     return "\n".join(lines)
 
 
@@ -280,7 +293,7 @@ def explain_dtc(code: str) -> dict:
 
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description="TuneItVerse bench helper")
-    parser.add_argument("command", choices=["checksum", "identify", "seedkey", "p01cmp", "diff", "adapters", "profile", "hex", "report", "logsummary", "dtc"])
+    parser.add_argument("command", choices=["checksum", "identify", "seedkey", "p01cmp", "diff", "adapters", "profile", "hex", "report", "logsummary", "dtc", "strings"])
     parser.add_argument("bin_path", nargs="?")
     parser.add_argument("seed_hex", nargs="?")
     parser.add_argument("level", nargs="?", default="1")
@@ -334,6 +347,11 @@ def main(argv: list[str]) -> int:
         off = int(args.seed_hex or "0", 0)
         length = int(args.level or "256", 0)
         print(hex_window(data, off, length))
+    elif args.command == "strings":
+        strs = extract_strings(data, 6)
+        print("\n".join(strs[:80]))
+        if len(strs) > 80:
+            print(f"\n... {len(strs) - 80} more strings omitted")
     elif args.command == "report":
         ident = identify(data)
         cs = checksum_report(data)
