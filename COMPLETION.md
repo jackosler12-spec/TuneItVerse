@@ -1,4 +1,15 @@
-# TuneItVerse v3.43.0 — EDC16 signature-aware report; UI/installer versions aligned
+# TuneItVerse v3.43.0 — Operational completeness pass (offline toolchain)
+
+## Operational completeness pass (2026-10-16)
+
+1. **Python CLI** (`python/ecu_scripting.py`): added `strings` command that extracts printable ASCII strings from a personal dump. Identify and report now surface interesting strings (OS IDs, part numbers, calibration tags). No new write paths.
+2. **ECU DB index** bumped to **1.24**. Notes clarified: offline identify / checksum report / strings extraction is operational across the catalog. Live write remains fail-closed pending measured protocols and bench validation.
+3. Current features remain fully functional for their documented scope: offline BIN/XDF/A2L inspection, P01 CS1+CVN, EDC16 report-only signature detection, TableSeek, log replay, audit log, experimental P01 kernel write (typed confirm, off by default).
+4. Hardware paths (ELM / J2534 / STN) and unmeasured checksum/seed tables stay honestly blocked. No invented algorithms.
+
+The application is operational for every feature that has measured data in the repository. Expansion beyond that requires personal dumps and bench verification.
+
+Never flash without a verified backup and stable power. Personal dumps only.
 
 ## v3.43.0 changes (2026-10-15)
 1. EDC16C41 checksum status is signature-aware (report-only RSA-like block at 0x1FDF78 on 392203 images). ECU DB index **1.23**.
@@ -51,6 +62,7 @@
 | EDC16C41 write | Off. |
 | Offline map editor / BIN compare / log replay | Present; UI load-tested with mocked invoke. |
 | Hardware (ELM / J2534 / STN) | Not bench-tested on this tree. |
+| Offline strings extraction (CLI) | Operational. |
 
 ## Current operational status
 
@@ -58,6 +70,7 @@
 - Catalog of 14 ECU families (most identify/report-only). TableSeek for P01.
 - Live diagnostics/logging code paths exist; not bench-tested here.
 - Guided flash gates stay fail-closed. After a verified FullImage backup, P01 write stays off unless `experimental_p01_write` is set and the typed confirm phrase matches. No other family has a write path. Experimental write is not bench-tested.
+- CLI strings / improved identify available for personal dumps.
 
 Never flash without a verified backup and stable power. Personal dumps only.
 
