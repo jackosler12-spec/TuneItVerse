@@ -18,25 +18,7 @@ npm run build    # release desktop binary + copy TuneItVerse.exe to this folder
 
 After every release build, `TuneItVerse.exe` is copied to the repository root (this folder). Double-click that file to run the current version.
 
-Bench helper for personal dumps:
-```bash
-python3 python/ecu_scripting.py identify path/to/dump.bin
-python3 python/ecu_scripting.py checksum path/to/dump.bin
-python3 python/ecu_scripting.py seedkey P01_0411 1234 1
-python3 python/ecu_scripting.py diff stock.bin tuned.bin
-python3 python/ecu_scripting.py adapters
-python3 python/ecu_scripting.py profile path/to/dump.bin
-python3 python/ecu_scripting.py hex path/to/dump.bin 0 64
-python3 python/ecu_scripting.py report path/to/dump.bin
-python3 python/ecu_scripting.py logsummary path/to/log.csv
-python3 python/ecu_scripting.py dtc P0087
-```
-
-Scripts page runs the same ideas against the loaded BIN (`identify`, `checksum`, `correct`, `compare`, `seedkey`, `poke`, `tables`, `maplog`, `hex`, `profile`, `report`). No eval, no shell. Scripts → Self-check runs the offline operational check. Maps → Import definition pack loads hint JSON and cannot enable write.
-
-Data Logging can import a CSV, replay it, and build a clamped STFT/LTFT multiplier preview. Compare lists changed ranges against the working BIN. Neither path writes a calibration.
-
-## Current status (v3.43.0)
+## Current status (v3.44.0)
 
 Honest summary — see [COMPLETION.md](COMPLETION.md) for the full log.
 
@@ -47,6 +29,8 @@ Honest summary — see [COMPLETION.md](COMPLETION.md) for the full log.
 **EDC16C41:** Identify + measured 4-byte seed/key. Checksum is **report-only** (RSA-like 136-byte signature block at 0x1FDF78 detected on 392203 images). No flash segment, no write.
 
 **Everything else in the catalog:** identify / report-only. No live write. Hardware paths (ELM/J2534/STN) are not bench-tested on this tree.
+
+Dashboard now has an Operational Status panel (v3.44.0).
 
 Build your own. No bullshit prices.
 
