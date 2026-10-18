@@ -1,7 +1,7 @@
 {
-  "version": "1.23",
-  "updated": "2026-10-15",
-  "description": "Master index of TuneItVerse ECU database entries.",
+  "version": "1.24",
+  "updated": "2026-10-18",
+  "description": "Master index of TuneItVerse ECU database entries. v3.44.0 operational polish.",
   "families": [
     {
       "id": "P01_0411",
@@ -25,7 +25,7 @@
       "display_name": "GM P59 PCM (Truck/SUV)",
       "bin_size_bytes": 524288,
       "primary_protocol": "VPW",
-      "status": "catalog \u2014 P01 corrector blocked on P59 OS string; no measured P59 CS/kernel"
+      "status": "catalog — P01 corrector blocked on P59 OS string; no measured P59 CS/kernel"
     },
     {
       "id": "MED17_COMMON",
@@ -33,7 +33,7 @@
       "display_name": "Bosch MED17 (VW/Audi gasoline turbo common)",
       "bin_size_bytes": 2097152,
       "primary_protocol": "CAN/UDS",
-      "status": "catalog only \u2014 starter keys refused; no measured flash path"
+      "status": "catalog only — starter keys refused; no measured flash path"
     },
     {
       "id": "EDC17_COMMON",
@@ -41,7 +41,7 @@
       "display_name": "Bosch EDC17 (common diesel platforms)",
       "bin_size_bytes": 2097152,
       "primary_protocol": "CAN/UDS",
-      "status": "catalog only \u2014 starter keys refused; no measured flash path"
+      "status": "catalog only — starter keys refused; no measured flash path"
     },
     {
       "id": "ME7_COMMON",
@@ -49,7 +49,7 @@
       "display_name": "Bosch ME7 (VW/Audi 1.8T community)",
       "bin_size_bytes": 1048576,
       "primary_protocol": "KWP",
-      "status": "starter catalog + map hints \u2014 loader wired"
+      "status": "starter catalog + map hints — loader wired; community typical addresses"
     },
     {
       "id": "DELPHI_DCM",
@@ -57,7 +57,7 @@
       "display_name": "Delphi DCM (common-rail diesel)",
       "bin_size_bytes": 2097152,
       "primary_protocol": "CAN/UDS",
-      "status": "starter catalog + diesel map hints \u2014 loader wired"
+      "status": "starter catalog + diesel map hints — loader wired"
     },
     {
       "id": "SIEMENS_SID803",
@@ -65,7 +65,7 @@
       "display_name": "Siemens / Continental SID803",
       "bin_size_bytes": 1572864,
       "primary_protocol": "CAN/UDS",
-      "status": "starter catalog \u2014 report-only checksum"
+      "status": "starter catalog — report-only checksum"
     },
     {
       "id": "HONDA_KEIHIN",
@@ -73,7 +73,7 @@
       "display_name": "Honda Keihin K-series",
       "bin_size_bytes": 524288,
       "primary_protocol": "KWP",
-      "status": "starter catalog \u2014 size collides with P01, identify by OS string"
+      "status": "starter catalog — size collides with P01, identify by OS string"
     },
     {
       "id": "EDC15_COMMON",
@@ -81,7 +81,7 @@
       "display_name": "Bosch EDC15",
       "bin_size_bytes": 1048576,
       "primary_protocol": "KWP",
-      "status": "catalog \u2014 report-only checksum"
+      "status": "catalog — report-only checksum"
     },
     {
       "id": "ME9_COMMON",
@@ -89,7 +89,7 @@
       "display_name": "Bosch ME9",
       "bin_size_bytes": 2097152,
       "primary_protocol": "CAN/KWP",
-      "status": "catalog \u2014 size collides with 2MB Bosch"
+      "status": "catalog — size collides with 2MB Bosch"
     },
     {
       "id": "SIMOS18",
@@ -97,7 +97,7 @@
       "display_name": "Continental Simos 18",
       "bin_size_bytes": 4194304,
       "primary_protocol": "CAN/UDS",
-      "status": "catalog \u2014 unique 4MB size"
+      "status": "catalog — unique 4MB size"
     },
     {
       "id": "TRIONIC8",
@@ -105,7 +105,7 @@
       "display_name": "Saab / GM Trionic 8",
       "bin_size_bytes": 2097152,
       "primary_protocol": "CAN",
-      "status": "catalog \u2014 identify by OS string"
+      "status": "catalog — identify by OS string"
     },
     {
       "id": "TRANSTRON_4HK1",
@@ -113,8 +113,8 @@
       "display_name": "Transtron / Isuzu 4HK1 (FRR class)",
       "bin_size_bytes": 2097152,
       "primary_protocol": "CAN/UDS",
-      "status": "catalog only \u2014 no write until personal dump"
+      "status": "catalog only — no write until personal dump"
     }
   ],
-  "notes": "Statuses describe what is measured in-repo. Only P01_0411 has FullImage backup + experimental kernel write (typed confirm). Add new family JSON + entry here + update loader. Personal dumps only; cite sources; mark unverified."
+  "notes": "Statuses describe what is measured in-repo. Only P01_0411 has FullImage backup + experimental kernel write (typed confirm). Offline map editor, BIN tools, logging replay, scripts fully operational. Hardware paths exist but untested. Personal dumps only; cite sources; mark unverified."
 }
