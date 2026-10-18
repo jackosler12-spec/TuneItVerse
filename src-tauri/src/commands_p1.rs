@@ -200,6 +200,13 @@ fn st_stop_monitor() -> Result<String, String> {
     with_port(|port| crate::transport::stop_monitor(port))
 }
 
+/// Capture a short bus dump (STM for `ms` milliseconds). Default 500 ms.
+#[tauri::command]
+fn st_capture_monitor(ms: Option<u64>) -> Result<String, String> {
+    let ms = ms.unwrap_or(500).min(3000);
+    with_port(|port| crate::transport::capture_monitor(port, ms))
+}
+
 #[tauri::command]
 fn st_enter_sleep() -> Result<String, String> {
     with_port(|port| crate::transport::enter_sleep(port))
