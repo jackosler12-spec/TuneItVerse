@@ -23,15 +23,23 @@
   },
   "maps_and_xdf": {
     "has_xdf": false,
-    "description": "Diesel maps expected: driver wish, IQ, rail, boost, EGR, torque limiter. Addresses are catalog hints until a dump exists.",
+    "description": "Diesel maps expected: driver wish, IQ, rail, boost, EGR, torque limiter. Addresses are catalog hints until a dump exists. Typical commercial diesel starting points — unverified; refine on your FRR dump.",
     "refined_map_addrs": {
-      "driver_wish": "0x80000",
-      "injection_quantity": "0x82000",
-      "rail_pressure": "0x86000",
-      "boost_setpoint": "0xC0000",
-      "egr_map": "0xD0000",
-      "torque_limiter": "0xD8000"
-    }
+      "driver_wish": {"addr": "0x80000", "typical_size": "16x16", "scale": "0.1", "offset": "0", "unit": "mg/stroke", "note": "unverified typical"},
+      "injection_quantity": {"addr": "0x82000", "typical_size": "16x16", "scale": "0.1", "offset": "0", "unit": "mg/stroke", "note": "unverified"},
+      "rail_pressure": {"addr": "0x86000", "typical_size": "16x16", "scale": "1", "offset": "0", "unit": "bar", "note": "unverified"},
+      "boost_setpoint": {"addr": "0xC0000", "typical_size": "16x16", "scale": "0.01", "offset": "0", "unit": "bar", "note": "unverified"},
+      "egr_map": {"addr": "0xD0000", "typical_size": "16x16", "scale": "0.1", "offset": "0", "unit": "%", "note": "unverified"},
+      "torque_limiter": {"addr": "0xD8000", "typical_size": "16x1", "scale": "1", "offset": "0", "unit": "Nm", "note": "unverified"},
+      "smoke_limiter": {"addr": "0xDA000", "typical_size": "16x16", "scale": "0.1", "offset": "0", "unit": "mg/stroke", "note": "unverified"}
+    },
+    "unverified": true
   },
-  "notes": "Catalog family for the Isuzu FRR 4HK1. Write stays blocked. Personal dump required before checksum or unlock work. Personal dumps only."
+  "notes": "Catalog family for the Isuzu FRR 4HK1. Write stays blocked. Personal dump required before checksum or unlock work. Personal dumps only. Map hints expanded for offline starting points.",
+  "verified": {
+    "identify": true,
+    "checksum": "pending_dump",
+    "write": false,
+    "hardware_bench": false
+  }
 }
