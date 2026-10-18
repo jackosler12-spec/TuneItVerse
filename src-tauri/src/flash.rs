@@ -350,7 +350,63 @@ where F: FnMut(FlashProgress),
             Err(e) => { result.error = Some(e); return Ok(result); }
         }
     }
-    // Remaining family paths (Bosch UDS, etc.) left as original; full file restored.
-    result.error = Some("Write path for this family is not enabled in the restored pipeline.".into());
+    // Remaining family paths restored from original (Bosch/UDS/etc. stay blocked until verified kernels exist).
+    result.error = Some("No live write path for this family. Identify/report only until a measured corrector and kernel exist.".into());
     Ok(result)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn ok(sid: u8) -> Vec<u8> {
+        vec![0x6C, 0xF0, 0x10, sid | 0x40]
+    }
+
+    #[test] fn gm_rejection_stops_before_data() {
+        let mut sent: Vec<Vec<u8>> = vec![];
+        let mut x = |f: &[u8]| { sent.push(f.to_vec()); Ok(vec![0x6C, 0xF0, 0x10, 0x7F, 0x34, 0x22]) };
+        assert!(gm_vpw_write_segment(&mut x, || Ok(()), 0x8000, &[1; 300], |_| Ok(())).is_err());
+        assert_eq!(sent.len(), 1);
+    }
+    #[test] fn gm_happy_path_writes_segment_at_address() {
+        let mut sent: Vec<Vec<u8>> = vec![];
+        let mut x = |f: &[u8]| { sent.push(f.to_vec()); Ok(ok(f[3])) };
+        let mut progress = vec![];
+        let w = gm_vpw_write_segment(&mut x, || Ok(()), 0x8000, &[7; 300], |d| { progress.push(d); Ok(()) }).unwrap();
+        assert_eq!(w.bytes_written, 300);
+        assert_eq!(sent[0], build_mode34_request(0x8000, 300));
+        assert_eq!(sent.len(), 1 + 3 + 1);
+        assert_eq!(sent[4], build_mode37_request());
+        assert_eq!(progress, vec![128, 256, 300]);
+    }
+    #[test] fn gm_chunk_nack_or_empty_aborts() {
+        let mut n = 0;
+        let mut x = |f: &[u8]| { n += 1; if n == 3 { Ok(vec![]) } else { Ok(ok(f[3])) } };
+        let e = gm_vpw_write_segment(&mut x, || Ok(()), 0x8000, &[1; 400], |_| Ok(())).unwrap_err();
+        assert!(e.contains("Mode 0x36") && e.contains("128 bytes"));
+    }
+    #[test] fn gm_voltage_abort_propagates() {
+        let mut x = |f: &[u8]| Ok(ok(f[3]));
+        assert!(gm_vpw_write_segment(&mut x, || Ok(()), 0x8000, &[1; 400], |_| Err("sag".into())).is_err());
+    }
+    #[test] fn real_p01_bin_segment_slice() {
+        let img = std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/../reference/LS1 PCM P01 12225074.bin")).unwrap();
+        let seg = crate::ecu_database::flash_segment("P01_0411").unwrap();
+        let w = seg.slice(&img).unwrap();
+        assert_eq!(w, &img[0x8000..0x20000]);
+    }
+    #[test] fn partial_or_failed_backup_blocks_write() {
+        assert!(!backup_quality_allows_write(&BackupQuality::PartialDidOnly));
+        assert!(!backup_quality_allows_write(&BackupQuality::Failed));
+        assert!(backup_quality_allows_write(&BackupQuality::FullImage));
+    }
+    #[test]
+    fn experimental_p01_write_defaults_off_and_needs_phrase() {
+        let req: GuidedFlashRequest = serde_json::from_str(r#"{"ecu_family":"P01_0411"}"#).unwrap();
+        assert!(!req.experimental_p01_write);
+        assert!(req.experimental_confirm.is_none());
+        assert_eq!(EXPERIMENTAL_CONFIRM_PHRASE, "WRITE CALIBRATION TO PCM");
+        assert!(P01_WRITE_NEEDS_FLAG.contains("experimental"));
+    }
 }
