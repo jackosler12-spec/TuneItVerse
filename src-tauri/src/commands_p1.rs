@@ -65,7 +65,7 @@ fn connect_ecu(port_name: String, baud: u32, protocol: String) -> Result<String,
         // Try ST setup; ignore failure so pure ELM clones still work with the ATSP warmup.
         if let Ok(v) = crate::transport::setup_obdlink(&mut port, stp) {
             extra = format!(" (OBDLink STP{} {:.1}V)", stp, v);
-            // For VPW/P01, apply a common PCM response filter (header 0x10).
+            // For VPW/P01, apply a common PCM response filter on header 0x10.
             if stp == "12" {
                 let _ = crate::transport::clear_filters(&mut port);
                 let _ = crate::transport::set_pass_filter(&mut port, "10");
@@ -224,5 +224,22 @@ fn st_stpx(hex: String) -> Result<String, String> {
     with_port(|port| {
         let resp = crate::transport::stpx(port, &bytes)?;
         Ok(resp.iter().map(|b| format!("{:02X}", b)).collect::<Vec<_>>().join(" "))
+    })
+}
+
+/// Combined adapter snapshot: identity, voltage, and current protocol.
+/// Returns JSON so the UI can show it without multiple round-trips.
+#[tauri::command]
+fn st_adapter_status() -> Result<String, String> {
+    with_port(|port| {
+        let id = crate::transport::identify_adapter(port);
+        let v = crate::transport::read_adapter_voltage(port);
+        let proto = crate::transport::current_protocol();
+        let obj = serde_json::json!({
+            "identity": id,
+            "voltage": v,
+            "protocol": proto,
+        });
+        Ok(obj.to_string())
     })
 }
