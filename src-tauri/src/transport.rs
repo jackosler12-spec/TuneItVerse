@@ -162,6 +162,12 @@ pub fn set_pass_filter(port: &mut Box<dyn SerialPort + Send>, id: &str) -> Resul
     elm_command(port, &format!("STFAP {}", id))
 }
 
+/// Set a CAN flow-control pass filter (STCFCPA).
+/// `id` is the CAN ID the adapter should accept for ISO-TP flow control (hex, no spaces).
+pub fn set_flow_control_filter(port: &mut Box<dyn SerialPort + Send>, id: &str) -> Result<String, String> {
+    elm_command(port, &format!("STCFCPA {}", id))
+}
+
 /// Start bus monitoring (STM). Returns the first chunk of traffic or the prompt.
 pub fn start_monitor(port: &mut Box<dyn SerialPort + Send>) -> Result<String, String> {
     elm_command(port, "STM")
@@ -172,6 +178,28 @@ pub fn stop_monitor(port: &mut Box<dyn SerialPort + Send>) -> Result<String, Str
     let _ = port.write_all(b"\r");
     port.flush().ok();
     Ok(read_ascii(port, 200))
+}
+
+/// Enter PowerSave / sleep (STSLEEP). Adapter wakes on UART activity or bus activity
+/// depending on STSLPAS configuration.
+pub fn enter_sleep(port: &mut Box<dyn SerialPort + Send>) -> Result<String, String> {
+    elm_command(port, "STSLEEP")
+}
+
+/// Configure PowerSave wake sources (STSLPAS).
+/// Typical values: 1 = UART, 2 = bus, 3 = both (device-dependent; see FRPM).
+pub fn set_sleep_wake(port: &mut Box<dyn SerialPort + Send>, mode: u8) -> Result<String, String> {
+    elm_command(port, &format!("STSLPAS {}", mode))
+}
+
+/// Read a programmable parameter (ATPP). Returns the raw response.
+pub fn read_pp(port: &mut Box<dyn SerialPort + Send>, pp: u8) -> Result<String, String> {
+    elm_command(port, &format!("ATPP {:02X} OFF", pp))
+}
+
+/// Write a programmable parameter (ATPP xx SV yy ON). Persistent across power cycles.
+pub fn write_pp(port: &mut Box<dyn SerialPort + Send>, pp: u8, value: u8) -> Result<String, String> {
+    elm_command(port, &format!("ATPP {:02X} SV {:02X} ON", pp, value))
 }
 
 /// Send an arbitrary message via STPX (up to 4 KB on MX+).
