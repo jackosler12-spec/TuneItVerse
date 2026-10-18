@@ -180,6 +180,20 @@ pub fn stop_monitor(port: &mut Box<dyn SerialPort + Send>) -> Result<String, Str
     Ok(read_ascii(port, 200))
 }
 
+/// Capture a short bus dump via STM for `ms` milliseconds, then stop.
+/// Useful for seeing traffic without a long-running monitor.
+pub fn capture_monitor(port: &mut Box<dyn SerialPort + Send>, ms: u64) -> Result<String, String> {
+    let _ = port.clear(serialport::ClearBuffer::Input);
+    port.write_all(b"STM\r").map_err(|e| format!("STM write: {e}"))?;
+    port.flush().ok();
+    let dump = read_ascii(port, ms.max(100));
+    // Abort and return to prompt.
+    let _ = port.write_all(b"\r");
+    port.flush().ok();
+    let _ = read_ascii(port, 150);
+    Ok(dump)
+}
+
 /// Enter PowerSave / sleep (STSLEEP). Adapter wakes on UART activity or bus activity
 /// depending on STSLPAS configuration.
 pub fn enter_sleep(port: &mut Box<dyn SerialPort + Send>) -> Result<String, String> {
