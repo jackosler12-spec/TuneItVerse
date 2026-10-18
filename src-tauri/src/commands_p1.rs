@@ -70,6 +70,11 @@ fn connect_ecu(port_name: String, baud: u32, protocol: String) -> Result<String,
                 let _ = crate::transport::clear_filters(&mut port);
                 let _ = crate::transport::set_pass_filter(&mut port, "10");
             }
+            // For CAN/UDS (STP 33), set a common 11-bit functional response filter.
+            if stp == "33" {
+                let _ = crate::transport::clear_filters(&mut port);
+                let _ = crate::transport::set_flow_control_filter(&mut port, "7E8");
+            }
         }
     }
 
