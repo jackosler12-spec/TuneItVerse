@@ -41,6 +41,23 @@ pub fn is_raw_vpw(protocol: &str) -> bool {
     p.contains("vpw") || p.contains("j1850")
 }
 
+/// Map a user-facing protocol name to an STP number (FRPM).
+/// 12 = J1850 VPW, 33 = ISO 15765 11-bit 500 kbps, 5 = ISO 14230 KWP fast, etc.
+pub fn protocol_to_stp(protocol: &str) -> Option<&'static str> {
+    let p = protocol.to_ascii_lowercase();
+    if p.contains("vpw") || p.contains("j1850") {
+        Some("12")
+    } else if p.contains("uds") || p.contains("can") || p.contains("iso15765") {
+        Some("33")
+    } else if p.contains("kwp") {
+        Some("5")
+    } else if p.contains("iso9141") || p.contains("9141") {
+        Some("3")
+    } else {
+        None
+    }
+}
+
 fn read_ascii(port: &mut Box<dyn SerialPort + Send>, wait_ms: u64) -> String {
     let deadline = Instant::now() + Duration::from_millis(wait_ms);
     let mut collected = String::new();
@@ -131,6 +148,30 @@ pub fn open_protocol(port: &mut Box<dyn SerialPort + Send>) -> Result<String, St
 /// Set request timeout in ms (STPTO).
 pub fn set_timeout_ms(port: &mut Box<dyn SerialPort + Send>, ms: u32) -> Result<String, String> {
     elm_command(port, &format!("STPTO {}", ms))
+}
+
+/// Clear all filters (STFAC / ATCRA for non-CAN).
+pub fn clear_filters(port: &mut Box<dyn SerialPort + Send>) -> Result<String, String> {
+    // STFAC is the modern clear; fall back to ATCRA if needed.
+    elm_command(port, "STFAC").or_else(|_| elm_command(port, "ATCRA"))
+}
+
+/// Set a CAN flow-control filter (STCFCPA) or generic pass filter (STFAP).
+/// `id` is the header/ID to accept (hex, no spaces).
+pub fn set_pass_filter(port: &mut Box<dyn SerialPort + Send>, id: &str) -> Result<String, String> {
+    elm_command(port, &format!("STFAP {}", id))
+}
+
+/// Start bus monitoring (STM). Returns the first chunk of traffic or the prompt.
+pub fn start_monitor(port: &mut Box<dyn SerialPort + Send>) -> Result<String, String> {
+    elm_command(port, "STM")
+}
+
+/// Stop monitoring (any key / ATZ-style abort). Sends a newline to return to prompt.
+pub fn stop_monitor(port: &mut Box<dyn SerialPort + Send>) -> Result<String, String> {
+    let _ = port.write_all(b"\r");
+    port.flush().ok();
+    Ok(read_ascii(port, 200))
 }
 
 /// Send an arbitrary message via STPX (up to 4 KB on MX+).
@@ -293,5 +334,15 @@ mod tests {
         assert!(is_elm_ascii("obdlink"));
         assert!(is_raw_vpw("vpw"));
         assert!(!is_raw_vpw("can"));
+    }
+
+    #[test]
+    fn protocol_to_stp_maps() {
+        assert_eq!(protocol_to_stp("vpw"), Some("12"));
+        assert_eq!(protocol_to_stp("j1850"), Some("12"));
+        assert_eq!(protocol_to_stp("can"), Some("33"));
+        assert_eq!(protocol_to_stp("uds"), Some("33"));
+        assert_eq!(protocol_to_stp("kwp"), Some("5"));
+        assert_eq!(protocol_to_stp("unknown"), None);
     }
 }
