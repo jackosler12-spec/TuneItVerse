@@ -133,6 +133,33 @@ pub fn set_timeout_ms(port: &mut Box<dyn SerialPort + Send>, ms: u32) -> Result<
     elm_command(port, &format!("STPTO {}", ms))
 }
 
+/// Send an arbitrary message via STPX (up to 4 KB on MX+).
+/// `data` is the raw payload bytes (header + SID + data). Adapter adds protocol framing.
+/// Returns the parsed response bytes.
+pub fn stpx(port: &mut Box<dyn SerialPort + Send>, data: &[u8]) -> Result<Vec<u8>, String> {
+    if data.is_empty() {
+        return Err("STPX: empty payload".into());
+    }
+    let hex: String = data.iter().map(|b| format!("{:02X}", b)).collect::<Vec<_>>().join("");
+    let cmd = format!("STPX {}", hex);
+    let raw = elm_command(port, &cmd)?;
+    Ok(parse_elm_hex(&raw))
+}
+
+/// Basic MX+ / OBDLink setup for a known protocol.
+/// Sets protocol, opens it, and reads adapter voltage. Logs identity.
+pub fn setup_obdlink(port: &mut Box<dyn SerialPort + Send>, stp: &str) -> Result<f32, String> {
+    let id = identify_adapter(port);
+    if !id.is_empty() {
+        eprintln!("OBDLink: {}", id);
+    }
+    set_protocol(port, stp)?;
+    open_protocol(port)?;
+    // Short timeout for interactive use; callers can raise for flash.
+    let _ = set_timeout_ms(port, 100);
+    read_adapter_voltage(port).ok_or_else(|| "No STVR/ATRV after setup".to_string())
+}
+
 pub fn parse_elm_hex(raw: &str) -> Vec<u8> {
     let cleaned: String = raw
         .chars()
