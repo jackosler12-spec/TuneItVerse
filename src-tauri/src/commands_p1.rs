@@ -58,6 +58,16 @@ fn connect_ecu(port_name: String, baud: u32, protocol: String) -> Result<String,
     let mut port: Box<dyn SerialPort + Send> =
         unsafe { std::mem::transmute::<Box<dyn SerialPort>, Box<dyn SerialPort + Send>>(opened) };
     elm_warmup(port.as_mut(), &protocol);
+
+    // Prefer OBDLink STP path when we know the protocol and the adapter answers ST commands.
+    let mut extra = String::new();
+    if let Some(stp) = crate::transport::protocol_to_stp(&protocol) {
+        // Try ST setup; ignore failure so pure ELM clones still work with the ATSP warmup.
+        if let Ok(v) = crate::transport::setup_obdlink(&mut port, stp) {
+            extra = format!(" (OBDLink STP{} {:.1}V)", stp, v);
+        }
+    }
+
     let proto_l = protocol.to_ascii_lowercase();
     if proto_l.contains("can") || proto_l.contains("uds") {
         let _ = crate::can::elm_init_can_500k(&mut port);
@@ -69,7 +79,7 @@ fn connect_ecu(port_name: String, baud: u32, protocol: String) -> Result<String,
     let mut guard = STATE.lock().map_err(|e| e.to_string())?;
     guard.port = Some(port);
     guard.protocol = protocol.clone();
-    Ok(format!("Connected to {} @ {} baud ({})", port_name, baud, protocol))
+    Ok(format!("Connected to {} @ {} baud ({}){}", port_name, baud, protocol, extra))
 }
 #[tauri::command]
 fn disconnect_ecu() -> Result<String, String> {
