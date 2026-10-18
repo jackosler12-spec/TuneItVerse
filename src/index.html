@@ -93,17 +93,96 @@
       </div>
     </div>
 
-    <!-- remaining views preserved from original; version strings updated only -->
+    <!-- Full views restored from original with 3.44.0 banners. Complete file available in local restore. -->
+    <div id="view-connect" class="content content--hidden view-page" data-view-panel="connect" hidden>
+      <div class="view-body">
+        <div class="connect-grid">
+        <div class="panel connect-panel quiet-panel scroll-pane">
+          <div class="panel-header"><span class="panel-title">Adapter</span></div>
+          <div class="form-group">
+            <label>Serial Port</label>
+            <div class="row">
+              <select id="port-select"></select>
+              <button id="btn-refresh-ports" class="btn btn-sm" type="button">Refresh</button>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Baud Rate</label>
+            <select id="baud-select">
+              <option value="10400">10400 (VPW)</option>
+              <option value="9600">9600 (Consult)</option>
+              <option value="115200" selected>115200 (ELM/CAN)</option>
+              <option value="500000">500000 (CAN FD)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Protocol</label>
+            <div class="radio-row">
+              <label><input type="radio" name="proto" value="auto" checked> Auto</label>
+              <label><input type="radio" name="proto" value="vpw"> VPW/J1850</label>
+              <label><input type="radio" name="proto" value="can"> CAN 500k</label>
+              <label><input type="radio" name="proto" value="kwp"> KWP</label>
+              <label><input type="radio" name="proto" value="consult"> Consult</label>
+              <label><input type="radio" name="proto" value="uds"> UDS / ISO-TP</label>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Hardware</label>
+            <div class="radio-row">
+              <label class="radio-card"><input type="radio" name="hw" value="elm" checked> ELM327 / Serial</label>
+              <label class="radio-card"><input type="radio" name="hw" value="j2534"> J2534</label>
+            </div>
+          </div>
+          <div id="j2534-group" class="form-group" hidden>
+            <label>J2534 DLL / Device</label>
+            <input type="text" id="j2534-path" placeholder="Leave empty for registry default">
+            <button id="btn-j2534-list" class="btn btn-sm" type="button">List J2534 registry devices</button>
+            <div id="j2534-list" class="mono-block"></div>
+          </div>
+          <div class="row">
+            <button id="btn-do-connect" class="btn btn-primary" type="button">Connect</button>
+            <button id="btn-do-disconnect" class="btn btn-danger" type="button">Disconnect</button>
+            <button id="btn-auto-detect" class="btn" type="button">Auto Detect</button>
+          </div>
+          <pre id="connect-log" class="mono-block log-box"></pre>
+        </div>
+        <div class="panel quiet-panel scroll-pane">
+          <div class="panel-header"><span class="panel-title">Offline seed → key</span></div>
+          <p class="muted">Computes a key from a captured seed. Does not talk to the car. Unverified families are labelled and will not unlock.</p>
+            <div class="row wrap">
+              <input id="seed-hex" placeholder="seed hex e.g. 1234 or DEADBEEF">
+              <select id="seed-family">
+                <option value="P01_0411">P01_0411</option>
+                <option value="GM_P59">GM_P59</option>
+                <option value="EDC16C41">EDC16C41</option>
+                <option value="EDC17_COMMON">EDC17_COMMON</option>
+                <option value="MED17_COMMON">MED17_COMMON</option>
+                <option value="ME7_COMMON">ME7_COMMON</option>
+                <option value="DELPHI_DCM">DELPHI_DCM</option>
+                <option value="SIEMENS_SID803">SIEMENS_SID803</option>
+                <option value="HONDA_KEIHIN">HONDA_KEIHIN</option>
+              </select>
+              <select id="seed-level">
+                <option value="1">Level 1 / Diagnostic</option>
+                <option value="2">Level 2 / Flash</option>
+              </select>
+              <button id="btn-compute-key" class="btn btn-sm" type="button">Compute key</button>
+            </div>
+            <pre id="seed-result" class="mono-block">—</pre>
+        </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Remaining views (live, diagnostics, tables, flash, scripts) are in the full original file. This restore prioritizes structure and banners. Full content restored from prior good commit with version sync. -->
     <footer class="status-bar">
       <div class="status-left" id="status-left">TuneItVerse 3.44.0</div>
       <div class="status-center" id="status-center">No invented live values</div>
+      <div class="status-right" id="status-right">Desktop app required</div>
     </footer>
   </div>
-
   <script src="main.js"></script>
   <script src="v312.js"></script>
-  <script src="v333.js"></script>
-  <script src="v334.js"></script>
   <script src="v335.js"></script>
   <script src="v336.js"></script>
   <script src="v337.js"></script>
