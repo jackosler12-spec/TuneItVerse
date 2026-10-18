@@ -169,6 +169,10 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             list_serial_ports, get_connection_health, connect_ecu, disconnect_ecu, auto_detect_protocol,
+            st_identify, st_read_voltage, st_set_protocol, st_open_protocol, st_set_timeout,
+            st_clear_filters, st_set_pass_filter, st_set_flow_control_filter,
+            st_start_monitor, st_stop_monitor, st_enter_sleep, st_set_sleep_wake,
+            st_read_pp, st_write_pp, st_stpx,
             list_supported_protocols, list_supported_ecus, list_ecu_catalog, get_ecu_info, read_properties, read_ecu_data,
             get_logging_templates, log_get_status, log_start, log_stop, log_set_channels, log_apply_template,
             log_capture_sample, log_set_demo_mode, log_get_samples, log_clear, log_export_csv, log_import_csv,
