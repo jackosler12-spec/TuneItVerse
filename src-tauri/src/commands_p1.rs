@@ -65,6 +65,11 @@ fn connect_ecu(port_name: String, baud: u32, protocol: String) -> Result<String,
         // Try ST setup; ignore failure so pure ELM clones still work with the ATSP warmup.
         if let Ok(v) = crate::transport::setup_obdlink(&mut port, stp) {
             extra = format!(" (OBDLink STP{} {:.1}V)", stp, v);
+            // For VPW/P01, apply a common PCM response filter (header 0x10).
+            if stp == "12" {
+                let _ = crate::transport::clear_filters(&mut port);
+                let _ = crate::transport::set_pass_filter(&mut port, "10");
+            }
         }
     }
 
@@ -136,4 +141,88 @@ fn auto_detect_protocol(port_name: String) -> Result<String, String> {
         return Ok("Detected: VPW/J1850 (Mode 01 header)".into());
     }
     Err("No adapter response. Check port, baud, and that the interface is powered.".into())
+}
+
+// ── ST / OBDLink helpers exposed to the UI ──
+
+#[tauri::command]
+fn st_identify() -> Result<String, String> {
+    with_port(|port| Ok(crate::transport::identify_adapter(port)))
+}
+
+#[tauri::command]
+fn st_read_voltage() -> Result<f32, String> {
+    with_port(|port| crate::transport::read_adapter_voltage(port).ok_or_else(|| "No STVR/ATRV".into()))
+}
+
+#[tauri::command]
+fn st_set_protocol(stp: String) -> Result<String, String> {
+    with_port(|port| crate::transport::set_protocol(port, &stp))
+}
+
+#[tauri::command]
+fn st_open_protocol() -> Result<String, String> {
+    with_port(|port| crate::transport::open_protocol(port))
+}
+
+#[tauri::command]
+fn st_set_timeout(ms: u32) -> Result<String, String> {
+    with_port(|port| crate::transport::set_timeout_ms(port, ms))
+}
+
+#[tauri::command]
+fn st_clear_filters() -> Result<String, String> {
+    with_port(|port| crate::transport::clear_filters(port))
+}
+
+#[tauri::command]
+fn st_set_pass_filter(id: String) -> Result<String, String> {
+    with_port(|port| crate::transport::set_pass_filter(port, &id))
+}
+
+#[tauri::command]
+fn st_set_flow_control_filter(id: String) -> Result<String, String> {
+    with_port(|port| crate::transport::set_flow_control_filter(port, &id))
+}
+
+#[tauri::command]
+fn st_start_monitor() -> Result<String, String> {
+    with_port(|port| crate::transport::start_monitor(port))
+}
+
+#[tauri::command]
+fn st_stop_monitor() -> Result<String, String> {
+    with_port(|port| crate::transport::stop_monitor(port))
+}
+
+#[tauri::command]
+fn st_enter_sleep() -> Result<String, String> {
+    with_port(|port| crate::transport::enter_sleep(port))
+}
+
+#[tauri::command]
+fn st_set_sleep_wake(mode: u8) -> Result<String, String> {
+    with_port(|port| crate::transport::set_sleep_wake(port, mode))
+}
+
+#[tauri::command]
+fn st_read_pp(pp: u8) -> Result<String, String> {
+    with_port(|port| crate::transport::read_pp(port, pp))
+}
+
+#[tauri::command]
+fn st_write_pp(pp: u8, value: u8) -> Result<String, String> {
+    with_port(|port| crate::transport::write_pp(port, pp, value))
+}
+
+#[tauri::command]
+fn st_stpx(hex: String) -> Result<String, String> {
+    let bytes = crate::transport::parse_elm_hex(&hex);
+    if bytes.is_empty() {
+        return Err("STPX: no hex bytes".into());
+    }
+    with_port(|port| {
+        let resp = crate::transport::stpx(port, &bytes)?;
+        Ok(resp.iter().map(|b| format!("{:02X}", b)).collect::<Vec<_>>().join(" "))
+    })
 }
