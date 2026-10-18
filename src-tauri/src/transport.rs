@@ -1,7 +1,10 @@
 //! Protocol-aware OBD transport.
 //!
-//! Cheap ELM327 adapters speak ASCII (`010C\\r` → `41 0C ..`).
+//! Cheap ELM327 adapters speak ASCII (`010C\r` → `41 0C ..`).
 //! Raw VPW adapters want a J1850 header + checksum.
+//! OBDLink / STN devices support the full ELM AT set plus the richer ST command set
+//! (see OBDLink Family Reference and Programming Manual).
+//!
 //! Sending VPW bytes down an ELM port is why live data looked dead.
 
 use serialport::SerialPort;
@@ -28,6 +31,8 @@ pub fn is_elm_ascii(protocol: &str) -> bool {
         || p.contains("uds")
         || p.contains("kwp")
         || p.contains("consult")
+        || p.contains("obdlink")
+        || p.contains("stn")
         || p.is_empty()
 }
 
@@ -61,17 +66,71 @@ fn read_ascii(port: &mut Box<dyn SerialPort + Send>, wait_ms: u64) -> String {
     collected
 }
 
+/// Send an AT or ST command and wait for the prompt.
+/// Returns the raw response (trimmed). Errors on UNABLE / ERROR / STOPPED.
 pub fn elm_command(port: &mut Box<dyn SerialPort + Send>, cmd: &str) -> Result<String, String> {
     let _ = port.clear(serialport::ClearBuffer::Input);
     port.write_all(format!("{}\r", cmd).as_bytes())
-        .map_err(|e| format!("ELM write {cmd}: {e}"))?;
+        .map_err(|e| format!("ELM/ST write {cmd}: {e}"))?;
     port.flush().ok();
     let raw = read_ascii(port, 400);
     let up = raw.to_ascii_uppercase();
     if up.contains("UNABLE") || up.contains("STOPPED") || up.contains("ERROR") {
-        return Err(format!("ELM {cmd}: {}", raw.trim()));
+        return Err(format!("ELM/ST {cmd}: {}", raw.trim()));
     }
     Ok(raw)
+}
+
+/// Preferred adapter voltage read (OBDLink STVR). Falls back to ATRV.
+/// Returns calibrated volts when the adapter supports it.
+pub fn read_adapter_voltage(port: &mut Box<dyn SerialPort + Send>) -> Option<f32> {
+    // STVR is the recommended command per FRPM (ATRV is deprecated).
+    if let Ok(raw) = elm_command(port, "STVR") {
+        if let Some(v) = crate::voltage_watch::parse_at_rv(&raw) {
+            return Some(v);
+        }
+    }
+    // Fallback for pure ELM327 clones.
+    if let Ok(raw) = elm_command(port, "ATRV") {
+        return crate::voltage_watch::parse_at_rv(&raw);
+    }
+    None
+}
+
+/// Identify the adapter (STDI / STI). Useful for confirming MX+ and logging firmware.
+pub fn identify_adapter(port: &mut Box<dyn SerialPort + Send>) -> String {
+    let mut id = String::new();
+    if let Ok(hw) = elm_command(port, "STDI") {
+        id.push_str(hw.trim());
+    }
+    if let Ok(fw) = elm_command(port, "STI") {
+        if !id.is_empty() {
+            id.push(' ');
+        }
+        id.push_str(fw.trim());
+    }
+    if id.is_empty() {
+        if let Ok(ati) = elm_command(port, "ATI") {
+            id = ati.trim().to_string();
+        }
+    }
+    id
+}
+
+/// Set protocol via STP (preferred over ATSP).
+/// Examples: STP 12 for J1850 VPW, STP 33 for ISO 15765 11-bit 500 kbps.
+pub fn set_protocol(port: &mut Box<dyn SerialPort + Send>, stp: &str) -> Result<String, String> {
+    elm_command(port, &format!("STP {}", stp))
+}
+
+/// Open the currently selected protocol (STPO).
+pub fn open_protocol(port: &mut Box<dyn SerialPort + Send>) -> Result<String, String> {
+    elm_command(port, "STPO")
+}
+
+/// Set request timeout in ms (STPTO).
+pub fn set_timeout_ms(port: &mut Box<dyn SerialPort + Send>, ms: u32) -> Result<String, String> {
+    elm_command(port, &format!("STPTO {}", ms))
 }
 
 pub fn parse_elm_hex(raw: &str) -> Vec<u8> {
@@ -162,7 +221,13 @@ pub fn decode_live_map(port: &mut Box<dyn SerialPort + Send>) -> serde_json::Map
     put("tps", pull_mode01(port, 0x11).and_then(|d| decode_throttle_pos(&d)), &mut obj, &mut decoded);
     put("iat", pull_mode01(port, 0x0F).and_then(|d| decode_iat(&d)), &mut obj, &mut decoded);
     put("spark", pull_mode01(port, 0x0E).and_then(|d| decode_timing_advance(&d)), &mut obj, &mut decoded);
-    put("batt", crate::flash::read_battery_voltage(port), &mut obj, &mut decoded);
+    // Prefer adapter voltage (STVR) over Mode 01 PID 0x42 when on ELM path.
+    put(
+        "batt",
+        read_adapter_voltage(port).or_else(|| crate::flash::read_battery_voltage(port)),
+        &mut obj,
+        &mut decoded,
+    );
     put("stft", pull_mode01(port, 0x06).and_then(|d| decode_stft_bank1(&d)), &mut obj, &mut decoded);
     put("ltft", pull_mode01(port, 0x07).and_then(|d| decode_ltft_bank1(&d)), &mut obj, &mut decoded);
     put("maf", pull_mode01(port, 0x10).and_then(|d| decode_maf_obd(&d)), &mut obj, &mut decoded);
@@ -198,6 +263,7 @@ mod tests {
         assert!(is_elm_ascii("can"));
         assert!(is_elm_ascii("uds"));
         assert!(is_elm_ascii("elm-auto (Mode 01 seen)"));
+        assert!(is_elm_ascii("obdlink"));
         assert!(is_raw_vpw("vpw"));
         assert!(!is_raw_vpw("can"));
     }
