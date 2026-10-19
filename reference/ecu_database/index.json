@@ -1,7 +1,7 @@
 {
-  "version": "1.25",
-  "updated": "2026-10-18",
-  "description": "Master index of TuneItVerse ECU database entries. v3.44.0+ expanded map hints for key families (unverified).",
+  "version": "1.26",
+  "updated": "2026-10-19",
+  "description": "Master index of TuneItVerse ECU database entries. v3.45.0+ expanded map hints for key families (unverified).",
   "families": [
     {
       "id": "P01_0411",

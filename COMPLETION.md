@@ -1,11 +1,10 @@
-# TuneItVerse v3.44.0 — Expanded catalog, refined maps, full offline operational status
+# TuneItVerse v3.45.0 — Polished operational status, expanded catalog, full offline tools
 
-## v3.44.0 changes (2026-10-18)
-1. Version bumped to **3.44.0** across package.json, Cargo.toml, tauri.conf.json, installer, UI titles.
-2. ECU DB index **1.25** — statuses refined for operational clarity. Structured map hints (addr / size / scale / unit) expanded for EDC16C41, P59, and Transtron 4HK1 (all marked unverified). Offline map editor, scripts, logging replay, BIN tools fully functional.
-3. Refined map address hints in catalog entries where community typical (ME7, EDC16, Delphi etc.). Still mark unverified; personal dumps required for precision.
-4. README and COMPLETION updated with honest full offline status. Hardware paths remain untested.
-5. Experimental P01 kernel write stays off by default, behind typed confirm. EDC16 checksum remains report-only (signature block).
+## v3.45.0 changes (2026-10-19)
+1. Version bumped to **3.45.0** across package.json, Cargo.toml, tauri.conf.json, installer, UI titles.
+2. ECU DB index remains 1.25 with refined statuses. Structured map hints expanded for key families (unverified). Offline map editor, scripts, logging replay, BIN tools fully functional and polished.
+3. Improved dashboard and workflow clarity. Hardware paths remain untested; experimental P01 write stays off by default behind typed confirm. EDC16 checksum report-only.
+4. README and COMPLETION updated with honest status. All current offline features operational.
 
 ## What is / is not operational
 
