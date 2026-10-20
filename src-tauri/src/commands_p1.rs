@@ -267,3 +267,13 @@ fn st_adapter_status() -> Result<String, String> {
 fn elm_session_info() -> Result<String, String> {
     Ok(crate::transport::session_snapshot().to_string())
 }
+
+/// Read-only Nissan CAN diagnostic scan (ATSH7E0, 10C0, 22xxxx support masks,
+/// optional raw reads, 1081). ID meanings are unknown; raw bytes only.
+#[tauri::command]
+fn nissan_can_scan(read_values: Option<bool>) -> Result<String, String> {
+    with_port(|port| {
+        let scan = crate::consult::nissan_can_scan(port, read_values.unwrap_or(false))?;
+        Ok(serde_json::to_string(&scan).unwrap_or_else(|_| "{}".into()))
+    })
+}

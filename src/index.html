@@ -143,6 +143,12 @@
             <button id="btn-do-disconnect" class="btn btn-danger" type="button">Disconnect</button>
             <button id="btn-auto-detect" class="btn" type="button">Auto Detect</button>
           </div>
+          <div class="row">
+            <button id="btn-adapter-status" class="btn btn-sm" type="button">Adapter Status</button>
+            <button id="btn-monitor" class="btn btn-sm" type="button">Bus Monitor (500 ms)</button>
+            <button id="btn-elm-session" class="btn btn-sm" type="button">Supported PIDs</button>
+            <button id="btn-nissan-scan" class="btn btn-sm" type="button" title="Read-only: ATSH7E0, 10C0, 22xxxx support masks, 1081. ID meanings unknown.">Nissan CAN Scan (read-only)</button>
+          </div>
           <pre id="connect-log" class="mono-block log-box"></pre>
         </div>
         <div class="panel quiet-panel scroll-pane">
@@ -386,5 +392,6 @@
   <script src="v337.js"></script>
   <script src="v340.js"></script>
   <script src="v341.js"></script>
+  <script src="adapter_status.js"></script>
 </body>
 </html>

@@ -33,6 +33,41 @@
         }
       });
     }
+
+    const sessBtn = document.getElementById('btn-elm-session');
+    if (sessBtn) {
+      sessBtn.addEventListener('click', async function () {
+        try {
+          const raw = await window.invokeCmd('elm_session_info');
+          const st = typeof raw === 'string' ? JSON.parse(raw) : raw;
+          const pids = (st && st.supported_pids) ? st.supported_pids.join(' ') : 'not read yet (read live data first)';
+          if (log) log.textContent += 'Supported Mode 01 PIDs: ' + pids + '  NO DATA streak: ' + (st ? st.no_data_streak : '—') + '\n';
+        } catch (e) {
+          if (log) log.textContent += 'Session error: ' + e + '\n';
+        }
+      });
+    }
+
+    const nisBtn = document.getElementById('btn-nissan-scan');
+    if (nisBtn) {
+      nisBtn.addEventListener('click', async function () {
+        try {
+          if (log) log.textContent += 'Nissan CAN scan (read-only)…\n';
+          const raw = await window.invokeCmd('nissan_can_scan', { readValues: true });
+          const sc = typeof raw === 'string' ? JSON.parse(raw) : raw;
+          if (log && sc) {
+            log.textContent += 'Supported IDs (meaning unknown): ' + (sc.supported_ids || []).join(' ') + '\n';
+            (sc.reads || []).forEach(function (r) {
+              log.textContent += '  ' + r.id + ' = ' + (r.raw_hex != null ? r.raw_hex : ('error: ' + r.error)) + '\n';
+            });
+            (sc.mask_errors || []).forEach(function (m) { log.textContent += '  mask: ' + m + '\n'; });
+            log.textContent += 'Session exit: ' + sc.session_exit + '\n';
+          }
+        } catch (e) {
+          if (log) log.textContent += 'Nissan scan error: ' + e + '\n';
+        }
+      });
+    }
   }
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', ready);
