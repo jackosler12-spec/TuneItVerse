@@ -34,6 +34,8 @@ mod vpw;
 mod xdf;
 mod v29_tools;
 mod private_bin_probe;
+mod elm_parse;
+mod replay_port;
 mod transport;
 mod v312;
 mod voltage_watch;

@@ -45,7 +45,8 @@ fn elm_warmup(port: &mut dyn SerialPort, protocol: &str) {
     };
     for cmd in seq {
         let _ = port.write_all(cmd);
-        std::thread::sleep(Duration::from_millis(80));
+        // ATZ is a full adapter reset (~1 s on ELM327/STN); commands sent during it are lost.
+        std::thread::sleep(Duration::from_millis(if cmd.starts_with(b"ATZ") { 1000 } else { 80 }));
         let _ = port.clear(serialport::ClearBuffer::Input);
     }
 }
@@ -58,6 +59,8 @@ fn connect_ecu(port_name: String, baud: u32, protocol: String) -> Result<String,
     let mut port: Box<dyn SerialPort + Send> =
         unsafe { std::mem::transmute::<Box<dyn SerialPort>, Box<dyn SerialPort + Send>>(opened) };
     elm_warmup(port.as_mut(), &protocol);
+    // New adapter session: clears the cached PID support masks and NO DATA streak.
+    crate::transport::begin_session(&protocol);
 
     // Prefer OBDLink STP path when we know the protocol and the adapter answers ST commands.
     let mut extra = String::new();
@@ -94,6 +97,7 @@ fn connect_ecu(port_name: String, baud: u32, protocol: String) -> Result<String,
 #[tauri::command]
 fn disconnect_ecu() -> Result<String, String> {
     let _ = crate::j2534::j2534_disconnect();
+    crate::transport::end_session();
     let mut guard = STATE.lock().map_err(|e| e.to_string())?;
     guard.port = None; guard.protocol = String::new(); guard.last_os_id = None; guard.last_family = None;
     Ok("Disconnected".into())
@@ -124,6 +128,7 @@ fn auto_detect_protocol(port_name: String) -> Result<String, String> {
         let pid = read_ascii_window(port.as_mut(), 300);
         if pid.contains("41 00") || pid.contains("4100") || pid.contains("UNABLE") {
             let proto = if pid.contains("41") { "elm-auto (Mode 01 seen)" } else { "elm (adapter answered, no PID yet)" };
+            crate::transport::begin_session(proto);
             let mut guard = STATE.lock().map_err(|e| e.to_string())?;
             guard.port = Some(port);
             guard.protocol = proto.into();
@@ -140,6 +145,7 @@ fn auto_detect_protocol(port_name: String) -> Result<String, String> {
     let mut buf = [0u8; 64];
     let n = port.read(&mut buf).unwrap_or(0);
     if n >= 5 && (buf[0] == 0x48 || buf[0] == 0x41) {
+        crate::transport::begin_session("vpw");
         let mut guard = STATE.lock().map_err(|e| e.to_string())?;
         guard.port = Some(port);
         guard.protocol = "vpw".into();
@@ -254,4 +260,10 @@ fn st_adapter_status() -> Result<String, String> {
         });
         Ok(obj.to_string())
     })
+}
+
+/// Cached adapter session: supported Mode 01 PIDs, protocol search state, NO DATA streak.
+#[tauri::command]
+fn elm_session_info() -> Result<String, String> {
+    Ok(crate::transport::session_snapshot().to_string())
 }

@@ -1,0 +1,123 @@
+# TuneItVerse ELM/STN replay fixture (redacted). Used by replay_port.rs unit tests.
+# Source: Car Scanner debug-log exchanges (OBDLink MX+), extracted and scrubbed by Jack's Data Logger
+# agent. Only adapter request/response frames are kept: no VIN (Patrol VIN is all zeros; Chevrolet VIN
+# lines removed), no Bluetooth MAC, no adapter serial, no phone details, no GPS, no garage records.
+# The Bluetooth connection section of the original sample was dropped (not needed for tests).
+# TuneItVerse fixture sample — extracted from a Car Scanner Pro debug log (OBDLink MX+, Bluetooth)
+# Format: one exchange per line:  > REQUEST  ||  < RESPONSE   (adapter lines joined with ' | ', CR stripped, '>' prompt removed)
+# Adapter settings in effect during the polls: ATE0 ATH1 ATS0 ATM0 ATAT1 ATAL STCSEGT1 ATST96 (headers ON, spaces OFF)
+#   -> 11-bit CAN responses look like 7E8 <PCI len> 41 <PID> <data>, e.g. 7E804410C0BBC = RPM 0x0BBC/4 = 751 rpm
+# Redacted: Bluetooth MAC, adapter serial, all garage/car-profile records, GPS, VIN (Chevrolet section). No personal data kept.
+# Section A: 2007 Nissan Patrol GU ZD30CRD, ISO 15765-4 CAN 11-bit 500k (ATDPN=A6), single ECU 7E8, session 2026-10-20 11:22 AEST.
+#   0100 -> 98390011 => PIDs 01 04 05 0B 0C 0D 10 1C 20 ; 0120 -> A0000000 => PIDs 21 23 (no 40+ range)
+#   0902 VIN -> 7F0978 (responsePending) then multi-frame with all-zero VIN ; 0904 CalID -> "0VS43B" ; 090A -> NO DATA
+#   Nissan extended: 10C0 -> 50C0 ; 2211xx/2212xx/2213xx -> supported-DID bitmasks ; 221209 -> 7F2212 ; 1081 -> 5081
+#   Poll rate observed: ~0.56 s per cycle of 6 PIDs (05 every other cycle) => ~10 req/s, zero errors over 28 min.
+#   Note: 'ATZ' reply shown as ELM327 v1.4b — OBDLink reports an ELM-compatible ID; the app detects STN 'ByName'. Repeated identical exchanges collapsed as (xN).
+
+## Section A1: Patrol connect + init + probing + first poll cycles (2026-10-20)
+> ATZ  ||  < ELM327 v1.4b
+> ATE0  ||  < OK   (x2)
+> ATD  ||  < OK
+> ATD0  ||  < OK
+> ATE0  ||  < OK
+> ATH1  ||  < OK
+> ATSP0  ||  < OK
+> ATE0  ||  < OK
+> ATH1  ||  < OK
+> ATM0  ||  < OK
+> ATS0  ||  < OK
+> ATAT1  ||  < OK
+> ATAL  ||  < OK
+> STCSEGT1  ||  < OK
+> ATST96  ||  < OK
+> 0100  ||  < SEARCHING... | 7E806410098390011
+> ATDPN  ||  < A6
+> 0100  ||  < 7E806410098390011
+> 0120  ||  < 7E8064120A0000000
+> 22F500  ||  < NO DATA
+> ATSH7E0  ||  < OK
+> 10C0  ||  < 7E80250C0
+> 221100  ||  < 7E807621100DE000615
+> 221120  ||  < 7E80762112001806001
+> 221140  ||  < 7E80762114026000000
+> 221200  ||  < 7E80762120003380012
+> 221300  ||  < 7E8076213006B4C0000
+> 1081  ||  < 7E8025081
+> 10C0  ||  < 7E80250C0
+> 221209  ||  < 7E8037F2212
+> 10811  ||  < 7E8025081
+> ATSP6  ||  < OK
+> ATSH7DF  ||  < OK
+> 0100  ||  < 7E806410098390011
+> 0100  ||  < 
+> 0902  ||  < 7E8037F0978 | 7E81014490201000000 | 7E82100000000000000 | 7E82200000000000000
+> 0904  ||  < 7E81013490401305653 | 7E82134334200000000 | 7E82200000000000000
+> 090A  ||  < NO DATA
+> 0100  ||  < 7E806410098390011   (x53)
+> 010C  ||  < 7E804410C0BBC
+> 0105  ||  < 7E803410550
+> 010D  ||  < 7E803410D00
+> 0110  ||  < 7E80441100653
+> 0123  ||  < 7E80441230CF6
+> 010B  ||  < 7E803410B64
+> 010C  ||  < 7E804410C0BBC
+> 010D  ||  < 7E803410D00
+> 0110  ||  < 7E80441100682
+> 0123  ||  < 7E80441230D4E
+> 010B  ||  < 7E803410B64
+> 010C1  ||  < 7E804410C0BB8
+> 0105  ||  < 7E803410550
+> 010D1  ||  < 7E803410D00
+> 01101  ||  < 7E8044110066C
+> 01231  ||  < 7E80441230D64
+> 010B1  ||  < 7E803410B63
+> 010C1  ||  < 7E804410C0BB8
+
+## Section A2: Patrol last exchanges before user disconnect
+> 010D1  ||  < 7E803410D00
+> 01101  ||  < 7E80441100640
+> 01231  ||  < 7E80441230D22
+> 010B1  ||  < 7E803410B65
+> 010C1  ||  < 7E804410C0BB8
+> 01051  ||  < 7E803410581
+> 010D1  ||  < 7E803410D00
+> 0100  ||  < 7E806410098390011   (x5)
+
+## Section C: Chevrolet profile, SAE J1850 VPW auto-detect (ATDPN=A2), 2026-05-30 — for vpw.rs tests (VIN removed)
+> ATZ  ||  < ATE0 | ELM327 v1.4b
+> ATE0  ||  < OK   (x2)
+> ATD  ||  < OK
+> ATD0  ||  < OK
+> ATE0  ||  < OK
+> ATH1  ||  < OK
+> ATSP0  ||  < OK
+> ATE0  ||  < OK
+> ATH1  ||  < OK
+> ATM0  ||  < OK
+> ATS0  ||  < OK
+> ATAT1  ||  < OK
+> ATAL  ||  < OK
+> STCSEGT1  ||  < OK
+> ATST64  ||  < OK
+> 0100  ||  < SEARCHING... | 486B104100BFBFF990B5
+> ATDPN  ||  < A2
+> 0100  ||  < 486B104100BFBFF990B5   (x12)
+> ATRV  ||  < 14.1V
+> 0101  ||  < 486B10410100002000E9
+> 0103  ||  < 486B104103020277
+> 0104  ||  < 486B10410401C1
+> 0105  ||  < 486B1041057B06
+> 0106  ||  < 486B104106774E
+> 0107  ||  < 486B104107802E
+> 0108  ||  < 486B1041087486
+> 0109  ||  < 486B10410980C1
+> ATRV  ||  < 14.1V
+> 0101  ||  < 486B10410100002000E9
+> 0103  ||  < 486B104103020277
+> ATRV  ||  < 14.1V
+> 0101  ||  < 486B10410100002000E9
+> 0103  ||  < 486B104103020277
+
+## Section D: other real ATRV replies seen across sessions (for parse_at_rv tests)
+# 12.5V, 12.6V, 13.2V, 13.4V, 13.5V, 13.6V, 13.7V, 13.8V, 13.9V, 14.0V, 14.1V, 14.2V, 14.3V, 14.6V, 14.7V, 14.8V, 14.9V

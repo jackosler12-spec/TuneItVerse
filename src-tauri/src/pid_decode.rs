@@ -1219,3 +1219,39 @@ mod tests {
         assert!(decode_maf_hi(&[0x01]).is_none()); // needs 2 bytes
     }
 }
+
+/// SAE J1979 PID 0x23 — Fuel rail gauge pressure (diesel / GDI), relative to
+/// manifold vacuum. Formula: `kPa = (A*256 + B) * 10`. Range 0–655,350 kPa.
+pub fn decode_fuel_rail_gauge_pressure(raw: &[u8]) -> Option<f32> {
+    if raw.len() < 2 { return None; }
+    Some(((raw[0] as u32) * 256 + raw[1] as u32) as f32 * 10.0)
+}
+
+/// SAE J1979 PID 0x21 — Distance travelled with MIL on. Formula: `km = A*256 + B`.
+pub fn decode_distance_with_mil(raw: &[u8]) -> Option<f32> {
+    if raw.len() < 2 { return None; }
+    Some(((raw[0] as u32) * 256 + raw[1] as u32) as f32)
+}
+
+/// SAE J1979 PID 0x42 — Control module voltage. Formula: `V = (A*256 + B) / 1000`.
+pub fn decode_module_voltage_obd(raw: &[u8]) -> Option<f32> {
+    if raw.len() < 2 { return None; }
+    Some(((raw[0] as u32) * 256 + raw[1] as u32) as f32 / 1000.0)
+}
+
+#[cfg(test)]
+mod sae_extra_tests {
+    use super::*;
+    #[test]
+    fn rail_pressure_from_real_patrol_replies() {
+        // 7E80441230CF6 / 7E80441230D4E (idle, 2007 Patrol ZD30CRD)
+        assert_eq!(decode_fuel_rail_gauge_pressure(&[0x0C, 0xF6]), Some(33180.0));
+        assert_eq!(decode_fuel_rail_gauge_pressure(&[0x0D, 0x4E]), Some(34060.0));
+        assert_eq!(decode_fuel_rail_gauge_pressure(&[0x0C]), None);
+    }
+    #[test]
+    fn distance_and_module_voltage() {
+        assert_eq!(decode_distance_with_mil(&[0x01, 0x00]), Some(256.0));
+        assert!((decode_module_voltage_obd(&[0x36, 0x5C]).unwrap() - 13.916).abs() < 1e-3);
+    }
+}

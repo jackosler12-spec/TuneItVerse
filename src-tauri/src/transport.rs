@@ -8,7 +8,12 @@
 //! Sending VPW bytes down an ELM port is why live data looked dead.
 
 use serialport::SerialPort;
+use std::collections::{BTreeMap, BTreeSet};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
+
+use crate::elm_parse::{parse_reply, ElmError, ElmReply, HeaderMode};
 
 use crate::pid_decode::*;
 use crate::vpw::{
@@ -16,11 +21,12 @@ use crate::vpw::{
     parse_mode09_response, request_response,
 };
 
+/// Protocol of the current adapter session. Read from the transport's own
+/// session cache, NOT from `crate::STATE`: callers run inside `with_port`, which
+/// already holds the STATE lock, and re-locking a std Mutex on the same thread
+/// deadlocks (this hung every live read before v3.45.0).
 pub fn current_protocol() -> String {
-    crate::STATE
-        .lock()
-        .map(|g| g.protocol.clone())
-        .unwrap_or_default()
+    with_session(|s| s.protocol.clone())
 }
 
 pub fn is_elm_ascii(protocol: &str) -> bool {
@@ -58,6 +64,21 @@ pub fn protocol_to_stp(protocol: &str) -> Option<&'static str> {
     }
 }
 
+/// Read window for one request once the protocol is known. Matches `ATST96`
+/// (0x96 x 4 ms = 600 ms adapter timeout) plus margin for the prompt.
+pub const READ_WINDOW_MS: u64 = 1000;
+/// First OBD request of a session: the adapter may run a protocol search
+/// (`SEARCHING...`), which takes several seconds on ELM327/STN devices.
+pub const SEARCH_WINDOW_MS: u64 = 6000;
+/// Extra time to keep listening after `7F xx 78` (response pending).
+pub const PENDING_EXTRA_MS: u64 = 5000;
+/// Consecutive NO DATA replies before logging stops ("ignition off?").
+/// The reference log shows 41 in a row with the ignition off.
+pub const NO_DATA_STOP_THRESHOLD: u32 = 10;
+
+/// Read until the `>` prompt or the deadline. A serial read timeout is not the
+/// end of the reply: the adapter can be silent for seconds during a protocol
+/// search, so only the prompt or the deadline stops the read.
 fn read_ascii(port: &mut Box<dyn SerialPort + Send>, wait_ms: u64) -> String {
     let deadline = Instant::now() + Duration::from_millis(wait_ms);
     let mut collected = String::new();
@@ -72,9 +93,6 @@ fn read_ascii(port: &mut Box<dyn SerialPort + Send>, wait_ms: u64) -> String {
             }
             Ok(_) => std::thread::sleep(Duration::from_millis(8)),
             Err(ref e) if e.kind() == std::io::ErrorKind::TimedOut => {
-                if !collected.is_empty() {
-                    break;
-                }
                 std::thread::sleep(Duration::from_millis(8));
             }
             Err(_) => break,
@@ -83,35 +101,230 @@ fn read_ascii(port: &mut Box<dyn SerialPort + Send>, wait_ms: u64) -> String {
     collected
 }
 
-/// Send an AT or ST command and wait for the prompt.
-/// Returns the raw response (trimmed). Errors on UNABLE / ERROR / STOPPED.
-pub fn elm_command(port: &mut Box<dyn SerialPort + Send>, cmd: &str) -> Result<String, String> {
-    let _ = port.clear(serialport::ClearBuffer::Input);
-    port.write_all(format!("{}\r", cmd).as_bytes())
-        .map_err(|e| format!("ELM/ST write {cmd}: {e}"))?;
-    port.flush().ok();
-    let raw = read_ascii(port, 400);
+fn reply_is_error(raw: &str) -> bool {
     let up = raw.to_ascii_uppercase();
-    if up.contains("UNABLE") || up.contains("STOPPED") || up.contains("ERROR") {
-        return Err(format!("ELM/ST {cmd}: {}", raw.trim()));
+    up.contains("UNABLE")
+        || up.contains("STOPPED")
+        || up.contains("ERROR")
+        || up.contains("BUFFER FULL")
+        || up.replace(' ', "").contains("NODATA")
+        || up.split(|c| c == '\r' || c == '\n').any(|l| l.replace('>', "").trim() == "?")
+}
+
+/// Send an AT or ST command and wait for the prompt.
+/// Returns the raw response. Errors on UNABLE / ERROR / STOPPED / BUFFER FULL /
+/// NO DATA / `?` (unknown command): none of those are success.
+pub fn elm_command(port: &mut Box<dyn SerialPort + Send>, cmd: &str) -> Result<String, String> {
+    elm_command_timeout(port, cmd, READ_WINDOW_MS)
+}
+
+pub fn elm_command_timeout(port: &mut Box<dyn SerialPort + Send>, cmd: &str, wait_ms: u64) -> Result<String, String> {
+    let raw = elm_send_raw(port, cmd, wait_ms)?;
+    if reply_is_error(&raw) {
+        return Err(format!("ELM/ST {cmd}: {}", raw.replace('>', "").trim()));
     }
     Ok(raw)
 }
 
-/// Preferred adapter voltage read (OBDLink STVR). Falls back to ATRV.
-/// Returns calibrated volts when the adapter supports it.
-pub fn read_adapter_voltage(port: &mut Box<dyn SerialPort + Send>) -> Option<f32> {
-    // STVR is the recommended command per FRPM (ATRV is deprecated).
+fn elm_send_raw(port: &mut Box<dyn SerialPort + Send>, cmd: &str, wait_ms: u64) -> Result<String, String> {
+    let _ = port.clear(serialport::ClearBuffer::Input);
+    port.write_all(format!("{}\r", cmd).as_bytes())
+        .map_err(|e| format!("ELM/ST write {cmd}: {e}"))?;
+    port.flush().ok();
+    Ok(read_ascii(port, wait_ms))
+}
+
+/// Send an OBD/UDS request (hex text) and parse the reply line by line.
+/// Keeps listening after `7F <sid> 78` (response pending) for up to
+/// `PENDING_EXTRA_MS`. NO DATA, adapter errors and negatives are reported in the
+/// returned `ElmReply`; use `ElmReply::positive` to get data or an `ElmError`.
+pub fn elm_request(
+    port: &mut Box<dyn SerialPort + Send>,
+    cmd: &str,
+    mode: HeaderMode,
+    wait_ms: u64,
+) -> Result<ElmReply, ElmError> {
+    let mut raw = elm_send_raw(port, cmd, wait_ms).map_err(ElmError::Io)?;
+    let sid = u8::from_str_radix(cmd.get(..2).unwrap_or(""), 16).unwrap_or(0);
+    let mut reply = parse_reply(&raw, mode);
+    let deadline = Instant::now() + Duration::from_millis(PENDING_EXTRA_MS);
+    while reply.only_pending(sid) && Instant::now() < deadline {
+        let more = read_ascii(port, 500);
+        if !more.is_empty() {
+            raw.push('\r');
+            raw.push_str(&more);
+            reply = parse_reply(&raw, mode);
+        }
+    }
+    Ok(reply)
+}
+
+// ── Session cache ──────────────────────────────────────────────────────────
+
+/// Per-connection ELM/STN state. Reset on connect/disconnect.
+#[derive(Debug, Clone)]
+pub struct ElmSession {
+    pub protocol: String,
+    /// Mode 01 PIDs the ECU reported as supported (from 0100/0120/0140...).
+    pub supported: Option<BTreeSet<u8>>,
+    /// A first OBD request succeeded, so the adapter's protocol search is done.
+    pub protocol_found: bool,
+    /// Replies carried CAN headers (3 or 8 digits): response-count suffix is safe.
+    pub can_frames: bool,
+    pub no_data_streak: u32,
+    /// ATCAF1 ATH1 ATS0 ATST96 sent for this session.
+    pub text_mode_ready: bool,
+}
+
+impl ElmSession {
+    pub const fn new() -> Self {
+        Self { protocol: String::new(), supported: None, protocol_found: false, can_frames: false, no_data_streak: 0, text_mode_ready: false }
+    }
+    pub fn for_protocol(protocol: &str) -> Self {
+        let mut s = Self::new();
+        s.protocol = protocol.to_string();
+        s
+    }
+}
+
+impl Default for ElmSession {
+    fn default() -> Self { Self::new() }
+}
+
+static ELM_SESSION: Mutex<ElmSession> = Mutex::new(ElmSession::new());
+/// Set by code that switches the adapter to raw CAN framing (ATCAF0 / ATH0),
+/// so the next OBD request restores text formatting first.
+static TEXT_MODE_DIRTY: AtomicBool = AtomicBool::new(false);
+
+pub fn mark_text_mode_dirty() {
+    TEXT_MODE_DIRTY.store(true, Ordering::SeqCst);
+}
+
+/// Start a new adapter session (call from connect/auto-detect).
+pub fn begin_session(protocol: &str) {
+    if let Ok(mut g) = ELM_SESSION.lock() {
+        *g = ElmSession::for_protocol(protocol);
+    }
+}
+
+pub fn end_session() {
+    begin_session("");
+}
+
+/// Run `f` with the session cache locked. Never call this from inside another
+/// `with_session` closure.
+pub fn with_session<R>(f: impl FnOnce(&mut ElmSession) -> R) -> R {
+    let mut g = ELM_SESSION.lock().unwrap_or_else(|e| e.into_inner());
+    f(&mut g)
+}
+
+pub fn session_snapshot() -> serde_json::Value {
+    with_session(|s| serde_json::json!({
+        "protocol": s.protocol,
+        "supported_pids": s.supported.as_ref().map(|set| set.iter().map(|p| format!("{:02X}", p)).collect::<Vec<_>>()),
+        "protocol_found": s.protocol_found,
+        "can_frames": s.can_frames,
+        "no_data_streak": s.no_data_streak,
+    }))
+}
+
+/// Header layout to expect for the session protocol (headers are on: `ATH1`).
+pub fn header_mode_for(protocol: &str) -> HeaderMode {
+    let p = protocol.to_ascii_lowercase();
+    if p.contains("can") || p.contains("uds") || p.contains("iso15765") {
+        HeaderMode::Can11
+    } else if p.contains("vpw") || p.contains("j1850") || p.contains("kwp") || p.contains("9141") {
+        HeaderMode::ThreeByte
+    } else {
+        HeaderMode::Auto
+    }
+}
+
+/// Make sure the adapter prints formatted frames with headers (ATCAF1 ATH1 ATS0)
+/// and uses the 600 ms response timeout (ATST96) before an OBD text request.
+pub fn ensure_text_mode(port: &mut Box<dyn SerialPort + Send>, sess: &mut ElmSession) {
+    if TEXT_MODE_DIRTY.swap(false, Ordering::SeqCst) {
+        sess.text_mode_ready = false;
+    }
+    if sess.text_mode_ready {
+        return;
+    }
+    for c in ["ATCAF1", "ATH1", "ATS0", "ATST96"] {
+        let _ = elm_command(port, c);
+    }
+    sess.text_mode_ready = true;
+}
+
+/// Where a supply-voltage reading came from. Labels are shown in the UI and the
+/// audit log, so they must name the real source.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VoltageSource {
+    /// OBDLink `STVR` (adapter pin 16 voltage, calibrated).
+    AdapterStvr,
+    /// ELM327 `ATRV` (adapter pin 16 voltage).
+    AdapterAtrv,
+    /// SAE Mode 01 PID 0x42 (control module voltage) via the ELM text path.
+    Pid42,
+    /// SAE Mode 01 PID 0x42 over the raw VPW frame path.
+    Pid42VpwRaw,
+}
+
+impl VoltageSource {
+    pub fn label(self) -> &'static str {
+        match self {
+            VoltageSource::AdapterStvr => "adapter_stvr",
+            VoltageSource::AdapterAtrv => "adapter_atrv",
+            VoltageSource::Pid42 => "pid42",
+            VoltageSource::Pid42VpwRaw => "pid42_vpw_raw",
+        }
+    }
+}
+
+/// Adapter voltage: OBDLink STVR first, then ELM ATRV. Returns the source.
+pub fn read_adapter_voltage_src(port: &mut Box<dyn SerialPort + Send>) -> Option<(f32, VoltageSource)> {
+    // STVR is the recommended command per FRPM (ATRV is deprecated on STN).
     if let Ok(raw) = elm_command(port, "STVR") {
         if let Some(v) = crate::voltage_watch::parse_at_rv(&raw) {
-            return Some(v);
+            return Some((v, VoltageSource::AdapterStvr));
         }
     }
     // Fallback for pure ELM327 clones.
     if let Ok(raw) = elm_command(port, "ATRV") {
-        return crate::voltage_watch::parse_at_rv(&raw);
+        if let Some(v) = crate::voltage_watch::parse_at_rv(&raw) {
+            return Some((v, VoltageSource::AdapterAtrv));
+        }
     }
     None
+}
+
+/// Preferred adapter voltage read (OBDLink STVR). Falls back to ATRV.
+pub fn read_adapter_voltage(port: &mut Box<dyn SerialPort + Send>) -> Option<f32> {
+    read_adapter_voltage_src(port).map(|(v, _)| v)
+}
+
+/// Supply voltage with its real source: adapter STVR/ATRV first; on the ELM text
+/// path, Mode 01 PID 0x42 only when the ECU lists 0x42 as supported.
+pub fn voltage_with_source_in(
+    port: &mut Box<dyn SerialPort + Send>,
+    sess: &mut ElmSession,
+) -> Option<(f32, VoltageSource)> {
+    if let Some(r) = read_adapter_voltage_src(port) {
+        return Some(r);
+    }
+    if !is_elm_path(&sess.protocol) {
+        return None;
+    }
+    let supported = read_support_in(port, sess).ok()?;
+    if !supported.contains(&0x42) {
+        return None;
+    }
+    let d = mode01_in(port, sess, 0x42).ok()?;
+    crate::pid_decode::decode_module_voltage_obd(&d).map(|v| (v, VoltageSource::Pid42))
+}
+
+/// Session-locking wrapper for `voltage_with_source_in`.
+pub fn read_voltage_with_source(port: &mut Box<dyn SerialPort + Send>) -> Option<(f32, VoltageSource)> {
+    with_session(|sess| voltage_with_source_in(port, sess))
 }
 
 /// Identify the adapter (STDI / STI). Useful for confirming MX+ and logging firmware.
@@ -225,8 +438,14 @@ pub fn stpx(port: &mut Box<dyn SerialPort + Send>, data: &[u8]) -> Result<Vec<u8
     }
     let hex: String = data.iter().map(|b| format!("{:02X}", b)).collect::<Vec<_>>().join("");
     let cmd = format!("STPX {}", hex);
-    let raw = elm_command(port, &cmd)?;
-    Ok(parse_elm_hex(&raw))
+    let reply = elm_request(port, &cmd, HeaderMode::Auto, READ_WINDOW_MS).map_err(|e| e.to_string())?;
+    if let Some(m) = reply.messages.first() {
+        return Ok(m.payload.clone());
+    }
+    if let Some(e) = reply.adapter_errors.first() {
+        return Err(format!("STPX: {}", e));
+    }
+    Err(if reply.no_data { "STPX: NO DATA".into() } else { "STPX: no frame in reply".into() })
 }
 
 /// Basic MX+ / OBDLink setup for a known protocol.
@@ -238,134 +457,303 @@ pub fn setup_obdlink(port: &mut Box<dyn SerialPort + Send>, stp: &str) -> Result
     }
     set_protocol(port, stp)?;
     open_protocol(port)?;
-    // Short timeout for interactive use; callers can raise for flash.
-    let _ = set_timeout_ms(port, 100);
+    // 600 ms, matching ATST96 (what Car Scanner ran error-free on the Patrol).
+    // The old 100 ms was shorter than the ECU's normal reply time on some buses.
+    let _ = set_timeout_ms(port, 600);
     read_adapter_voltage(port).ok_or_else(|| "No STVR/ATRV after setup".to_string())
 }
 
+/// Legacy: join every hex digit and cut pairs. Only valid for header-less text
+/// such as hex typed by the user. On adapter replies with `ATH1` the 3-digit CAN
+/// header shifts every byte, so replies go through `elm_parse::parse_reply`.
 pub fn parse_elm_hex(raw: &str) -> Vec<u8> {
-    let cleaned: String = raw
-        .chars()
-        .filter(|c| c.is_ascii_hexdigit())
-        .collect();
-    let mut out = Vec::new();
-    let bytes = cleaned.as_bytes();
-    let mut i = 0;
-    while i + 1 < bytes.len() {
-        if let Ok(b) = u8::from_str_radix(std::str::from_utf8(&bytes[i..i + 2]).unwrap_or(""), 16) {
-            out.push(b);
+    crate::elm_parse::hex_from_text(raw)
+}
+
+fn is_elm_path(protocol: &str) -> bool {
+    !(is_raw_vpw(protocol) && !is_elm_ascii(protocol))
+}
+
+/// One Mode 01 request with session bookkeeping: protocol-search timeout on the
+/// first request, response-count suffix once CAN is confirmed, NO DATA streak.
+pub fn mode01_in(
+    port: &mut Box<dyn SerialPort + Send>,
+    sess: &mut ElmSession,
+    pid: u8,
+) -> Result<Vec<u8>, ElmError> {
+    if !is_elm_path(&sess.protocol) {
+        let r = request_response(port, &build_obd_request(pid))
+            .map_err(ElmError::Io)
+            .and_then(|resp| parse_mode01_response(&resp, pid).ok_or_else(|| ElmError::Unmatched("VPW frame".into())));
+        match &r {
+            Ok(_) => sess.no_data_streak = 0,
+            Err(_) => sess.no_data_streak = sess.no_data_streak.saturating_add(1),
         }
-        i += 2;
+        return r;
     }
-    out
+    ensure_text_mode(port, sess);
+    let mut cmd = format!("01{:02X}", pid);
+    if sess.protocol_found && sess.can_frames {
+        // ELM327 >= v1.3: trailing digit = number of responses to wait for.
+        cmd.push('1');
+    }
+    let wait = if sess.protocol_found { READ_WINDOW_MS } else { SEARCH_WINDOW_MS };
+    let reply = elm_request(port, &cmd, header_mode_for(&sess.protocol), wait)?;
+    let r = reply.positive(0x01, &[pid]);
+    match &r {
+        Ok(_) => {
+            sess.no_data_streak = 0;
+            sess.protocol_found = true;
+            if reply.messages.iter().any(|m| matches!(m.header.as_deref().map(str::len), Some(3) | Some(8))) {
+                sess.can_frames = true;
+            }
+        }
+        Err(ElmError::NoData) => sess.no_data_streak = sess.no_data_streak.saturating_add(1),
+        Err(_) => {}
+    }
+    r
+}
+
+/// Read (and cache) the Mode 01 support masks: 0100, then 0120/0140/... while
+/// the previous mask advertises the next one. Fails when 0100 is not answered.
+pub fn read_support_in(
+    port: &mut Box<dyn SerialPort + Send>,
+    sess: &mut ElmSession,
+) -> Result<BTreeSet<u8>, ElmError> {
+    if let Some(s) = &sess.supported {
+        return Ok(s.clone());
+    }
+    let mut set = BTreeSet::new();
+    let mut base: u8 = 0x00;
+    loop {
+        let mask = mode01_in(port, sess, base)?;
+        if mask.len() < 4 {
+            return Err(ElmError::Unmatched(format!("01{:02X} mask too short", base)));
+        }
+        let pids = crate::elm_parse::decode_support_mask(base as u16, &mask[..4]);
+        let next = base.checked_add(0x20);
+        let has_next = next.map(|n| pids.contains(&(n as u16))).unwrap_or(false);
+        for p in pids {
+            if p % 0x20 != 0 && p <= 0xFF {
+                set.insert(p as u8);
+            }
+        }
+        match next {
+            Some(n) if has_next && n < 0xE0 => base = n,
+            _ => break,
+        }
+    }
+    sess.supported = Some(set.clone());
+    Ok(set)
 }
 
 /// Pull Mode 01 PID payload using whichever transport the session opened.
 pub fn pull_mode01(port: &mut Box<dyn SerialPort + Send>, pid: u8) -> Option<Vec<u8>> {
-    let proto = current_protocol();
-    if is_raw_vpw(&proto) && !is_elm_ascii(&proto) {
-        return request_response(port, &build_obd_request(pid))
-            .ok()
-            .and_then(|resp| parse_mode01_response(&resp, pid));
+    with_session(|sess| mode01_in(port, sess, pid).ok())
+}
+
+pub fn mode09_in(port: &mut Box<dyn SerialPort + Send>, sess: &mut ElmSession, info: u8) -> Result<String, ElmError> {
+    if !is_elm_path(&sess.protocol) {
+        return request_response(port, &build_mode09_request(info))
+            .map_err(ElmError::Io)
+            .and_then(|resp| parse_mode09_response(&resp, info).ok_or_else(|| ElmError::Unmatched("VPW frame".into())))
+            .map(|d| ascii_from_obd_payload(&d))
+            .and_then(|s| if s.is_empty() { Err(ElmError::Unmatched("empty".into())) } else { Ok(s) });
     }
-    let cmd = format!("01{:02X}", pid);
-    let raw = elm_command(port, &cmd).ok()?;
-    let bytes = parse_elm_hex(&raw);
-    if let Some(data) = parse_mode01_response(&bytes, pid) {
-        return Some(data);
+    ensure_text_mode(port, sess);
+    let wait = if sess.protocol_found { READ_WINDOW_MS * 2 } else { SEARCH_WINDOW_MS };
+    let reply = elm_request(port, &format!("09{:02X}", info), header_mode_for(&sess.protocol), wait)?;
+    let data = reply.positive(0x09, &[info])?;
+    let s = ascii_from_obd_payload(&data);
+    if s.is_empty() {
+        // e.g. the Patrol answers 0902 with an all-zero VIN.
+        return Err(ElmError::Unmatched("blank (all-zero) value".into()));
     }
-    for i in 0..bytes.len().saturating_sub(1) {
-        if bytes[i] == 0x41 && bytes[i + 1] == pid {
-            return Some(bytes[i + 2..].to_vec());
-        }
-    }
-    None
+    Ok(s)
 }
 
 pub fn pull_mode09(port: &mut Box<dyn SerialPort + Send>, info: u8) -> Option<String> {
-    let proto = current_protocol();
-    if is_raw_vpw(&proto) && !is_elm_ascii(&proto) {
-        return request_response(port, &build_mode09_request(info))
-            .ok()
-            .and_then(|resp| parse_mode09_response(&resp, info))
-            .map(|d| ascii_from_obd_payload(&d))
-            .filter(|s| !s.is_empty());
-    }
-    let cmd = format!("09{:02X}", info);
-    let raw = elm_command(port, &cmd).ok()?;
-    let bytes = parse_elm_hex(&raw);
-    if let Some(data) = parse_mode09_response(&bytes, info) {
-        let s = ascii_from_obd_payload(&data);
-        if !s.is_empty() {
-            return Some(s);
-        }
-    }
-    for i in 0..bytes.len().saturating_sub(1) {
-        if bytes[i] == 0x49 && bytes[i + 1] == info {
-            let s = ascii_from_obd_payload(&bytes[i + 2..]);
-            if !s.is_empty() {
-                return Some(s);
-            }
-        }
-    }
-    None
+    with_session(|sess| mode09_in(port, sess, info).ok())
 }
 
 pub fn elm_service(port: &mut Box<dyn SerialPort + Send>, sid: u8) -> Result<Vec<u8>, String> {
-    let raw = elm_command(port, &format!("{:02X}", sid))?;
-    Ok(parse_elm_hex(&raw))
+    let mode = with_session(|s| header_mode_for(&s.protocol));
+    let reply = elm_request(port, &format!("{:02X}", sid), mode, READ_WINDOW_MS).map_err(|e| e.to_string())?;
+    reply.positive(sid, &[]).map_err(|e| e.to_string())
+}
+
+// ── Live channels ──────────────────────────────────────────────────────────
+
+fn first_byte(d: &[u8]) -> Option<f32> { d.first().map(|&b| b as f32) }
+
+/// SAE J1979 Mode 01 channels the app can poll. `batt` is handled separately
+/// (adapter voltage first). Only PIDs the ECU lists as supported are polled.
+pub const MODE01_CHANNELS: &[(&str, u8, fn(&[u8]) -> Option<f32>)] = &[
+    ("rpm", 0x0C, decode_engine_rpm),
+    ("map", 0x0B, decode_map),
+    ("ect", 0x05, decode_ect),
+    ("tps", 0x11, decode_throttle_pos),
+    ("iat", 0x0F, decode_iat),
+    ("spark", 0x0E, decode_timing_advance),
+    ("stft", 0x06, decode_stft_bank1),
+    ("ltft", 0x07, decode_ltft_bank1),
+    ("maf", 0x10, decode_maf_obd),
+    ("vss", 0x0D, decode_vss),
+    ("load", 0x04, decode_engine_load),
+    ("o2b1s1", 0x14, decode_o2_b1s1_obd),
+    ("o2b1s2", 0x15, decode_o2_b1s2_obd),
+    ("baro", 0x33, first_byte),
+    ("fuel_status", 0x03, decode_fuel_system_status),
+    ("fuel_level", 0x2F, decode_fuel_level),
+    ("rail", 0x23, decode_fuel_rail_gauge_pressure),
+    ("dist_mil", 0x21, decode_distance_with_mil),
+];
+
+pub fn mode01_pid_for(id: &str) -> Option<u8> {
+    MODE01_CHANNELS.iter().find(|c| c.0 == id).map(|c| c.1)
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct LivePoll {
+    pub values: BTreeMap<String, f64>,
+    /// Requested channels whose PID the ECU does not list as supported (not polled).
+    pub unsupported: Vec<String>,
+    /// Supported channels that were polled but failed (NO DATA, negative, ...).
+    pub failed: Vec<String>,
+    pub voltage_source: Option<&'static str>,
+    pub no_data_streak: u32,
+    pub supported: Vec<u8>,
+}
+
+impl LivePoll {
+    pub fn should_stop(&self) -> bool {
+        self.no_data_streak >= NO_DATA_STOP_THRESHOLD
+    }
+}
+
+pub fn ignition_off_message(streak: u32) -> String {
+    format!("{} consecutive NO DATA replies: ignition off? Logging stopped.", streak)
+}
+
+/// Poll the requested channel ids, skipping PIDs the ECU does not support.
+/// Errors when the support mask (0100) cannot be read.
+pub fn poll_live_in(
+    port: &mut Box<dyn SerialPort + Send>,
+    sess: &mut ElmSession,
+    wanted: &[String],
+) -> Result<LivePoll, String> {
+    let mut out = LivePoll::default();
+    let supported = match read_support_in(port, sess) {
+        Ok(s) => s,
+        Err(e) => {
+            out.no_data_streak = sess.no_data_streak;
+            return Err(if sess.no_data_streak >= NO_DATA_STOP_THRESHOLD {
+                ignition_off_message(sess.no_data_streak)
+            } else {
+                format!("PID support mask (0100) not answered: {}. Check ignition and protocol.", e)
+            });
+        }
+    };
+    out.supported = supported.iter().copied().collect();
+    for id in wanted {
+        if id == "batt" {
+            if let Some((v, src)) = voltage_with_source_in(port, sess) {
+                out.values.insert("batt".into(), v as f64);
+                out.voltage_source = Some(src.label());
+            } else {
+                out.failed.push("batt: no STVR/ATRV and PID 0x42 not supported".into());
+            }
+            continue;
+        }
+        let Some(&(_, pid, decode)) = MODE01_CHANNELS.iter().find(|c| c.0 == id.as_str()) else {
+            out.unsupported.push(id.clone());
+            continue;
+        };
+        if !supported.contains(&pid) {
+            out.unsupported.push(id.clone());
+            continue;
+        }
+        match mode01_in(port, sess, pid) {
+            Ok(d) => match decode(&d) {
+                Some(v) => { out.values.insert(id.clone(), v as f64); }
+                None => out.failed.push(format!("{}: undecodable {:02X?}", id, d)),
+            },
+            Err(e) => out.failed.push(format!("{}: {}", id, e)),
+        }
+        if sess.no_data_streak >= NO_DATA_STOP_THRESHOLD {
+            break;
+        }
+    }
+    out.no_data_streak = sess.no_data_streak;
+    Ok(out)
+}
+
+pub fn poll_live(port: &mut Box<dyn SerialPort + Send>, wanted: &[String]) -> Result<LivePoll, String> {
+    with_session(|sess| poll_live_in(port, sess, wanted))
+}
+
+pub fn all_channel_ids() -> Vec<String> {
+    let mut v: Vec<String> = MODE01_CHANNELS.iter().map(|c| c.0.to_string()).collect();
+    v.push("batt".into());
+    v
+}
+
+pub fn live_map_from_poll(poll: Result<LivePoll, String>, protocol: &str) -> serde_json::Map<String, serde_json::Value> {
+    let mut obj = serde_json::Map::new();
+    match poll {
+        Ok(p) => {
+            for (k, v) in &p.values {
+                obj.insert(k.clone(), serde_json::json!(v));
+            }
+            obj.insert("pids_decoded".into(), serde_json::json!(p.values.len()));
+            obj.insert("source".into(), serde_json::json!(if p.values.is_empty() { "live-empty" } else { "live-Mode01" }));
+            obj.insert("unsupported".into(), serde_json::json!(p.unsupported));
+            obj.insert("failed".into(), serde_json::json!(p.failed));
+            obj.insert("voltage_source".into(), serde_json::json!(p.voltage_source));
+            obj.insert("supported_pids".into(), serde_json::json!(p.supported.iter().map(|x| format!("{:02X}", x)).collect::<Vec<_>>()));
+        }
+        Err(e) => {
+            obj.insert("pids_decoded".into(), serde_json::json!(0));
+            obj.insert("source".into(), serde_json::json!("live-empty"));
+            obj.insert("error".into(), serde_json::json!(e));
+        }
+    }
+    obj.insert("honest".into(), serde_json::json!(true));
+    obj.insert("transport".into(), serde_json::json!(protocol));
+    obj
 }
 
 pub fn decode_live_map(port: &mut Box<dyn SerialPort + Send>) -> serde_json::Map<String, serde_json::Value> {
-    let mut obj = serde_json::Map::new();
-    let mut decoded = 0u32;
-    let mut put = |k: &str, v: Option<f32>, map: &mut serde_json::Map<String, serde_json::Value>, n: &mut u32| {
-        if let Some(val) = v {
-            map.insert(k.to_string(), serde_json::json!(val));
-            *n += 1;
-        }
-    };
-    put("rpm", pull_mode01(port, 0x0C).and_then(|d| decode_engine_rpm(&d)), &mut obj, &mut decoded);
-    put("map", pull_mode01(port, 0x0B).and_then(|d| decode_map(&d)), &mut obj, &mut decoded);
-    put("ect", pull_mode01(port, 0x05).and_then(|d| decode_ect(&d)), &mut obj, &mut decoded);
-    put("tps", pull_mode01(port, 0x11).and_then(|d| decode_throttle_pos(&d)), &mut obj, &mut decoded);
-    put("iat", pull_mode01(port, 0x0F).and_then(|d| decode_iat(&d)), &mut obj, &mut decoded);
-    put("spark", pull_mode01(port, 0x0E).and_then(|d| decode_timing_advance(&d)), &mut obj, &mut decoded);
-    // Prefer adapter voltage (STVR) over Mode 01 PID 0x42 when on ELM path.
-    put(
-        "batt",
-        read_adapter_voltage(port).or_else(|| crate::flash::read_battery_voltage(port)),
-        &mut obj,
-        &mut decoded,
-    );
-    put("stft", pull_mode01(port, 0x06).and_then(|d| decode_stft_bank1(&d)), &mut obj, &mut decoded);
-    put("ltft", pull_mode01(port, 0x07).and_then(|d| decode_ltft_bank1(&d)), &mut obj, &mut decoded);
-    put("maf", pull_mode01(port, 0x10).and_then(|d| decode_maf_obd(&d)), &mut obj, &mut decoded);
-    put("vss", pull_mode01(port, 0x0D).and_then(|d| decode_vss(&d)), &mut obj, &mut decoded);
-    put("load", pull_mode01(port, 0x04).and_then(|d| decode_engine_load(&d)), &mut obj, &mut decoded);
-    put("o2b1s1", pull_mode01(port, 0x14).and_then(|d| decode_o2_b1s1_obd(&d)), &mut obj, &mut decoded);
-    put("o2b1s2", pull_mode01(port, 0x15).and_then(|d| decode_o2_b1s2_obd(&d)), &mut obj, &mut decoded);
-    put("baro", pull_mode01(port, 0x33).and_then(|d| d.first().map(|&b| b as f32)), &mut obj, &mut decoded);
-    put("fuel_status", pull_mode01(port, 0x03).and_then(|d| decode_fuel_system_status(&d)), &mut obj, &mut decoded);
-    put("fuel_level", pull_mode01(port, 0x2F).and_then(|d| decode_fuel_level(&d)), &mut obj, &mut decoded);
-    obj.insert("pids_decoded".into(), serde_json::json!(decoded));
-    obj.insert(
-        "source".into(),
-        serde_json::json!(if decoded > 0 { "live-Mode01" } else { "live-empty" }),
-    );
-    obj.insert("honest".into(), serde_json::json!(true));
-    obj.insert("transport".into(), serde_json::json!(current_protocol()));
-    obj
+    let ids = all_channel_ids();
+    let proto = current_protocol();
+    live_map_from_poll(poll_live(port, &ids), &proto)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::replay_port::{ReplayPort, SentLog};
+
+    const FIXTURE: &str = include_str!("../../reference/fixtures/elm_patrol_zd30_obdlink.txt");
+
+    fn patrol_port() -> (Box<dyn SerialPort + Send>, SentLog) {
+        ReplayPort::from_fixture(FIXTURE, "## Section A1").with_reply("ATRV", &["13.8V"]).boxed()
+    }
 
     #[test]
-    fn elm_hex_strips_spaces_and_prompt() {
-        let b = parse_elm_hex("41 0C 1A F8\r>");
-        assert_eq!(b, vec![0x41, 0x0C, 0x1A, 0xF8]);
+    fn legacy_join_parser_shifts_bytes_with_headers() {
+        // Why replies no longer go through parse_elm_hex: 7E8 header shifts every byte.
+        let old = parse_elm_hex("7E804410C0BBC");
+        assert_eq!(old, vec![0x7E, 0x80, 0x44, 0x10, 0xC0, 0xBB]);
+        assert!(!old.windows(2).any(|w| w == [0x41, 0x0C]));
+        assert_eq!(parse_elm_hex("41 0C 1A F8\r>"), vec![0x41, 0x0C, 0x1A, 0xF8]);
+    }
+
+    #[test]
+    fn current_protocol_does_not_relock_state() {
+        // Holding STATE (as with_port does) must not deadlock current_protocol().
+        let _g = crate::STATE.lock().unwrap_or_else(|e| e.into_inner());
+        let _ = current_protocol();
     }
 
     #[test]
@@ -386,5 +774,119 @@ mod tests {
         assert_eq!(protocol_to_stp("uds"), Some("33"));
         assert_eq!(protocol_to_stp("kwp"), Some("5"));
         assert_eq!(protocol_to_stp("unknown"), None);
+    }
+
+    #[test]
+    fn replay_support_masks_match_patrol() {
+        let (mut port, log) = patrol_port();
+        let mut sess = ElmSession::for_protocol("can");
+        let s = read_support_in(&mut port, &mut sess).unwrap();
+        let v: Vec<u8> = s.into_iter().collect();
+        assert_eq!(v, vec![0x01, 0x04, 0x05, 0x0B, 0x0C, 0x0D, 0x10, 0x1C, 0x21, 0x23]);
+        assert!(sess.protocol_found && sess.can_frames);
+        // Cached: no second 0100 sent.
+        let before = log.get().len();
+        read_support_in(&mut port, &mut sess).unwrap();
+        assert_eq!(log.get().len(), before);
+    }
+
+    #[test]
+    fn replay_poll_only_supported_pids() {
+        let (mut port, log) = patrol_port();
+        let mut sess = ElmSession::for_protocol("can");
+        let p = poll_live_in(&mut port, &mut sess, &all_channel_ids()).unwrap();
+        // Real replies to the count-suffixed requests: 010C1 -> 0BB8 = 750 rpm,
+        // 0105 -> 50 = 40 C, 010D1 -> 0 km/h, 01231 -> 0D64 = 34280 kPa, 010B1 -> 63 = 99 kPa.
+        assert_eq!(p.values.get("rpm"), Some(&750.0));
+        assert_eq!(p.values.get("ect"), Some(&40.0));
+        assert_eq!(p.values.get("vss"), Some(&0.0));
+        assert_eq!(p.values.get("rail"), Some(&34280.0));
+        assert_eq!(p.values.get("map"), Some(&99.0));
+        assert!(p.values.contains_key("maf"));
+        for id in ["tps", "iat", "spark", "stft", "ltft", "o2b1s1", "o2b1s2", "baro", "fuel_status", "fuel_level"] {
+            assert!(p.unsupported.iter().any(|u| u == id), "{id} should be skipped");
+        }
+        let sent = log.get();
+        for never in ["0111", "010F", "010E", "0106", "0107", "0114", "0115", "0133", "0103", "012F", "0142"] {
+            assert!(!sent.iter().any(|c| c.starts_with(never)), "polled unsupported {never}");
+        }
+        // Response-count suffix once CAN is confirmed.
+        assert!(sent.iter().any(|c| c == "010C1"), "{:?}", sent);
+        assert_eq!(p.voltage_source, Some("adapter_atrv"));
+        assert_eq!(p.values.get("batt"), Some(&(13.8f32 as f64)));
+    }
+
+    #[test]
+    fn replay_text_mode_setup_sent() {
+        let (mut port, log) = patrol_port();
+        let mut sess = ElmSession::for_protocol("can");
+        let _ = mode01_in(&mut port, &mut sess, 0x0C);
+        let sent = log.get();
+        for c in ["ATCAF1", "ATH1", "ATS0", "ATST96"] {
+            assert!(sent.iter().any(|s| s == c), "{c} missing: {:?}", sent);
+        }
+    }
+
+    #[test]
+    fn no_data_streak_stops() {
+        let (mut port, _log) = ReplayPort::empty().boxed();
+        let mut sess = ElmSession::for_protocol("can");
+        let mut last = Err(String::new());
+        for _ in 0..NO_DATA_STOP_THRESHOLD {
+            last = poll_live_in(&mut port, &mut sess, &["rpm".to_string()]);
+        }
+        let e = last.unwrap_err();
+        assert!(e.contains("ignition off"), "{e}");
+        assert!(sess.no_data_streak >= NO_DATA_STOP_THRESHOLD);
+    }
+
+    #[test]
+    fn replay_voltage_prefers_adapter_and_labels_source() {
+        let (mut port, _log) = ReplayPort::empty().with_reply("STVR", &["12.6"]).boxed();
+        let mut sess = ElmSession::for_protocol("can");
+        assert_eq!(voltage_with_source_in(&mut port, &mut sess), Some((12.6, VoltageSource::AdapterStvr)));
+        // No adapter voltage, ECU without PID 0x42 (Patrol): no reading, and 0142 never sent.
+        let (mut port, log) = patrol_port_no_atrv();
+        let mut sess = ElmSession::for_protocol("can");
+        assert_eq!(voltage_with_source_in(&mut port, &mut sess), None);
+        assert!(!log.get().iter().any(|c| c.starts_with("0142")));
+        // ECU that lists 0x42 (synthetic mask): PID 42 used and labelled as such.
+        let (mut port, _log) = ReplayPort::empty()
+            .with_reply("0100", &["7E806410000000001"])
+            .with_reply("0120", &["7E806412000000001"])
+            .with_reply("0140", &["7E806414040000000"])
+            .with_reply("01421", &["7E8044142365C"])
+            .boxed();
+        let mut sess = ElmSession::for_protocol("can");
+        let (v, src) = voltage_with_source_in(&mut port, &mut sess).unwrap();
+        assert_eq!(src, VoltageSource::Pid42);
+        assert!((v - 13.916).abs() < 0.001);
+    }
+
+    fn patrol_port_no_atrv() -> (Box<dyn SerialPort + Send>, SentLog) {
+        ReplayPort::from_fixture(FIXTURE, "## Section A1").boxed()
+    }
+
+    #[test]
+    fn replay_mode09_calid_and_blank_vin() {
+        let (mut port, _log) = patrol_port();
+        let mut sess = ElmSession::for_protocol("can");
+        assert_eq!(mode09_in(&mut port, &mut sess, 0x04).unwrap(), "0VS43B");
+        assert!(mode09_in(&mut port, &mut sess, 0x02).is_err(), "all-zero VIN is not a VIN");
+        assert_eq!(mode09_in(&mut port, &mut sess, 0x0A), Err(ElmError::NoData));
+    }
+
+    #[test]
+    fn replay_vpw_over_elm_section() {
+        let (mut port, log) = ReplayPort::from_fixture(FIXTURE, "## Section C").boxed();
+        let mut sess = ElmSession::for_protocol("auto");
+        let s = read_support_in(&mut port, &mut sess).unwrap();
+        // 0100 -> BFBFF990: includes 01,03,04,05,06,07,09,0C ...
+        for p in [0x01u8, 0x03, 0x04, 0x05, 0x06, 0x07, 0x09, 0x0C, 0x0D] {
+            assert!(s.contains(&p), "{p:02X}");
+        }
+        assert!(!sess.can_frames, "J1850 replies are not CAN");
+        assert_eq!(mode01_in(&mut port, &mut sess, 0x05).map(|d| decode_ect(&d)), Ok(Some(83.0)));
+        assert!(!log.get().iter().any(|c| c == "01051"), "no count suffix on J1850");
     }
 }

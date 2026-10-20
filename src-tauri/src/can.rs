@@ -237,7 +237,11 @@ where F: FnMut(FlowControlParams) -> Result<Vec<u8>, String>,
 // ── ELM327 transport ────────────────────────────────────────────────────────
 
 pub fn elm_init_can_500k(port: &mut Box<dyn SerialPort + Send>) -> Result<(), String> {
-    for c in ["AT Z", "AT E0", "AT L0", "AT S0", "AT H0", "AT SP 6", "AT AL", "AT CAF 0"] {
+    // No "AT Z" here: connect_ecu already reset the adapter in elm_warmup, and a
+    // second reset wiped the OBDLink STP/filter setup done in between.
+    // ATH0/ATCAF0 suit raw ISO-TP; the Mode 01 text path restores ATCAF1/ATH1.
+    crate::transport::mark_text_mode_dirty();
+    for c in ["AT E0", "AT L0", "AT S0", "AT H0", "AT SP 6", "AT AL", "AT CAF 0"] {
         let _ = send_elm_cmd(port, c);
         std::thread::sleep(Duration::from_millis(60));
     }
@@ -330,6 +334,7 @@ pub fn elm_send_iso_tp_request_with_fc(
     fc: FlowControlParams,
 ) -> Result<Vec<u8>, String> {
     elm_set_header(port, request_id)?;
+    crate::transport::mark_text_mode_dirty();
     let _ = send_elm_cmd(port, "AT CAF 0");
     if data.len() > 7 { return elm_send_multiframe_tx(port, data); }
     let sf = build_single_frame(data)?;

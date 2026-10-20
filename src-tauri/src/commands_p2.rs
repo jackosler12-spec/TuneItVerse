@@ -86,32 +86,32 @@ fn read_ecu_data() -> Result<String, String> {
 #[tauri::command] fn log_apply_template(template_id: String) -> Result<String, String> { Ok(serde_json::to_string(&logging::apply_template(&template_id)?).unwrap_or_else(|_| "{}".into())) }
 #[tauri::command]
 fn log_capture_sample() -> Result<String, String> {
-    use crate::pid_decode::*;
     if logging::get_status().demo {
         return Ok(serde_json::to_string(&logging::capture_demo_sample()?).unwrap_or_else(|_| "{}".into()));
     }
-    let live_overrides = with_port(|port| {
-        let mut map: HashMap<String, f64> = HashMap::new();
-        if let Some(d)=pull_mode01(port,0x0C){ if let Some(v)=decode_engine_rpm(&d){ map.insert("rpm".into(), v as f64);} }
-        if let Some(d)=pull_mode01(port,0x0B){ if let Some(v)=decode_map(&d){ map.insert("map".into(), v as f64);} }
-        if let Some(d)=pull_mode01(port,0x05){ if let Some(v)=decode_ect(&d){ map.insert("ect".into(), v as f64);} }
-        if let Some(d)=pull_mode01(port,0x11){ if let Some(v)=decode_throttle_pos(&d){ map.insert("tps".into(), v as f64);} }
-        if let Some(d)=pull_mode01(port,0x0F){ if let Some(v)=decode_iat(&d){ map.insert("iat".into(), v as f64);} }
-        if let Some(d)=pull_mode01(port,0x0E){ if let Some(v)=decode_timing_advance(&d){ map.insert("spark".into(), v as f64);} }
-        if let Some(d)=pull_mode01(port,0x06){ if let Some(v)=decode_stft_bank1(&d){ map.insert("stft".into(), v as f64);} }
-        if let Some(d)=pull_mode01(port,0x07){ if let Some(v)=decode_ltft_bank1(&d){ map.insert("ltft".into(), v as f64);} }
-        if let Some(d)=pull_mode01(port,0x10){ if let Some(v)=decode_maf_obd(&d){ map.insert("maf".into(), v as f64);} }
-        if let Some(d)=pull_mode01(port,0x0D){ if let Some(v)=decode_vss(&d){ map.insert("vss".into(), v as f64);} }
-        if let Some(d)=pull_mode01(port,0x04){ if let Some(v)=decode_engine_load(&d){ map.insert("load".into(), v as f64);} }
-        if let Some(v)=crate::flash::read_battery_voltage(port){ map.insert("batt".into(), v as f64); }
-        if let Some(d)=pull_mode01(port,0x14){ if let Some(v)=decode_o2_b1s1_obd(&d){ map.insert("o2b1s1".into(), v as f64);} }
-        if let Some(d)=pull_mode01(port,0x15){ if let Some(v)=decode_o2_b1s2_obd(&d){ map.insert("o2b1s2".into(), v as f64);} }
-        if let Some(d)=pull_mode01(port,0x33){ if let Some(&b)=d.first(){ map.insert("baro".into(), b as f64);} }
-        if let Some(d)=pull_mode01(port,0x03){ if let Some(v)=decode_fuel_system_status(&d){ map.insert("fuel_status".into(), v as f64);} }
-        if let Some(d)=pull_mode01(port,0x2F){ if let Some(v)=decode_fuel_level(&d){ map.insert("fuel_level".into(), v as f64);} }
-        Ok(map)
-    }).ok();
-    Ok(serde_json::to_string(&logging::capture_sample(live_overrides)?).unwrap_or_else(|_| "{}".into()))
+    if !logging::get_status().running {
+        return Err("Logging not running".into());
+    }
+    let wanted: Vec<String> = logging::get_status().channels.into_iter().filter(|c| c.enabled).map(|c| c.id).collect();
+    // None = not connected. Some(Err) = connected but the poll failed.
+    let polled: Option<Result<crate::transport::LivePoll, String>> = with_port(|port| Ok(crate::transport::poll_live(port, &wanted))).ok();
+    let live = match polled {
+        None => None,
+        Some(Ok(p)) => {
+            if p.should_stop() {
+                let _ = logging::stop_session();
+                return Err(crate::transport::ignition_off_message(p.no_data_streak));
+            }
+            Some(p.values.into_iter().collect::<HashMap<String, f64>>())
+        }
+        Some(Err(e)) => {
+            if crate::transport::with_session(|s| s.no_data_streak) >= crate::transport::NO_DATA_STOP_THRESHOLD {
+                let _ = logging::stop_session();
+            }
+            return Err(e);
+        }
+    };
+    Ok(serde_json::to_string(&logging::capture_sample(live)?).unwrap_or_else(|_| "{}".into()))
 }
 #[tauri::command] fn log_set_demo_mode(enabled: bool) -> Result<String, String> { Ok(serde_json::to_string(&logging::set_demo_mode(enabled)?).unwrap_or_else(|_| "{}".into())) }
 #[tauri::command] fn log_get_samples(limit: Option<usize>) -> Result<String, String> { Ok(serde_json::to_string(&logging::get_samples(limit)).unwrap_or_else(|_| "[]".into())) }

@@ -938,8 +938,12 @@ async function logPollTick() {
     appendLogRow(sample);
     await refreshLogStatus();
   } catch (e) {
+    const msg = String(e.message || e);
+    // The backend stops the session itself (e.g. repeated NO DATA: ignition off?),
+    // so re-read status to stop polling, then show the reason.
+    try { await refreshLogStatus(); } catch (_) { /* keep message */ }
     const el = document.getElementById('log-status');
-    if (el) el.textContent = String(e.message || e);
+    if (el) el.textContent = msg;
   }
 }
 
