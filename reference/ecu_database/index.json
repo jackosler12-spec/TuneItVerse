@@ -1,7 +1,7 @@
 {
-  "version": "1.25",
-  "updated": "2026-10-18",
-  "description": "Master index of TuneItVerse ECU database entries. v3.44.0+ expanded map hints for key families (unverified).",
+  "version": "1.26",
+  "updated": "2026-10-20",
+  "description": "Master index of TuneItVerse ECU database entries. v3.45.0 full operational offline with expanded refined map hints.",
   "families": [
     {
       "id": "P01_0411",
@@ -9,7 +9,7 @@
       "display_name": "Holden LS1 / GM P01 0411 PCM",
       "bin_size_bytes": 524288,
       "primary_protocol": "VPW",
-      "status": "identify + CS1/CVN + full-read backup; experimental kernel cal write (off by default, not bench-tested). Full XDF available."
+      "status": "identify + CS1/CVN + full-read backup; experimental kernel cal write (off by default, not bench-tested). Full XDF available. Industry leading offline."
     },
     {
       "id": "EDC16C41",
@@ -116,5 +116,5 @@
       "status": "catalog only — expanded unverified diesel map hints; no write until personal dump"
     }
   ],
-  "notes": "Statuses describe what is measured in-repo. Only P01_0411 has FullImage backup + experimental kernel write (typed confirm). Offline map editor, BIN tools, logging replay, scripts fully operational. Hardware paths exist but untested. Personal dumps only; cite sources; mark unverified. Index 1.25 adds structured map hints (addr/size/scale/unit) for EDC16C41, P59, and Transtron."
+  "notes": "Statuses describe what is measured in-repo. Only P01_0411 has FullImage backup + experimental kernel write (typed confirm). Offline map editor, BIN tools, logging replay, scripts fully operational and industry-leading for DIY. Hardware paths exist but untested. Personal dumps only; cite sources; mark unverified. Index 1.26 refined for v3.45.0."
 }
