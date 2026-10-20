@@ -1,0 +1,166 @@
+# TuneItVerse extra fixtures #2 - Car Scanner Pro debug log, OBDLink MX+ (only adapter in the log; ATZ banner 'ELM327 v1.4b'), extracted 2026-10-20
+# Format: > REQUEST  ||  < RESPONSE (lines joined ' | ', CR stripped). 'raw:' lines are verbatim log text with CR as \r, LF as \n, '>' = prompt.
+# Only 7E8 (Patrol ECU) reply frames are reproduced where an item concerns ECU replies; other responders are counted, not quoted.
+# No MAC, adapter serial, car/profile names, garage IDs, phone details, GPS or VINs.
+
+==========================================================================================
+## ITEM 1 - Patrol 22F190 / 22F18C replies, 26.06.2026 17:01:05 session (verbatim)
+==========================================================================================
+# header=ATSH7DF; last 10C0/1081 exchange before it: 10811 -> 7E8025081
+#   raw: >22F190\rNO DATA\r\r>
+> 22F190  ||  < NO DATA
+# header=ATSH7E0; last 10C0/1081 exchange before it: 10C01 -> 7E80250C0
+#   raw: >22F18C\r7E8037F2212\r\r>
+> 22F18C  ||  < 7E8037F2212
+# header=ATSH7E0; last 10C0/1081 exchange before it: 10C01 -> 7E80250C0
+#   raw: >22F190\r7E8037F2212\r\r>
+> 22F190  ||  < 7E8037F2212
+# header=ATSH7E0; last 10C0/1081 exchange before it: 10C01 -> 7E80250C0
+#   raw: >22F190\r7E8037F2212\r\r>
+> 22F190  ||  < 7E8037F2212
+# Decode: 7E8 03 7F 22 12 = negative response to ReadDataByIdentifier, NRC 0x12 (subFunctionNotSupported - the ECU's KWP-on-CAN
+#   usage; in UDS terms read as 'DID not supported'). The first 22F190 was sent functionally (7DF) after a 1081 (default session) and got NO DATA.
+# The same two DIDs sent to the BCM (ATSH745) were rejected with NRC 0x11 (serviceNotSupported) from 765: 3 frames, not quoted.
+# No positive F190/F18C reply exists for the Patrol, so there is no VIN or ECU serial to redact in these frames.
+
+==========================================================================================
+## ITEM 2 - Were DIDs 1143 or 120B ever read (any car, any session)?
+==========================================================================================
+# substring hit (NOT a DID - it is a data value): > 2212081  ||  < 7E8056212081143  = 62 1208 + value 0x1143
+# Checked 77994 service-22 requests in all 26 sessions (all cars), splitting multi-DID requests into 4-hex DIDs.
+# Requests containing DID 1143 or 120B (aligned): 0.  Any request line starting '22' containing '1143'/'120B' anywhere (unaligned): 0.
+# Positive replies containing '1143'/'120B' as a raw substring: 1 (the data-value hit above; no DID echo).  Literal '621143' / '62120B' in the whole log: 0 / 0.
+# Result: confirmed - neither DID was ever requested or returned, so their data lengths cannot be determined from this log.
+# (For comparison, neighbours on the Patrol: 1146/1147 = 1 data byte, 1208/120C = 2 data bytes; see tuneitverse_fixture_extra.txt 1a.)
+
+==========================================================================================
+## ITEM 3 - Were Patrol 22xxxx value reads always inside a 10C0 -> 50C0 session?
+==========================================================================================
+# Per session: order of the first events (index = exchange number in that session), then poll-block wrapping stats.
+# A 'block' = a contiguous run of 2211/12/13xx value reads; 'wrapped' = immediately preceded by 10C0x->7E8 50C0 and followed by 1081x
+# (or by a fresh 10C0x refresh - 26.06 sometimes re-sent 10C01 mid-cycle without a 1081).
+
+## Session 20.05.2026 06:22:52  (exchanges=47636, value-read blocks=1079, wrapped=1079)
+#   [21] first 10C0: 10C0 -> 7E80250C0
+#   [22] first 22 mask read: 221100 -> 7E807621100DE000615 (state=ext, hdr=7E0)
+#   [27] first 1081: 1081 -> 7E8025081
+#   [83] first 22 value read: 22110111021104 -> 7E8100A621101541102 | 7E8210D11043800000 (state=ext, hdr=7E0)
+#   [79] last non-AT exchange before it: 10C01 -> 7E80250C0
+
+## Session 21.05.2026 17:28:37  (exchanges=41433, value-read blocks=916, wrapped=912, NOT wrapped: {'221124': 4})
+#   [21] first 10C0: 10C0 -> 7E80250C0
+#   [22] first 22 mask read: 221100 -> 7E807621100DE000615 (state=ext, hdr=7E0)
+#   [27] first 1081: 1081 -> 7E8025081
+#   [73] first 22 value read: 221124 -> NO DATA (state=default(after 1081), hdr=7DF)
+#   [72] last non-AT exchange before it: 0100 -> 7E806410098390011
+
+## Session 28.05.2026 19:33:58  (exchanges=26589, value-read blocks=816, wrapped=816)
+#   [21] first 10C0: 10C0 -> 7E80250C0
+#   [22] first 22 mask read: 221100 -> 7E807621100DE000615 (state=ext, hdr=7E0)
+#   [27] first 1081: 1081 -> 7E8025081
+#   [78] first 22 value read: 22110111021104 -> 7E8100A6211014A1102 | 7E8210011042600000 (state=ext, hdr=7E0)
+#   [74] last non-AT exchange before it: 10C01 -> 7E80250C0
+
+## Session 26.06.2026 17:01:05  (exchanges=7030, value-read blocks=282, wrapped=282)
+#   [20] first 22 other22 read: 22F500 -> NO DATA (state=after reset, hdr=7DF(default))
+#   [22] first 10C0: 10C0 -> 7E80250C0
+#   [23] first 22 mask read: 221100 -> 7E807621100DE000615 (state=ext, hdr=7E0)
+#   [28] first 1081: 1081 -> 7E8025081
+#   [53] first 22 value read: 221101 -> 7E80462110156 (state=ext, hdr=7E0)
+#   [52] last non-AT exchange before it: 10C01 -> 7E80250C0
+
+## Session 11.08.2026 05:12:37  (exchanges=7499, value-read blocks=17, wrapped=17)
+#   [20] first 22 other22 read: 22F500 -> NO DATA (state=after reset, hdr=7DF(default))
+#   [22] first 10C0: 10C0 -> 7E80250C0
+#   [23] first 22 mask read: 221100 -> 7E807621100DE000615 (state=ext, hdr=7E0)
+#   [28] first 1081: 1081 -> 7E8025081
+#   [167] first 22 value read: 221101 -> 7E8046211016A (state=ext, hdr=7E0)
+#   [166] last non-AT exchange before it: 10C01 -> 7E80250C0
+
+## Session 11.08.2026 05:47:21  (exchanges=327, value-read blocks=0, wrapped=0)
+#   [20] first 22 other22 read: 22F500 -> NO DATA (state=after reset, hdr=7DF(default))
+#   [22] first 10C0: 10C0 -> 7E80250C0
+#   [23] first 22 mask read: 221100 -> 7E807621100DE000615 (state=ext, hdr=7E0)
+#   [28] first 1081: 1081 -> 7E8025081
+
+## Session 22.08.2026 12:58:27  (exchanges=31381, value-read blocks=71, wrapped=71)
+#   [16] first 22 other22 read: 22F810 -> NO DATA (state=after reset, hdr=7DF(default))
+#   [90] first 10C0: 10C0 -> 7E80250C0
+#   [91] first 22 mask read: 221100 -> 7E807621100DE000615 (state=ext, hdr=7E0)
+#   [96] first 1081: 1081 -> 7E8025081
+#   [351] first 22 value read: 221101 -> 7E80462110143 (state=ext, hdr=7E0)
+#   [350] last non-AT exchange before it: 10C01 -> 7E80250C0
+
+## Session 07.09.2026 18:01:21  (exchanges=23965, value-read blocks=60, wrapped=60)
+#   [20] first 22 other22 read: 22F500 -> NO DATA (state=after reset, hdr=7DF(default))
+#   [22] first 10C0: 10C0 -> 7E80250C0
+#   [23] first 22 mask read: 221100 -> 7E807621100DE000615 (state=ext, hdr=7E0)
+#   [28] first 1081: 1081 -> 7E8025081
+#   [289] first 22 value read: 221101 -> 7E8046211014C (state=ext, hdr=7E0)
+#   [288] last non-AT exchange before it: 10C01 -> 7E80250C0
+
+## Session 08.09.2026 14:40:31  (exchanges=21162, value-read blocks=0, wrapped=0)
+#   [20] first 22 other22 read: 22F500 -> NO DATA (state=after reset, hdr=7DF(default))
+#   [22] first 10C0: 10C0 -> 7E80250C0
+#   [23] first 22 mask read: 221100 -> 7E807621100DE000615 (state=ext, hdr=7E0)
+#   [28] first 1081: 1081 -> 7E8025081
+
+## Session 20.10.2026 11:22:10  (exchanges=16744, value-read blocks=0, wrapped=0)
+#   [20] first 22 other22 read: 22F500 -> NO DATA (state=after reset, hdr=7DF(default))
+#   [22] first 10C0: 10C0 -> 7E80250C0
+#   [23] first 22 mask read: 221100 -> 7E807621100DE000615 (state=ext, hdr=7E0)
+#   [28] first 1081: 1081 -> 7E8025081
+
+# 22 reads made while NOT in a 7E8-confirmed 10C0 session (all Patrol sessions):
+#   07.09.2026 18:01:21: 22F500  state=after reset  hdr=7DF(default)  -> NO DATA  x1
+#   08.09.2026 14:40:31: 22F500  state=after reset  hdr=7DF(default)  -> NO DATA  x1
+#   11.08.2026 05:12:37: 22F500  state=after reset  hdr=7DF(default)  -> NO DATA  x1
+#   11.08.2026 05:47:21: 22F500  state=after reset  hdr=7DF(default)  -> NO DATA  x1
+#   20.10.2026 11:22:10: 22F500  state=after reset  hdr=7DF(default)  -> NO DATA  x1
+#   21.05.2026 17:28:37: value:221124  state=default(after 1081)  hdr=7DF  -> NO DATA  x4
+#   22.08.2026 12:58:27: 22F400  state=after reset  hdr=7DF(default)  -> NO DATA  x12
+#   22.08.2026 12:58:27: 22F500  state=after reset  hdr=7DF(default)  -> NO DATA  x1
+#   22.08.2026 12:58:27: 22F810  state=after reset  hdr=7DF(default)  -> NO DATA  x12
+#   26.06.2026 17:01:05: 22F190  state=default(after 1081)  hdr=7DF  -> NO DATA  x1
+#   26.06.2026 17:01:05: 22F500  state=after reset  hdr=7DF(default)  -> NO DATA  x1
+#   26.06.2026 17:01:05: plus 36 22F1xx identity reads addressed to the BCM (745) inside the BCM's own 10C0 session - all NRC 0x11 from 765 (not ECU frames, not quoted).
+# Raw examples of reads without a 10C0 session:
+#   21.05 (221124 sent on functional 7DF between 0100 keep-alives, after 1081):  raw: >0100\r7E806410098390011\r\r>221124\rNO DATA\r\r>0100\r7E806410098390011\r\r>221124\rNO DATA\r\r>
+> 221124  ||  < NO DATA
+#   20.10 (22F500 sent on 7DF before ATSH7E0/10C0; first mask read only after 50C0):  raw: >0120\r7E8064120A0000000\r\r>22F500\rNO DATA\r\r>ATSH7E0\rOK\r\r>10C0\r7E80250C0\r\r>221100\r7E807621100DE000615\r\r>
+# Conclusion: every Patrol 2211/12/13xx read that got a 7E8 reply (positive or NRC) was sent to 7E0 inside a 10C0->50C0
+# session; there are zero positive 62 replies outside one. Car Scanner opens 10C0(1) before each poll block and closes with
+# 1081(1) after it. The only 22 reads outside a session were functional (7DF) probes - 22F500 at every connect, 22F810/22F400
+# on 22.08, 22F190 on 26.06, and 221124 x4 on 21.05 - and all of them got NO DATA. So the log never shows the Patrol answering
+# 22xxxx without 10C0 (it also never shows a physical 7E0 read attempted without it, so 'refused in default session' is untested).
+
+==========================================================================================
+## ITEM 4 - MX+ replies to STCAF1, STFAC, ATCRA (with/without args), ATFCSM0 (all sessions)
+==========================================================================================
+# STCAF1 (bare): never sent (0 occurrences).
+# STCAF1,<xx>: reply 'OK' x143.  first raw: >STCAF1,02\rOK\r\r>
+# STFAC: never sent (0 occurrences).
+# ATCRA (bare): never sent (0 occurrences).
+# ATCRA<id>: reply 'OK' x274.  first raw: >ATCRA7E8\rOK\r\r>
+# ATFCSM0: reply 'OK' x1260.  first raw: >ATFCSM0\rOK\r\r>
+# STFAC appears 0 times in the log. Bare 'ATCRA' (filter reset) 0 times. Bare 'STCAF1' 0 times.
+# Every logged STCAF1,xx / ATCRAxxx / ATFCSM0 got 'OK'; no '?' or other reply. Distinct ATCRA ids: 56; distinct STCAF1 second args: 81.
+# On the Patrol only: ATCRA730, ATCRA73A, ATCRA765, ATCRA7E8 (x1 each) and ATFCSM0 (x979); STCAF1,xx only on other cars.
+# Note the 11.08 05:47 NO DATA run (tuneitverse_fixture_extra.txt s.3) followed STCAF0 + ATCM000 with no STCAF1/ATCRA/ATCF reset afterwards.
+
+==========================================================================================
+## ITEM 5 - Any final answer arriving after '>' on its own (not as the start of the next command's reply)?
+==========================================================================================
+# Method: split the whole log on '>' and flag every prompt whose next adapter-looking text is a reply (7xx/2D1/23D frame,
+# NO DATA, OK, ?, UNABLE TO CONNECT, STOPPED, BUFFER FULL, CAN ERROR) instead of a request written by Car Scanner.
+# Every hit was a logging artefact, not adapter traffic:
+#   - '[cmd_reply=] ...' and '[Trying to decode: ...' lines: Car Scanner re-printing the previous reply (the bytes match it exactly);
+#   - '[STSupported=True(ByName)]VTI\r?': request VTI written on the same line as an app message, reply '?';
+#   - a '>' inside app text 'CarInfoModel->Load(...)' splitting a 0100 / 10811 exchange (request was written before the app line).
+# Result: NO case in any session (any car) of a final answer arriving after the prompt on its own.
+# Strongest candidate (non-Patrol multi-ECU car, 24.08.2026 12:48, 7E8 frames only, other responders' frames removed):
+#   raw (7E9/7EB lines removed): >190208\r7E8037F1978\r\r>1902AC\r7E8035902FF\r\r>
+> 190208  ||  < 7E8037F1978   <- prompt returned while 7E8 still 'pending'
+> 1902AC  ||  < 7E8035902FF   <- first 7E8 line after the next request; could be the late 190208 answer or the 1902AC answer
+# The only other '>' around a cmd_reply re-log on the Patrol, for reference (20.10, raw):
+#   raw: >0100\rSEARCHING...\r7E806410098390011\r\r>\r\n[cmd_reply=] SEARCHING...\r7E806410098390011\r\r>

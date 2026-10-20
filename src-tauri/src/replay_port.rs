@@ -238,11 +238,12 @@ mod tests {
     const FIXTURE: &str = include_str!("../../reference/fixtures/elm_patrol_zd30_obdlink.txt");
     const READS: &str = include_str!("../../reference/fixtures/elm_patrol_nissan_22reads.txt");
     const CLEANUP: &str = include_str!("../../reference/fixtures/elm_cleanup_and_pending.txt");
+    const SESSION_ID: &str = include_str!("../../reference/fixtures/elm_patrol_session_identity.txt");
 
     #[test]
     fn fixtures_are_scrubbed() {
         assert!(READS.len() < 100_000, "22-read slice must stay small");
-        for f in [FIXTURE, READS, CLEANUP] { scrub_check(f); }
+        for f in [FIXTURE, READS, CLEANUP, SESSION_ID] { scrub_check(f); }
         // The 22-read slice holds only ECU 7E8 frames.
         for line in READS.lines().filter(|l| l.starts_with("> ")) {
             let resp = line.split_once("||").unwrap().1.trim().trim_start_matches('<').trim();

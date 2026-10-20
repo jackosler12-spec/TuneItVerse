@@ -84,7 +84,11 @@ fn read_ecu_data() -> Result<String, String> {
 #[tauri::command] fn get_logging_templates() -> Result<String, String> { Ok(serde_json::to_string(&logging::list_templates()).unwrap_or_else(|_| "[]".into())) }
 #[tauri::command] fn log_get_status() -> Result<String, String> { Ok(serde_json::to_string(&logging::get_status()).unwrap_or_else(|_| "{}".into())) }
 #[tauri::command] fn log_start(rate_hz: Option<f64>, session_name: Option<String>) -> Result<String, String> { Ok(serde_json::to_string(&logging::start_session(rate_hz, session_name)?).unwrap_or_else(|_| "{}".into())) }
-#[tauri::command] fn log_stop() -> Result<String, String> { Ok(serde_json::to_string(&logging::stop_session()?).unwrap_or_else(|_| "{}".into())) }
+#[tauri::command] fn log_stop() -> Result<String, String> {
+    // Close an open Nissan raw-DID block (1081 + ATSH7DF); not connected is fine.
+    let _ = with_port(|port| { crate::consult::nissan_block_end(port); Ok(()) });
+    Ok(serde_json::to_string(&logging::stop_session()?).unwrap_or_else(|_| "{}".into()))
+}
 #[tauri::command] fn log_set_channels(enabled_ids: Vec<String>) -> Result<String, String> { Ok(serde_json::to_string(&logging::set_channels(enabled_ids)?).unwrap_or_else(|_| "{}".into())) }
 #[tauri::command] fn log_apply_template(template_id: String) -> Result<String, String> { Ok(serde_json::to_string(&logging::apply_template(&template_id)?).unwrap_or_else(|_| "{}".into())) }
 #[tauri::command]
@@ -102,6 +106,7 @@ fn log_capture_sample() -> Result<String, String> {
         None => None,
         Some(Ok(p)) => {
             if p.should_stop() {
+                let _ = with_port(|port| { crate::consult::nissan_block_end(port); Ok(()) });
                 let _ = logging::stop_session();
                 return Err(crate::transport::ignition_off_message(p.no_data_streak));
             }

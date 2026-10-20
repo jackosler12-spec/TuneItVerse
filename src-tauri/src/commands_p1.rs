@@ -97,6 +97,7 @@ fn connect_ecu(port_name: String, baud: u32, protocol: String) -> Result<String,
 #[tauri::command]
 fn disconnect_ecu() -> Result<String, String> {
     let _ = crate::j2534::j2534_disconnect();
+    let _ = crate::with_port(|port| { crate::consult::nissan_block_end(port); Ok(()) });
     crate::transport::end_session();
     let mut guard = STATE.lock().map_err(|e| e.to_string())?;
     guard.port = None; guard.protocol = String::new(); guard.last_os_id = None; guard.last_family = None;

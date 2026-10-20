@@ -218,20 +218,54 @@ impl Drop for AdapterGuard<'_> {
     }
 }
 
-/// Re-initialise CAN text formatting after foreign frames showed up.
+/// Send a best-effort setup command; a `?` (or other error) is not fatal but is
+/// logged in the session, e.g. bare STCAF1 / STFAC / ATCRA, which the MX+ in the
+/// Patrol log was never seen answering (documented in the ELM327/STN manuals).
+fn best_effort(port: &mut Box<dyn SerialPort + Send>, sess: &mut ElmSession, cmd: &str, wait_ms: u64) {
+    if let Err(e) = elm_command_timeout(port, cmd, wait_ms) {
+        let note = format!("{}: {} (ignored)", cmd, e.rsplit(": ").next().unwrap_or(&e));
+        if sess.recovery_log.len() >= 64 {
+            sess.recovery_log.remove(0);
+        }
+        sess.recovery_log.push(note);
+    }
+}
+
+/// Re-initialise CAN text formatting after foreign frames showed up. The
+/// caller's header is put back if it was the Nissan ECM header (7E0).
 pub fn recover_formatting(port: &mut Box<dyn SerialPort + Send>, sess: &mut ElmSession) {
     for c in CAN_TEXT_DEFAULTS {
-        let _ = elm_command_timeout(port, c, 400);
+        best_effort(port, sess, c, 400);
+    }
+    if sess.header_7e0 {
+        best_effort(port, sess, "ATSH7E0", 400);
     }
     TEXT_MODE_DIRTY.store(false, Ordering::SeqCst);
     sess.text_mode_ready = true;
     sess.recoveries = sess.recoveries.saturating_add(1);
 }
 
+/// Last resort when foreign frames survive the re-init: ATZ and the full warmup
+/// (echo/linefeeds/spaces off, headers on, protocol), then the CAN text defaults.
+pub fn full_reinit(port: &mut Box<dyn SerialPort + Send>, sess: &mut ElmSession) {
+    let _ = elm_send_raw(port, "ATZ", 1500);
+    let mut warm = vec!["ATE0", "ATL0", "ATS0", "ATH1"];
+    let p = sess.protocol.to_ascii_lowercase();
+    if p.contains("can") || p.contains("uds") {
+        warm.push("ATSP6");
+    }
+    for c in warm {
+        best_effort(port, sess, c, 400);
+    }
+    recover_formatting(port, sess);
+    sess.full_reinits = sess.full_reinits.saturating_add(1);
+}
+
 /// Request with a foreign-frame check: if the reply contains CAN frames from IDs
 /// that are not OBD responders (7E8..7EF / 18DAF1xx), the adapter's filters or
 /// formatting are dirty (e.g. left on STCAF0 + ATCM000). Re-init the defaults; use
-/// the answer if a valid one was in the reply, otherwise retry once.
+/// the answer if a valid one was in the reply, otherwise retry. If the flood
+/// persists, ATZ + full warmup and one last retry.
 pub fn request_checked(
     port: &mut Box<dyn SerialPort + Send>,
     sess: &mut ElmSession,
@@ -250,11 +284,18 @@ pub fn request_checked(
     if let Ok(d) = reply.positive(sid, prefix) {
         return Ok((reply, d));
     }
-    let retry = elm_request(port, sess, cmd, mode, wait_ms)?;
+    let mut retry = elm_request(port, sess, cmd, mode, wait_ms)?;
     if !retry.foreign_headers().is_empty() {
-        let d = retry.positive(sid, prefix).map_err(|e| ElmError::Adapter(format!(
-            "foreign CAN frames ({}) still present after re-init: {}", retry.foreign_headers().join(","), e)))?;
-        return Ok((retry, d));
+        if let Ok(d) = retry.positive(sid, prefix) {
+            return Ok((retry, d));
+        }
+        full_reinit(port, sess);
+        retry = elm_request(port, sess, cmd, mode, wait_ms)?;
+        if !retry.foreign_headers().is_empty() {
+            let d = retry.positive(sid, prefix).map_err(|e| ElmError::Adapter(format!(
+                "foreign CAN frames ({}) still present after re-init and ATZ: {}", retry.foreign_headers().join(","), e)))?;
+            return Ok((retry, d));
+        }
     }
     let d = retry.positive(sid, prefix)?;
     Ok((retry, d))
@@ -281,6 +322,18 @@ pub struct ElmSession {
     pub unresolved_pending: Option<(u8, String)>,
     /// Times the adapter formatting was re-initialised after foreign frames.
     pub recoveries: u32,
+    /// Times the re-init was not enough and ATZ + full warmup was done.
+    pub full_reinits: u32,
+    /// Setup commands that answered `?` or an error (non-fatal), most recent last.
+    pub recovery_log: Vec<String>,
+    /// Adapter header currently set to the Nissan ECM (ATSH7E0).
+    pub header_7e0: bool,
+    /// Nissan 10C0 session open for a raw-DID poll block.
+    pub nissan_open: bool,
+    /// Samples polled in the current Nissan block.
+    pub nissan_block_samples: u32,
+    /// Times 10C0 was re-sent mid-block after the ECU dropped the session.
+    pub nissan_reentries: u32,
 }
 
 impl ElmSession {
@@ -288,7 +341,8 @@ impl ElmSession {
         Self {
             protocol: String::new(), supported: None, protocol_found: false, can_frames: false,
             no_data_streak: 0, text_mode_ready: false, p2_star_ms: PENDING_EXTRA_MS,
-            unresolved_pending: None, recoveries: 0,
+            unresolved_pending: None, recoveries: 0, full_reinits: 0, recovery_log: Vec::new(),
+            header_7e0: false, nissan_open: false, nissan_block_samples: 0, nissan_reentries: 0,
         }
     }
     pub fn for_protocol(protocol: &str) -> Self {
@@ -337,6 +391,10 @@ pub fn session_snapshot() -> serde_json::Value {
         "can_frames": s.can_frames,
         "no_data_streak": s.no_data_streak,
         "formatting_recoveries": s.recoveries,
+        "full_reinits": s.full_reinits,
+        "recovery_log": s.recovery_log,
+        "nissan_block_open": s.nissan_open,
+        "nissan_session_reentries": s.nissan_reentries,
         "unresolved_pending": s.unresolved_pending.as_ref().map(|(sid, h)| format!("{} SID {:02X}", h, sid)),
     }))
 }
@@ -772,6 +830,12 @@ pub fn poll_live_in(
     };
     out.supported = supported.iter().copied().collect();
     let nissan: Vec<u16> = wanted.iter().filter_map(|id| nissan_raw_channel_did(id)).collect();
+    if sess.header_7e0 && wanted.iter().any(|id| nissan_raw_channel_did(id).is_none()) {
+        // Mode 01 goes functional (7DF); the Nissan block keeps its session open.
+        if elm_command(port, "ATSH7DF").is_ok() {
+            sess.header_7e0 = false;
+        }
+    }
     for id in wanted.iter().filter(|id| nissan_raw_channel_did(id).is_none()) {
         if id == "batt" {
             if let Some((v, src)) = voltage_with_source_in(port, sess) {
@@ -934,10 +998,34 @@ mod tests {
         assert!(matches!(r.positive_from(Some("7E8"), 0x19, &[0x02]), Err(ElmError::Ambiguous { .. })));
     }
 
+    const SESSION_ID: &str = include_str!("../../reference/fixtures/elm_patrol_session_identity.txt");
+
     #[test]
-    fn late_answer_after_prompt_is_picked_up_without_new_request() {
-        // Synthetic shape (the log has no such case): final answer after the '>'
-        // within P2*. Frame bytes reuse 7E8 03 59 02 FF from Section S4.
+    fn real_24aug_late_answer_in_next_reply_is_ambiguous() {
+        // Real 24 Aug sequence, 7E8 frames only (Data Logger item 5):
+        // >190208\r7E8037F1978\r\r>1902AC\r7E8035902FF\r\r>
+        let raw = SESSION_ID.lines().find(|l| l.contains("raw (7E9/7EB lines removed)")).unwrap();
+        let raw = raw.split_once(": ").unwrap().1.replace("\\r", "\r");
+        assert_eq!(raw, ">190208\r7E8037F1978\r\r>1902AC\r7E8035902FF\r\r>");
+        let mut p = ReplayPort::empty();
+        for seg in raw.split('>').filter(|s| !s.is_empty()) {
+            let (cmd, rest) = seg.split_once('\r').unwrap();
+            p = p.with_reply(cmd, &[format!("{}>", rest).as_str()]);
+        }
+        let (mut port, log) = p.boxed();
+        let mut sess = quick_sess();
+        let r = elm_request(&mut port, &mut sess, "190208", HeaderMode::Can11, 200).unwrap();
+        assert_eq!(r.positive_from(Some("7E8"), 0x19, &[0x02]), Err(ElmError::Pending { sid: 0x19 }));
+        assert_eq!(log.get(), vec!["190208"], "nothing sent during P2*");
+        let r = elm_request(&mut port, &mut sess, "1902AC", HeaderMode::Can11, 200).unwrap();
+        assert_eq!(r.positive_from(Some("7E8"), 0x19, &[0x02]), Err(ElmError::Ambiguous { sid: 0x19, header: "7E8".into() }));
+        assert_eq!(r.positive(0x19, &[0x02]), Err(ElmError::Ambiguous { sid: 0x19, header: "7E8".into() }));
+    }
+
+    #[test]
+    fn synthetic_late_answer_after_prompt_is_picked_up_without_new_request() {
+        // SYNTHETIC: the Data Logger found no case in any session of a final answer
+        // arriving on its own after the '>'. Shape only; bytes reuse 7E8 03 59 02 FF.
         let (mut port, log) = ReplayPort::empty().with_reply("190208", &["7E8037F1978\r\r>7E8035902FF\r\r>"]).boxed();
         let mut sess = quick_sess();
         let r = elm_request(&mut port, &mut sess, "190208", HeaderMode::Can11, 200).unwrap();
@@ -985,6 +1073,42 @@ mod tests {
     }
 
     #[test]
+    fn reinit_question_mark_is_logged_not_fatal() {
+        // Bare STCAF1 / STFAC / ATCRA were never seen answered on the MX+; here they answer '?'.
+        let mut p = ReplayPort::empty().with_reply("0100", &["2D1200000030E", "7E806410098390011"]);
+        for c in CAN_TEXT_DEFAULTS.iter().filter(|c| !matches!(**c, "STCAF1" | "STFAC" | "ATCRA")) {
+            p = p.with_reply(c, &["OK"]);
+        }
+        let (mut port, _log) = p.boxed();
+        let mut sess = quick_sess();
+        assert_eq!(mode01_in(&mut port, &mut sess, 0x00).unwrap(), vec![0x98, 0x39, 0x00, 0x11]);
+        assert_eq!(sess.recovery_log.len(), 3, "{:?}", sess.recovery_log);
+        for c in ["STCAF1", "STFAC", "ATCRA"] {
+            assert!(sess.recovery_log.iter().any(|l| l.starts_with(c) && l.contains('?') && l.ends_with("(ignored)")), "{:?}", sess.recovery_log);
+        }
+        assert!(!sess.recovery_log.iter().any(|l| l.starts_with("ATFCSM0")));
+        assert_eq!(sess.full_reinits, 0);
+    }
+
+    #[test]
+    fn persistent_flood_falls_back_to_atz_and_warmup() {
+        let (mut port, log) = ReplayPort::empty()
+            .with_reply("0100", &["2D1200000030E", "23D23000000007DFE8A", "7E806410098390011"])
+            .with_reply("ATZ", &["ELM327 v1.4b"])
+            .boxed();
+        let mut sess = quick_sess();
+        sess.protocol = "can".into();
+        assert_eq!(mode01_in(&mut port, &mut sess, 0x00).unwrap(), vec![0x98, 0x39, 0x00, 0x11]);
+        assert_eq!(sess.full_reinits, 1);
+        let sent = log.get();
+        let z = sent.iter().position(|c| c == "ATZ").unwrap();
+        for c in ["ATE0", "ATL0", "ATS0", "ATH1", "ATSP6", "ATCAF1", "ATSH7DF"] {
+            assert!(sent[z..].iter().any(|s| s == c), "{c} after ATZ");
+        }
+        assert_eq!(sent.last().map(String::as_str), Some("0100"));
+    }
+
+    #[test]
     fn s3_clean_reply_after_reinit_is_used() {
         let (mut port, log) = ReplayPort::empty().with_reply("0100", &["2D1200000030E", "7E806410098390011"]).boxed();
         let mut sess = quick_sess();
@@ -1016,8 +1140,12 @@ mod tests {
         assert!(p.values.contains_key("rpm"));
         assert!(!p.values.contains_key("nissan_1101"));
         assert!(p.failed.iter().any(|f| f.starts_with("nissan_1101")));
+        // Block stays open across samples; closing sends 1081(1) + ATSH7DF.
+        assert!(sess.nissan_open);
+        assert!(log.get().iter().any(|c| c == "10C01"), "suffix once CAN is known");
+        crate::consult::nissan_block_end_in(&mut port, &mut sess);
         let sent = log.get();
-        assert_eq!(&sent[sent.len() - 2..], &["1081", "ATSH7DF"]);
+        assert_eq!(&sent[sent.len() - 2..], &["10811", "ATSH7DF"]);
     }
 
     fn patrol_port() -> (Box<dyn SerialPort + Send>, SentLog) {

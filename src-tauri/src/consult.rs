@@ -136,8 +136,9 @@ pub fn nissan_ids_from_mask(base: u16, mask: &[u8]) -> (Vec<u16>, bool) {
 
 /// Data length (bytes after `62 DID`) seen in every positive read on the reference
 /// Patrol (Car Scanner log, all 10 sessions): 1101..1147 one byte, 1207..130E two.
-/// 1143 and 120B are in the masks but were never read, so their length is unknown
-/// (None): they are read one at a time and every returned byte is kept.
+/// 1143 and 120B are advertised in the masks but were never read in any session of
+/// any car (Data Logger checked all 77,994 service-22 requests), so their length is
+/// unknown (None): they are only read one at a time, see `check_unknown_len`.
 /// Lengths are observations, not meanings.
 pub fn nissan_did_len(id: u16) -> Option<usize> {
     if !PATROL_ZD30_SUPPORTED_IDS.contains(&id) || id == 0x1143 || id == 0x120B {
@@ -185,21 +186,68 @@ pub fn parse_multi_did(payload: &[u8], ids: &[u16]) -> Result<Vec<(u16, Vec<u8>)
     Ok(out)
 }
 
+/// `10C0`/`1081` with Car Scanner's `1` response-count suffix, only once the
+/// CAN protocol is known (a response-count digit is meaningless during a search).
+fn session_cmd(sess: &ElmSession, base: &str) -> String {
+    if sess.protocol_found && sess.can_frames { format!("{}1", base) } else { base.to_string() }
+}
+
+/// Positive Nissan reads were only ever seen inside 10C0 -> 50C0 sent to 7E0.
+fn enter_session(port: &mut Box<dyn SerialPort + Send>, sess: &mut ElmSession) -> Result<(), ElmError> {
+    let cmd = session_cmd(sess, "10C0");
+    request_checked(port, sess, &cmd, READ_WINDOW_MS, 0x10, &[0xC0]).map(|_| ())
+}
+
+fn set_ecm_header(port: &mut Box<dyn SerialPort + Send>, sess: &mut ElmSession) -> Result<(), String> {
+    if !sess.header_7e0 {
+        elm_command(port, &format!("ATSH{}", NISSAN_ECM_TX)).map_err(|e| format!("ATSH{}: {}", NISSAN_ECM_TX, e))?;
+        sess.header_7e0 = true;
+    }
+    Ok(())
+}
+
+/// NRCs that mean the ECU is no longer in the session the request needs:
+/// 0x7F serviceNotSupportedInActiveSession, 0x22 conditionsNotCorrect.
+pub fn is_session_lost(e: &ElmError) -> bool {
+    matches!(e, ElmError::Negative { nrc: 0x7F | 0x22, .. })
+}
+
+/// Re-send 10C0 mid-block (Car Scanner did this on 26 Jun) and count it.
+fn reenter_session(port: &mut Box<dyn SerialPort + Send>, sess: &mut ElmSession) -> bool {
+    sess.nissan_reentries = sess.nissan_reentries.saturating_add(1);
+    enter_session(port, sess).is_ok()
+}
+
+/// Length check for DIDs whose length was never observed (1143, 120B): at
+/// least one byte, at most 8 (what a raw integer channel can hold). The actual
+/// length is reported with the value; nothing about it is assumed.
+pub fn check_unknown_len(id: u16, d: &[u8]) -> Result<(), ElmError> {
+    if d.is_empty() || d.len() > 8 {
+        return Err(ElmError::Unmatched(format!("{:04X}: {} byte(s), length unknown (accepted 1..=8)", id, d.len())));
+    }
+    Ok(())
+}
+
 fn read_single_did(port: &mut Box<dyn SerialPort + Send>, sess: &mut ElmSession, id: u16) -> Result<Vec<u8>, ElmError> {
     let cmd = format!("22{:04X}", id);
     let echo = [(id >> 8) as u8, id as u8];
-    let mut r = elm_request(port, sess, &cmd, HeaderMode::Can11, READ_WINDOW_MS).and_then(|r| r.positive_from(Some("7E8"), 0x22, &echo));
+    let mut once = |port: &mut Box<dyn SerialPort + Send>, sess: &mut ElmSession| {
+        elm_request(port, sess, &cmd, HeaderMode::Can11, READ_WINDOW_MS).and_then(|r| r.positive_from(Some("7E8"), 0x22, &echo))
+    };
+    let mut r = once(port, sess);
     // 7F 22 21 (busyRepeatRequest) was seen 4 times on single reads: retry once.
     if r == Err(ElmError::Negative { sid: 0x22, nrc: 0x21 }) {
-        r = elm_request(port, sess, &cmd, HeaderMode::Can11, READ_WINDOW_MS).and_then(|r| r.positive_from(Some("7E8"), 0x22, &echo));
+        r = once(port, sess);
+    }
+    if r.as_ref().err().map(is_session_lost).unwrap_or(false) && reenter_session(port, sess) {
+        r = once(port, sess);
     }
     let d = r?;
-    if let Some(len) = nissan_did_len(id) {
-        if d.len() != len {
-            return Err(ElmError::Unmatched(format!("{:04X}: {} byte(s), expected {}", id, d.len(), len)));
-        }
+    match nissan_did_len(id) {
+        Some(len) if d.len() != len => Err(ElmError::Unmatched(format!("{:04X}: {} byte(s), expected {}", id, d.len(), len))),
+        Some(_) => Ok(d),
+        None => check_unknown_len(id, &d).map(|_| d),
     }
-    Ok(d)
 }
 
 /// Read DIDs raw. Known-length DIDs go 3 per request; if a multi request fails in
@@ -222,10 +270,13 @@ pub fn read_dids_in(port: &mut Box<dyn SerialPort + Send>, sess: &mut ElmSession
         let mut multi: Result<Vec<(u16, Vec<u8>)>, String> = Err("single".into());
         if group.len() > 1 {
             let cmd: String = std::iter::once("22".to_string()).chain(group.iter().map(|i| format!("{:04X}", i))).collect();
-            multi = elm_request(port, sess, &cmd, HeaderMode::Can11, READ_WINDOW_MS)
-                .and_then(|r| r.positive_from(Some("7E8"), 0x22, &[]))
-                .map_err(|e| e.to_string())
-                .and_then(|p| parse_multi_did(&p, group));
+            let r = elm_request(port, sess, &cmd, HeaderMode::Can11, READ_WINDOW_MS)
+                .and_then(|r| r.positive_from(Some("7E8"), 0x22, &[]));
+            if r.as_ref().err().map(is_session_lost).unwrap_or(false) {
+                // Session dropped: re-enter, then the single reads below run in it.
+                reenter_session(port, sess);
+            }
+            multi = r.map_err(|e| e.to_string()).and_then(|p| parse_multi_did(&p, group));
         }
         match multi {
             Ok(vals) => vals.into_iter().for_each(|(id, d)| push(&mut out, id, Ok(d), "multi")),
@@ -244,9 +295,11 @@ pub fn read_dids_in(port: &mut Box<dyn SerialPort + Send>, sess: &mut ElmSession
     out
 }
 
-/// Identity DIDs (ISO 14229 F190 = VIN, F18C = ECU serial). The reference
-/// Patrol rejects them (Data Logger: 7F 22 12 / 7F 22 11). Only the outcome is
-/// reported; returned bytes are never stored or shown.
+/// Identity DIDs (ISO 14229 F190 = VIN, F18C = ECU serial). On the reference
+/// Patrol both get `7E8 03 7F 22 12` inside 10C0 (26 Jun log); `22F190` sent to
+/// 7DF outside a session got NO DATA. (The 7F 22 11 in the log came from the BCM
+/// on 765, not the ECU.) Only the outcome is reported; returned bytes are never
+/// stored or shown. Must be called inside the 10C0 session on 7E0.
 pub const NISSAN_IDENTITY_DIDS: [u16; 2] = [0xF190, 0xF18C];
 
 #[derive(Debug, Clone, serde::Serialize, PartialEq)]
@@ -288,9 +341,6 @@ fn hex(b: &[u8]) -> String {
     b.iter().map(|x| format!("{:02X}", x)).collect()
 }
 
-/// Commands the Nissan path must undo: leave session C0, back to the functional header.
-pub const NISSAN_RESTORE: &[&str] = &["1081", "ATSH7DF"];
-
 /// Read-only scan: enter session C0 on 7E0, read the support masks, optionally
 /// read each supported ID raw (3 per request, single-read fallback) and probe
 /// F190/F18C. A Drop guard always sends 1081 and ATSH7DF, also on error.
@@ -301,9 +351,12 @@ pub fn nissan_can_scan_in(
     read_values: bool,
 ) -> Result<NissanScan, String> {
     ensure_text_mode(port, sess);
-    let mut guard = AdapterGuard::new(port, NISSAN_RESTORE);
+    let exit_cmd = session_cmd(sess, "1081");
+    let mut guard = AdapterGuard::new(port, &[exit_cmd.as_str(), "ATSH7DF"]);
     let port = guard.port();
-    elm_command(port, &format!("ATSH{}", NISSAN_ECM_TX)).map_err(|e| format!("ATSH{}: {}", NISSAN_ECM_TX, e))?;
+    sess.header_7e0 = false;
+    sess.nissan_open = false;
+    set_ecm_header(port, sess)?;
     let mode = HeaderMode::Can11;
     let mut scan = NissanScan {
         session_entered: false,
@@ -314,7 +367,7 @@ pub fn nissan_can_scan_in(
         session_exit: String::new(),
         note: "Nissan CAN path observed on a 2007 Patrol ZD30CRD (cal ID 0VS43B). ID meanings are unknown; values are raw bytes only.",
     };
-    let entered = request_checked(port, sess, "10C0", READ_WINDOW_MS, 0x10, &[0xC0]);
+    let entered = enter_session(port, sess);
     let result = match entered {
         Err(e) => Err(format!("10C0 not accepted ({}). Nothing read.", e)),
         Ok(_) => {
@@ -343,24 +396,56 @@ pub fn nissan_can_scan_in(
             Ok(())
         }
     };
-    scan.session_exit = match elm_request(port, sess, "1081", mode, READ_WINDOW_MS).and_then(|r| r.positive_from(Some("7E8"), 0x10, &[0x81])) {
-        Ok(_) => { guard.done("1081"); "5081 default session".into() }
+    scan.session_exit = match elm_request(port, sess, &exit_cmd, mode, READ_WINDOW_MS).and_then(|r| r.positive_from(Some("7E8"), 0x10, &[0x81])) {
+        Ok(_) => { guard.done(&exit_cmd); "5081 default session".into() }
         Err(e) => format!("1081 not confirmed: {} (guard resends it)", e),
     };
     drop(guard); // sends ATSH7DF (and 1081 again if it was not confirmed)
+    sess.header_7e0 = false;
     result.map(|_| scan)
 }
 
-/// Poll raw values for logging channels `nissan_XXXX`. Enters session C0 on 7E0,
-/// reads, and leaves through the guard. Values are raw big-endian integers with
-/// unknown meaning.
+/// Samples per Nissan poll block. Car Scanner wrapped every block of value reads
+/// in 10C0(1) ... 1081(1) (20.05 session: 1079 blocks in 47,636 exchanges, about
+/// 44 exchanges per block). The exact block length is an approximation of that.
+pub const NISSAN_BLOCK_SAMPLES: u32 = 4;
+
+/// Poll raw values for logging channels `nissan_XXXX`, in Car Scanner's block
+/// pattern: the first sample of a block sends ATSH7E0 + 10C0(1); later samples
+/// only read; after `NISSAN_BLOCK_SAMPLES` samples the block closes with 1081(1).
+/// If the ECU drops the session (7F xx 7F / 7F xx 22) mid-block, 10C0 is re-sent.
+/// Any error path closes the session through the Drop guard (1081 + ATSH7DF).
+/// Values are raw big-endian integers with unknown meaning.
 pub fn nissan_poll_raw_in(port: &mut Box<dyn SerialPort + Send>, sess: &mut ElmSession, ids: &[u16]) -> Result<Vec<(u16, Result<u64, String>)>, String> {
     ensure_text_mode(port, sess);
-    let mut guard = AdapterGuard::new(port, NISSAN_RESTORE);
+    let exit_cmd = session_cmd(sess, "1081");
+    let mut guard = AdapterGuard::new(port, &[exit_cmd.as_str(), "ATSH7DF"]);
     let port = guard.port();
-    elm_command(port, &format!("ATSH{}", NISSAN_ECM_TX)).map_err(|e| format!("ATSH{}: {}", NISSAN_ECM_TX, e))?;
-    request_checked(port, sess, "10C0", READ_WINDOW_MS, 0x10, &[0xC0]).map_err(|e| format!("10C0 not accepted ({})", e))?;
+    let fail = |sess: &mut ElmSession, e: String| {
+        sess.nissan_open = false;
+        sess.header_7e0 = false;
+        e
+    };
+    if let Err(e) = set_ecm_header(port, sess) {
+        return Err(fail(sess, e));
+    }
+    if !sess.nissan_open {
+        if let Err(e) = enter_session(port, sess) {
+            return Err(fail(sess, format!("10C0 not accepted ({})", e)));
+        }
+        sess.nissan_open = true;
+        sess.nissan_block_samples = 0;
+    }
     let reads = read_dids_in(port, sess, ids);
+    sess.nissan_block_samples += 1;
+    if sess.nissan_block_samples >= NISSAN_BLOCK_SAMPLES {
+        drop(guard); // end of block: 1081(1) + ATSH7DF
+        sess.nissan_open = false;
+        sess.header_7e0 = false;
+    } else {
+        guard.done(&exit_cmd);
+        guard.done("ATSH7DF");
+    }
     Ok(reads
         .into_iter()
         .map(|r| {
@@ -373,6 +458,22 @@ pub fn nissan_poll_raw_in(port: &mut Box<dyn SerialPort + Send>, sess: &mut ElmS
             (id, v)
         })
         .collect())
+}
+
+/// Close an open Nissan poll block (log stop, disconnect): 1081(1) + ATSH7DF.
+pub fn nissan_block_end_in(port: &mut Box<dyn SerialPort + Send>, sess: &mut ElmSession) {
+    if sess.nissan_open || sess.header_7e0 {
+        let exit_cmd = session_cmd(sess, "1081");
+        let restore: Vec<&str> = if sess.nissan_open { vec![exit_cmd.as_str(), "ATSH7DF"] } else { vec!["ATSH7DF"] };
+        drop(AdapterGuard::new(port, &restore));
+        sess.nissan_open = false;
+        sess.header_7e0 = false;
+        sess.nissan_block_samples = 0;
+    }
+}
+
+pub fn nissan_block_end(port: &mut Box<dyn SerialPort + Send>) {
+    crate::transport::with_session(|sess| nissan_block_end_in(port, sess));
 }
 
 pub fn nissan_can_scan(port: &mut Box<dyn SerialPort + Send>, read_values: bool) -> Result<NissanScan, String> {
@@ -548,18 +649,37 @@ mod tests {
         assert!(r[0].error.as_deref().unwrap().contains("NO DATA"));
     }
 
+    const SESSION_ID: &str = include_str!("../../reference/fixtures/elm_patrol_session_identity.txt");
+
     #[test]
-    fn identity_dids_rejected_gracefully() {
-        // Negative replies as reported by the Data Logger for the Patrol: F190 -> 7F 22 12, F18C -> 7F 22 11.
-        let (mut port, _log) = ReplayPort::empty()
-            .with_reply("22F190", &["7E8037F2212"])
-            .with_reply("22F18C", &["7E8037F2211"])
+    fn identity_dids_real_frames() {
+        // 26 Jun, verbatim: 22F190 on 7DF after 1081 -> NO DATA; inside 10C0 on 7E0
+        // 22F18C and 22F190 -> 7E8 03 7F 22 12 (the 7F 22 11 in the log was the BCM on 765).
+        let (mut port, _log) = ReplayPort::from_fixture(SESSION_ID, "## ITEM 1").boxed();
+        let mut sess = reads_sess();
+        let outside = elm_request(&mut port, &mut sess, "22F190", HeaderMode::Can11, 200).unwrap();
+        assert_eq!(outside.positive_from(Some("7E8"), 0x22, &[0xF1, 0x90]), Err(ElmError::NoData));
+        let p = identity_probe_in(&mut port, &mut sess);
+        assert_eq!(p.iter().map(|x| x.id.as_str()).collect::<Vec<_>>(), vec!["F190", "F18C"]);
+        for x in &p {
+            assert!(x.outcome.starts_with("not supported by this ECU (NRC 12"), "{}: {}", x.id, x.outcome);
+            assert!(!x.outcome.contains("NRC 11"));
+        }
+    }
+
+    #[test]
+    fn unknown_length_dids_read_singly_with_length_check() {
+        // 1143/120B: never read in the log. Shapes below are synthetic (no real frames exist).
+        let (mut port, log) = ReplayPort::empty()
+            .with_reply("221143", &["7E80462114312"])
+            .with_reply("22120B", &["7E80362120B"])
             .boxed();
         let mut sess = reads_sess();
-        let p = identity_probe_in(&mut port, &mut sess);
-        assert_eq!(p[0].id, "F190");
-        assert!(p[0].outcome.starts_with("not supported by this ECU (NRC 12"), "{}", p[0].outcome);
-        assert!(p[1].outcome.starts_with("not supported by this ECU (NRC 11"), "{}", p[1].outcome);
+        let r = read_dids_in(&mut port, &mut sess, &[0x1143, 0x120B]);
+        assert_eq!(log.get(), vec!["221143", "22120B"], "never in a multi request");
+        assert_eq!(r[0].raw_hex.as_deref(), Some("12"));
+        assert!(r[1].raw_hex.is_none() && r[1].error.as_deref().unwrap().contains("length unknown"), "{:?}", r[1]);
+        assert!(check_unknown_len(0x1143, &[0; 9]).is_err());
     }
 
     #[test]
@@ -578,16 +698,79 @@ mod tests {
         assert!(sess.recoveries >= 1);
     }
 
+    fn block_port() -> (Box<dyn SerialPort + Send>, crate::replay_port::SentLog) {
+        ReplayPort::from_fixture_merged(READS, "## Section R1")
+            .with_reply("ATSH7E0", &["OK"]).with_reply("ATSH7DF", &["OK"])
+            .with_reply("10C0", &["7E80250C0"]).with_reply("1081", &["7E8025081"])
+            .boxed()
+    }
+
     #[test]
-    fn raw_poll_gives_integers() {
-        let (mut port, log) = ReplayPort::from_fixture_merged(READS, "## Section R1")
-            .with_reply("ATSH7E0", &["OK"]).with_reply("10C0", &["7E80250C0"]).with_reply("1081", &["7E8025081"])
-            .boxed();
+    fn raw_poll_uses_blocks_like_car_scanner() {
+        let (mut port, log) = block_port();
         let mut sess = reads_sess();
+        sess.protocol_found = true;
+        sess.can_frames = true;
         let v = nissan_poll_raw_in(&mut port, &mut sess, &[0x1147, 0x1207, 0x1208]).unwrap();
         assert!(v.contains(&(0x1207, Ok(0x33F2))) && v.contains(&(0x1147, Ok(0x56))), "{v:?}");
+        assert!(sess.nissan_open);
+        for _ in 1..NISSAN_BLOCK_SAMPLES {
+            nissan_poll_raw_in(&mut port, &mut sess, &[0x1147, 0x1207, 0x1208]).unwrap();
+        }
+        let sent = log.get();
+        // One 10C0(1) at the start of the block, one 1081(1) at the end, nothing per sample.
+        assert_eq!(sent.iter().filter(|c| c.starts_with("10C0")).count(), 1);
+        assert_eq!(sent.iter().filter(|c| c.starts_with("1081")).count(), 1);
+        assert_eq!(sent.iter().filter(|c| *c == "22114712071208").count(), NISSAN_BLOCK_SAMPLES as usize);
+        let sh = sent.iter().position(|c| c == "ATSH7E0").unwrap();
+        assert_eq!(sent[sh + 1], "10C01", "suffix once CAN is known");
+        assert_eq!(&sent[sent.len() - 2..], &["10811", "ATSH7DF"]);
+        assert!(!sess.nissan_open && !sess.header_7e0);
+    }
+
+    #[test]
+    fn block_end_closes_open_session() {
+        let (mut port, log) = block_port();
+        let mut sess = reads_sess();
+        nissan_poll_raw_in(&mut port, &mut sess, &[0x1147, 0x1207, 0x1208]).unwrap();
+        assert!(log.get().iter().any(|c| c == "10C0"), "no suffix before the protocol is known");
+        nissan_block_end_in(&mut port, &mut sess);
         let sent = log.get();
         assert_eq!(&sent[sent.len() - 2..], &["1081", "ATSH7DF"]);
+        assert!(!sess.nissan_open);
+    }
+
+    #[test]
+    fn session_drop_mid_block_resends_10c0() {
+        // Car Scanner re-sent 10C01 mid-cycle on 26 Jun. The 7F 22 7F reply below is
+        // synthetic (NRC 7F = serviceNotSupportedInActiveSession); the log does not quote one.
+        let (mut port, log) = ReplayPort::empty()
+            .with_reply("ATSH7E0", &["OK"]).with_reply("ATSH7DF", &["OK"])
+            .with_reply("10C0", &["7E80250C0"]).with_reply("1081", &["7E8025081"])
+            .with_reply("221101", &["7E80462110156", "7E8037F227F", "7E80462110157"])
+            .boxed();
+        let mut sess = reads_sess();
+        let v = nissan_poll_raw_in(&mut port, &mut sess, &[0x1101]).unwrap();
+        assert_eq!(v, vec![(0x1101, Ok(0x56))]);
+        let v = nissan_poll_raw_in(&mut port, &mut sess, &[0x1101]).unwrap();
+        assert_eq!(v, vec![(0x1101, Ok(0x57))]);
+        assert_eq!(sess.nissan_reentries, 1);
+        assert_eq!(log.get().iter().filter(|c| *c == "10C0").count(), 2);
+        assert!(!log.get().iter().any(|c| c == "1081"), "re-entry without leaving");
+    }
+
+    #[test]
+    fn poll_error_closes_session_via_guard() {
+        // 10C0 refused (real Patrol-style 7F 10 12 shape from the refused-session test): guard sends 1081 + ATSH7DF.
+        let (mut port, log) = ReplayPort::empty()
+            .with_reply("ATSH7E0", &["OK"]).with_reply("10C0", &["7E8037F1012"])
+            .boxed();
+        let mut sess = reads_sess();
+        assert!(nissan_poll_raw_in(&mut port, &mut sess, &[0x1101]).is_err());
+        let sent = log.get();
+        assert_eq!(&sent[sent.len() - 2..], &["1081", "ATSH7DF"]);
+        assert!(!sess.nissan_open && !sess.header_7e0);
+        assert!(!sent.iter().any(|c| c.starts_with("22")));
     }
 
     #[test]
@@ -604,6 +787,8 @@ mod tests {
                 assert!(u32::from_str_radix(lo, 16).unwrap() <= u32::from_str_radix(hi, 16).unwrap());
             } else {
                 assert_eq!(e["positive_reads"], 0);
+                assert_eq!(e["note"], "advertised in mask, never read; length unknown");
+                assert!(e["len"].is_null());
             }
         }
     }
