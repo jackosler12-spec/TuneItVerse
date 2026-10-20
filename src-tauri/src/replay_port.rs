@@ -29,6 +29,17 @@ pub struct ReplayPort {
     rx: Mutex<VecDeque<u8>>,
     pending_cmd: Vec<u8>,
     sent: SentLog,
+    strip_counts: bool,
+}
+
+/// Strip an ELM/STN expected-response-count digit from a hex request (odd length).
+pub fn strip_count_suffix(key: &str) -> String {
+    let is_hex = !key.is_empty() && key.chars().all(|c| c.is_ascii_hexdigit());
+    if is_hex && key.len() % 2 == 1 && key.len() > 2 {
+        key[..key.len() - 1].to_string()
+    } else {
+        key.to_string()
+    }
 }
 
 fn normalize(cmd: &str) -> String {
@@ -37,7 +48,7 @@ fn normalize(cmd: &str) -> String {
 
 impl ReplayPort {
     pub fn empty() -> Self {
-        Self { script: HashMap::new(), last: HashMap::new(), rx: Mutex::new(VecDeque::new()), pending_cmd: Vec::new(), sent: SentLog::default() }
+        Self { script: HashMap::new(), last: HashMap::new(), rx: Mutex::new(VecDeque::new()), pending_cmd: Vec::new(), sent: SentLog::default(), strip_counts: false }
     }
 
     /// Load the exchanges under the section whose heading starts with `section`
@@ -67,7 +78,38 @@ impl ReplayPort {
         port
     }
 
+    /// Like `from_fixture`, but Car Scanner's expected-frame-count suffix is
+    /// stripped from the recorded requests (odd-length hex: `221101110211042`
+    /// -> `22110111021104`, `2211011` -> `221101`), so suffixed and plain
+    /// recordings of the same request share one reply queue. Lookups strip the
+    /// same suffix. The sent log keeps the commands exactly as written.
+    pub fn from_fixture_merged(text: &str, section: &str) -> Self {
+        let mut p = Self::from_fixture(text, section);
+        let mut merged: HashMap<String, VecDeque<String>> = HashMap::new();
+        // Re-key preserving fixture order: rebuild from the text so the
+        // interleaving of suffixed/plain lines stays chronological.
+        let mut inside = section.is_empty();
+        for line in text.lines() {
+            if line.starts_with("## ") {
+                inside = section.is_empty() || line.starts_with(section);
+                continue;
+            }
+            if !inside { continue; }
+            let Some(rest) = line.strip_prefix("> ") else { continue };
+            let Some((req, _)) = rest.split_once("||") else { continue };
+            let k = normalize(req);
+            if let Some(r) = p.script.get_mut(&k).and_then(|q| q.pop_front()) {
+                merged.entry(strip_count_suffix(&k)).or_default().push_back(r);
+            }
+        }
+        p.script = merged;
+        p.strip_counts = true;
+        p
+    }
+
     /// Add (or append) replies for a command. Multi-line replies use `\r`.
+    /// A reply that ends with `>` is played verbatim (it may hold text after a
+    /// prompt, e.g. a late answer); otherwise `\r\r>` is appended.
     pub fn with_reply(mut self, cmd: &str, replies: &[&str]) -> Self {
         let q = self.script.entry(normalize(cmd)).or_default();
         for r in replies {
@@ -96,7 +138,7 @@ impl ReplayPort {
     }
 
     fn answer(&mut self, cmd: &str) -> String {
-        let key = normalize(cmd);
+        let key = if self.strip_counts { strip_count_suffix(&normalize(cmd)) } else { normalize(cmd) };
         let is_hex = !key.is_empty() && key.chars().all(|c| c.is_ascii_hexdigit());
         let mut reply = self.take_reply(&key);
         // ELM response-count suffix: "010C1" and "010C" ask the same question.
@@ -107,7 +149,7 @@ impl ReplayPort {
             reply = self.take_reply(&format!("{}1", key));
         }
         let body = reply.unwrap_or_else(|| if is_hex { "NO DATA".into() } else { "?".into() });
-        format!("{}\r\r>", body)
+        if body.ends_with('>') { body } else { format!("{}\r\r>", body) }
     }
 }
 
@@ -117,7 +159,10 @@ impl Read for ReplayPort {
         if rx.is_empty() {
             return Err(std::io::Error::new(std::io::ErrorKind::TimedOut, "replay: no data"));
         }
-        let n = buf.len().min(rx.len());
+        // Deliver at most up to and including the next '>' so text after a
+        // prompt arrives in a later read, as it would on a real adapter.
+        let upto = rx.iter().position(|&b| b == b'>').map(|i| i + 1).unwrap_or(rx.len());
+        let n = buf.len().min(upto);
         for b in buf.iter_mut().take(n) {
             *b = rx.pop_front().unwrap_or(0);
         }
@@ -191,10 +236,47 @@ impl SerialPort for ReplayPort {
 mod tests {
     use super::*;
     const FIXTURE: &str = include_str!("../../reference/fixtures/elm_patrol_zd30_obdlink.txt");
+    const READS: &str = include_str!("../../reference/fixtures/elm_patrol_nissan_22reads.txt");
+    const CLEANUP: &str = include_str!("../../reference/fixtures/elm_cleanup_and_pending.txt");
 
     #[test]
-    fn fixture_is_scrubbed() {
-        let up = FIXTURE.to_ascii_uppercase();
+    fn fixtures_are_scrubbed() {
+        assert!(READS.len() < 100_000, "22-read slice must stay small");
+        for f in [FIXTURE, READS, CLEANUP] { scrub_check(f); }
+        // The 22-read slice holds only ECU 7E8 frames.
+        for line in READS.lines().filter(|l| l.starts_with("> ")) {
+            let resp = line.split_once("||").unwrap().1.trim().trim_start_matches('<').trim();
+            assert!(resp == "NO DATA" || resp.split(" | ").all(|f| f.starts_with("7E8")), "{line}");
+        }
+    }
+
+    #[test]
+    fn merged_fixture_strips_count_suffix() {
+        let (mut p, log) = ReplayPort::from_fixture_merged(READS, "## Section R1").boxed();
+        let mut buf = [0u8; 128];
+        // First recorded exchanges (plain and suffixed forms share one queue).
+        p.write_all(b"22110111021104\r").unwrap();
+        let n = p.read(&mut buf).unwrap();
+        assert!(String::from_utf8_lossy(&buf[..n]).starts_with("7E8100A621101541102\r7E8210D110438000000"));
+        p.write_all(b"221101110211042\r").unwrap();
+        let n = p.read(&mut buf).unwrap();
+        assert!(String::from_utf8_lossy(&buf[..n]).starts_with("7E8100A621101"));
+        assert_eq!(log.get(), vec!["22110111021104", "221101110211042"]);
+    }
+
+    #[test]
+    fn verbatim_reply_splits_at_prompt() {
+        let (mut p, _) = ReplayPort::empty().with_reply("190208", &["7E8037F1978\r\r>7E8035902FF\r\r>"]).boxed();
+        p.write_all(b"190208\r").unwrap();
+        let mut buf = [0u8; 128];
+        let n = p.read(&mut buf).unwrap();
+        assert_eq!(&buf[..n], b"7E8037F1978\r\r>");
+        let n = p.read(&mut buf).unwrap();
+        assert_eq!(&buf[..n], b"7E8035902FF\r\r>");
+    }
+
+    fn scrub_check(f: &str) {
+        let up = f.to_ascii_uppercase();
         // No MAC-address pattern, no adapter serial / phone / GPS fields.
         let bytes: Vec<char> = up.chars().collect();
         for w in bytes.windows(17) {
@@ -205,6 +287,11 @@ mod tests {
         for banned in ["LATITUDE", "LONGTITUDE", "DEVICENAME", "SERIAL NUMBER", "STSN"] {
             assert!(!up.contains(banned), "{banned}");
         }
+    }
+
+    #[test]
+    fn fixture_is_scrubbed() {
+        scrub_check(FIXTURE);
     }
 
     #[test]

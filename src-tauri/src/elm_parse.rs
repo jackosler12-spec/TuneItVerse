@@ -47,6 +47,11 @@ pub struct ElmReply {
     pub searching: bool,
     /// Frames that could not be assembled (bad PCI, missing consecutive frame).
     pub malformed: Vec<String>,
+    /// Header of every CAN line seen, including malformed ones (for foreign-frame checks).
+    pub headers_seen: Vec<String>,
+    /// Headers whose answer for this SID cannot be trusted (an earlier request with the
+    /// same SID was left pending on that ECU, so a late answer could land here).
+    pub ambiguous: Vec<(u8, String)>,
 }
 
 /// Why a request produced no usable data. None of these count as success.
@@ -60,6 +65,9 @@ pub enum ElmError {
     Adapter(String),
     /// Frames arrived but none answered the request.
     Unmatched(String),
+    /// A positive answer arrived from an ECU that still owed a late answer to an
+    /// earlier request with the same SID; it cannot be attributed safely.
+    Ambiguous { sid: u8, header: String },
     Io(String),
 }
 
@@ -71,6 +79,7 @@ impl std::fmt::Display for ElmError {
             ElmError::Pending { sid } => write!(f, "7F {:02X} 78 response pending, no final answer", sid),
             ElmError::Adapter(s) => write!(f, "adapter error: {}", s),
             ElmError::Unmatched(s) => write!(f, "no matching response: {}", s),
+            ElmError::Ambiguous { sid, header } => write!(f, "answer from {} to SID {:02X} is ambiguous (earlier request still pending on that ECU); discarded", header, sid),
             ElmError::Io(s) => write!(f, "{}", s),
         }
     }
@@ -295,6 +304,9 @@ fn feed_line(
         }
         Some(Line::Can { header, bytes }) => {
             let key = header.clone().unwrap_or_default();
+            if !key.is_empty() {
+                out.headers_seen.push(key.clone());
+            }
             let Some(&pci) = bytes.first() else { return };
             match pci >> 4 {
                 0x0 => {
@@ -336,28 +348,91 @@ fn feed_line(
     }
 }
 
+fn is_pending(m: &EcuMessage, sid: u8) -> bool {
+    m.payload.len() >= 3 && m.payload[0] == 0x7F && m.payload[1] == sid && m.payload[2] == 0x78
+}
+
+fn answers_sid(m: &EcuMessage, sid: u8) -> bool {
+    m.payload.first() == Some(&sid.wrapping_add(0x40)) || (m.payload.len() >= 2 && m.payload[0] == 0x7F && m.payload[1] == sid)
+}
+
+/// ISO 15765-4 OBD response IDs: 11-bit 7E8..7EF, 29-bit 18DAF1xx.
+pub fn is_obd_response_header(h: &str) -> bool {
+    let h = h.to_ascii_uppercase();
+    (h.len() == 3 && h.starts_with("7E") && matches!(h.as_bytes()[2], b'8'..=b'9' | b'A'..=b'F'))
+        || (h.len() == 8 && h.starts_with("18DAF1"))
+}
+
 impl ElmReply {
     /// True when only `7F <sid> 78` arrived for `sid` and no final answer followed.
     pub fn only_pending(&self, sid: u8) -> bool {
-        let pending = self.messages.iter().any(|m| m.payload.len() >= 3 && m.payload[0] == 0x7F && m.payload[1] == sid && m.payload[2] == 0x78);
-        pending && !self.messages.iter().any(|m| !(m.payload.len() >= 3 && m.payload[0] == 0x7F && m.payload[1] == sid && m.payload[2] == 0x78))
+        let pending = self.messages.iter().any(|m| is_pending(m, sid));
+        pending && !self.messages.iter().any(|m| !is_pending(m, sid))
+    }
+
+    /// ECUs (headers) that sent `7F <sid> 78` and no final answer for `sid` yet.
+    pub fn pending_headers(&self, sid: u8) -> Vec<String> {
+        let mut out: Vec<String> = Vec::new();
+        for m in self.messages.iter().filter(|m| is_pending(m, sid)) {
+            let h = m.header.clone().unwrap_or_default();
+            let done = self.messages.iter().any(|o| o.header == m.header && answers_sid(o, sid) && !is_pending(o, sid));
+            if !done && !out.contains(&h) {
+                out.push(h);
+            }
+        }
+        out
+    }
+
+    /// CAN frames from IDs that are not OBD responders (e.g. 2D1/23D broadcast
+    /// traffic leaking through after a mask/filter change).
+    pub fn foreign_headers(&self) -> Vec<String> {
+        let mut out: Vec<String> = Vec::new();
+        for h in &self.headers_seen {
+            if !is_obd_response_header(h) && !out.contains(h) {
+                out.push(h.clone());
+            }
+        }
+        out
+    }
+
+    fn is_ambiguous(&self, m: &EcuMessage, sid: u8) -> bool {
+        let h = m.header.clone().unwrap_or_default();
+        self.ambiguous.iter().any(|(s, a)| *s == sid && *a == h)
     }
 
     /// Positive answer to service `sid` whose payload starts with `sid+0x40` then `prefix`.
     /// Returns the bytes after the prefix. Negative responses and NO DATA are errors.
     pub fn positive(&self, sid: u8, prefix: &[u8]) -> Result<Vec<u8>, ElmError> {
+        self.positive_from(None, sid, prefix)
+    }
+
+    /// Like `positive`, restricted to one responder header (e.g. `7E8`) when given.
+    /// The SID echo (sid+0x40) and `prefix` (PID/DID echo) must match, so a stray
+    /// frame for another service (e.g. a late `59 02 FF`) is never taken as the answer.
+    pub fn positive_from(&self, header: Option<&str>, sid: u8, prefix: &[u8]) -> Result<Vec<u8>, ElmError> {
         let pos = sid.wrapping_add(0x40);
-        for m in &self.messages {
-            if m.payload.first() == Some(&pos) && m.payload.len() >= 1 + prefix.len() && &m.payload[1..1 + prefix.len()] == prefix {
+        let of_header = |m: &&EcuMessage| header.map(|h| m.header.as_deref() == Some(h)).unwrap_or(true);
+        let matches = |m: &EcuMessage| m.payload.first() == Some(&pos) && m.payload.len() >= 1 + prefix.len() && &m.payload[1..1 + prefix.len()] == prefix;
+        let mut ambiguous_hit: Option<String> = None;
+        for m in self.messages.iter().filter(of_header) {
+            if matches(m) {
+                if self.is_ambiguous(m, sid) {
+                    ambiguous_hit.get_or_insert(m.header.clone().unwrap_or_default());
+                    continue;
+                }
                 return Ok(m.payload[1 + prefix.len()..].to_vec());
             }
         }
-        for m in &self.messages {
-            if m.payload.len() >= 3 && m.payload[0] == 0x7F && m.payload[1] == sid && m.payload[2] != 0x78 {
+        for m in self.messages.iter().filter(of_header) {
+            if m.payload.len() >= 3 && m.payload[0] == 0x7F && m.payload[1] == sid && m.payload[2] != 0x78 && !self.is_ambiguous(m, sid) {
                 return Err(ElmError::Negative { sid, nrc: m.payload[2] });
             }
         }
-        if self.only_pending(sid) {
+        if let Some(h) = ambiguous_hit {
+            return Err(ElmError::Ambiguous { sid, header: h });
+        }
+        let pend = self.pending_headers(sid);
+        if pend.iter().any(|h| header.map(|w| w == h).unwrap_or(true)) {
             return Err(ElmError::Pending { sid });
         }
         if let Some(e) = self.adapter_errors.first() {
@@ -520,6 +595,32 @@ mod tests {
     fn support_mask_decodes_patrol() {
         assert_eq!(decode_support_mask(0x00, &[0x98, 0x39, 0x00, 0x11]), vec![0x01, 0x04, 0x05, 0x0B, 0x0C, 0x0D, 0x10, 0x1C, 0x20]);
         assert_eq!(decode_support_mask(0x20, &[0xA0, 0, 0, 0]), vec![0x21, 0x23]);
+    }
+
+    #[test]
+    fn multi_ecu_pending_and_foreign() {
+        // Real (non-Patrol, multi-ECU car): 7E8 pending, 7E9/7EB answered before the prompt.
+        let r = p("7E8037F1978 | 7EB035902FF | 7E9035902FF");
+        assert_eq!(r.pending_headers(0x19), vec!["7E8".to_string()]);
+        assert_eq!(r.positive_from(Some("7E8"), 0x19, &[0x02]), Err(ElmError::Pending { sid: 0x19 }));
+        assert_eq!(r.positive_from(Some("7E9"), 0x19, &[0x02]).unwrap(), vec![0xFF]);
+        assert!(!r.only_pending(0x19));
+        assert!(r.foreign_headers().is_empty());
+        // Real 11 Aug flood after STCAF0 + ATCM000: 2D1/23D are foreign, never data.
+        let r = p("23D03000000 | 7E806410098390011 | 2D1200000030E");
+        assert_eq!(r.foreign_headers(), vec!["23D".to_string(), "2D1".to_string()]);
+        assert_eq!(r.positive(0x01, &[0x00]).unwrap(), vec![0x98, 0x39, 0x00, 0x11]);
+        let r = p("2D1200000030E");
+        assert!(r.positive(0x01, &[0x00]).is_err());
+        assert_eq!(r.foreign_headers(), vec!["2D1".to_string()]);
+    }
+
+    #[test]
+    fn stray_answer_for_other_service_is_not_taken() {
+        let r = p("7E8035902FF");
+        assert!(matches!(r.positive(0x01, &[0x00]), Err(ElmError::Unmatched(_))));
+        let r = p("7E8035902FF | 7E806410098390011");
+        assert_eq!(r.positive(0x01, &[0x00]).unwrap(), vec![0x98, 0x39, 0x00, 0x11]);
     }
 
     #[test]

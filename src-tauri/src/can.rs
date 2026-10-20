@@ -297,6 +297,13 @@ fn elm_read_raw(port: &mut Box<dyn SerialPort + Send>, timeout: Duration) -> Res
         }
     }
     if collected.is_empty() { return Err("ELM: no data".into()); }
+    // Adapter status text is not data: "NO DATA" would otherwise hex-decode to 0xDA.
+    let up = collected.to_ascii_uppercase();
+    for bad in ["NO DATA", "CAN ERROR", "BUS ERROR", "UNABLE", "STOPPED", "BUFFER FULL", "?"] {
+        if up.contains(bad) {
+            return Err(format!("ELM: {}", bad));
+        }
+    }
     Ok(elm_hex_to_bytes(&collected))
 }
 
@@ -327,14 +334,28 @@ fn elm_collect_cfs(
     asm.finish()
 }
 
+/// What the raw ISO-TP path changes (header, headers off, CAF off) is put back
+/// by this list when the request ends, success or error.
+pub const ISO_TP_RESTORE: &[&str] = &["ATCAF1", "ATH1", "ATSH7DF"];
+
 pub fn elm_send_iso_tp_request_with_fc(
     port: &mut Box<dyn SerialPort + Send>,
     request_id: u32,
     data: &[u8],
     fc: FlowControlParams,
 ) -> Result<Vec<u8>, String> {
+    let mut guard = crate::transport::AdapterGuard::new(port, ISO_TP_RESTORE);
+    iso_tp_request_inner(guard.port(), request_id, data, fc)
+}
+
+fn iso_tp_request_inner(
+    port: &mut Box<dyn SerialPort + Send>,
+    request_id: u32,
+    data: &[u8],
+    fc: FlowControlParams,
+) -> Result<Vec<u8>, String> {
     elm_set_header(port, request_id)?;
-    crate::transport::mark_text_mode_dirty();
+    let _ = send_elm_cmd(port, "AT H0");
     let _ = send_elm_cmd(port, "AT CAF 0");
     if data.len() > 7 { return elm_send_multiframe_tx(port, data); }
     let sf = build_single_frame(data)?;
@@ -361,7 +382,7 @@ pub fn elm_send_iso_tp_request(
 ) -> Result<Vec<u8>, String> {
     with_fc_retry(|fc| {
         if fc == FlowControlParams::gentle() {
-            let _ = send_elm_cmd(port, "AT CAF 0");
+            // CAF 0 / H0 / SH are set (and restored) inside the guarded request.
             std::thread::sleep(Duration::from_millis(30));
         }
         elm_send_iso_tp_request_with_fc(port, request_id, data, fc)
@@ -669,6 +690,21 @@ pub fn j2534_list_devices() -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn iso_tp_request_restores_adapter_state_on_error() {
+        use crate::replay_port::ReplayPort;
+        // No reply for the request: adapter prints NO DATA -> error, never a 0xDA byte.
+        let (mut port, log) = ReplayPort::empty()
+            .with_reply("ATSH7E0", &["OK"]).with_reply("ATH0", &["OK"]).with_reply("ATCAF0", &["OK"])
+            .with_reply("ATCAF1", &["OK"]).with_reply("ATH1", &["OK"]).with_reply("ATSH7DF", &["OK"])
+            .boxed();
+        let r = elm_send_iso_tp_request_with_fc(&mut port, 0x7E0, &[0x10, 0xC0], FlowControlParams::fast());
+        assert!(r.is_err(), "{r:?}");
+        let sent = log.get();
+        assert_eq!(&sent[sent.len() - 3..], &["ATCAF1", "ATH1", "ATSH7DF"]);
+        assert!(sent.iter().any(|c| c == "ATCAF0"));
+    }
+
     use super::*;
 
     #[test]

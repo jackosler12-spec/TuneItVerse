@@ -176,7 +176,7 @@ pub fn nissan_can_scan_in(
         session_exit: String::new(),
         note: "Nissan CAN path observed on a 2007 Patrol ZD30CRD (cal ID 0VS43B). ID meanings are unknown; values are raw bytes only.",
     };
-    let entered = elm_request(port, "10C0", mode, READ_WINDOW_MS).and_then(|r| r.positive(0x10, &[0xC0]));
+    let entered = elm_request(port, sess, "10C0", mode, READ_WINDOW_MS).and_then(|r| r.positive(0x10, &[0xC0]));
     let result = match entered {
         Err(e) => Err(format!("10C0 not accepted ({}). Nothing read.", e)),
         Ok(_) => {
@@ -186,7 +186,7 @@ pub fn nissan_can_scan_in(
                 let mut base = start;
                 loop {
                     let req = format!("22{:04X}", base);
-                    match elm_request(port, &req, mode, READ_WINDOW_MS).and_then(|r| r.positive(0x22, &[(base >> 8) as u8, base as u8])) {
+                    match elm_request(port, sess, &req, mode, READ_WINDOW_MS).and_then(|r| r.positive(0x22, &[(base >> 8) as u8, base as u8])) {
                         Ok(mask) if mask.len() >= 4 => {
                             let (found, next) = nissan_ids_from_mask(base, &mask[..4]);
                             ids.extend(found);
@@ -200,7 +200,7 @@ pub fn nissan_can_scan_in(
             scan.supported_ids = ids.iter().map(|i| format!("{:04X}", i)).collect();
             if read_values {
                 for id in &ids {
-                    let r = elm_request(port, &format!("22{:04X}", id), mode, READ_WINDOW_MS)
+                    let r = elm_request(port, sess, &format!("22{:04X}", id), mode, READ_WINDOW_MS)
                         .and_then(|r| r.positive(0x22, &[(id >> 8) as u8, *id as u8]));
                     scan.reads.push(NissanIdRead {
                         id: format!("{:04X}", id),
@@ -214,7 +214,7 @@ pub fn nissan_can_scan_in(
         }
     };
     // Always try to return to the default session and the functional OBD header.
-    scan.session_exit = match elm_request(port, "1081", mode, READ_WINDOW_MS).and_then(|r| r.positive(0x10, &[0x81])) {
+    scan.session_exit = match elm_request(port, sess, "1081", mode, READ_WINDOW_MS).and_then(|r| r.positive(0x10, &[0x81])) {
         Ok(_) => "5081 default session".into(),
         Err(e) => format!("1081 not confirmed: {}", e),
     };
@@ -285,7 +285,8 @@ mod tests {
     #[test]
     fn negative_221209_is_an_error() {
         let (mut port, _log) = ReplayPort::from_fixture(FIXTURE, "## Section A1").boxed();
-        let r = elm_request(&mut port, "221209", HeaderMode::Can11, 100).unwrap();
+        let mut sess = ElmSession::for_protocol("can");
+        let r = elm_request(&mut port, &mut sess, "221209", HeaderMode::Can11, 100).unwrap();
         assert_eq!(r.positive(0x22, &[0x12, 0x09]), Err(ElmError::Negative { sid: 0x22, nrc: 0x12 }));
     }
 }
