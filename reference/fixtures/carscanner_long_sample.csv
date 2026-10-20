@@ -1,0 +1,7 @@
+"SECONDS";"PID";"VALUE";"UNITS";"LATITUDE";"LONGTITUDE";
+"100.25";"Engine RPM";"751";"rpm";"0.000000";"0.000000";
+"100.25";"Engine RPM x1000";"0.8";"rpm";"0.000000";"0.000000";
+"100.5";"Fuel rail press.";"33180";"kPa";"0.000000";"0.000000";
+"100.5";"Vehicle speed";"0";"km/h";"0.000000";"0.000000";
+"101";"Engine coolant temperature";"40";"℃";"0.000000";"0.000000";
+"101";"Engine coolant temperature";"n/a";"℃";"0.000000";"0.000000";
