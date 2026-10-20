@@ -140,5 +140,48 @@
     "mode01_supported": "01 04 05 0B 0C 0D 10 1C 21 23 (0100=98390011, 0120=A0000000; no 0140 range, so no PID 0x42)",
     "nissan_can_session": "ATSH7E0, 10C0 -> 50C0, 22xxxx reads, 1081 -> 5081; 32 supported IDs, meanings unknown (see consult.rs)",
     "mapping": "UNCONFIRMED: the cal ID 0VS43B resembles part 23710-VS43B, but nothing in the log identifies the ECU hardware as Bosch EDC16C41. Do not treat a live 0VS43B as EDC16C41 until a hardware/software ID read or a dump from this car confirms it."
+  },
+  "nissan_did_observations": {
+    "source": "Car Scanner Pro debug log, 10 Patrol sessions 20.05.2026-20.10.2026 (Data Logger summary). Observed data only: raw values, no scaling, meanings unknown.",
+    "dids": {
+      "1101": {"len": 1, "min_raw": "43", "max_raw": "85", "distinct": 64, "positive_reads": 2948, "meaning": "unknown"},
+      "1102": {"len": 1, "min_raw": "00", "max_raw": "31", "distinct": 50, "positive_reads": 2942, "meaning": "unknown"},
+      "1104": {"len": 1, "min_raw": "26", "max_raw": "87", "distinct": 69, "positive_reads": 2911, "meaning": "unknown"},
+      "1105": {"len": 1, "min_raw": "A3", "max_raw": "B2", "distinct": 13, "positive_reads": 2888, "meaning": "unknown"},
+      "1106": {"len": 1, "min_raw": "B9", "max_raw": "BE", "distinct": 6, "positive_reads": 2865, "meaning": "unknown"},
+      "1107": {"len": 1, "min_raw": "48", "max_raw": "98", "distinct": 81, "positive_reads": 2860, "meaning": "unknown"},
+      "1116": {"len": 1, "min_raw": "1E", "max_raw": "1E", "distinct": 1, "positive_reads": 2876, "meaning": "unknown"},
+      "1117": {"len": 1, "min_raw": "26", "max_raw": "A1", "distinct": 85, "positive_reads": 2867, "meaning": "unknown"},
+      "111C": {"len": 1, "min_raw": "36", "max_raw": "45", "distinct": 16, "positive_reads": 3001, "meaning": "unknown"},
+      "111E": {"len": 1, "min_raw": "13", "max_raw": "44", "distinct": 38, "positive_reads": 2860, "meaning": "unknown"},
+      "1128": {"len": 1, "min_raw": "00", "max_raw": "FF", "distinct": 2, "positive_reads": 2863, "meaning": "unknown"},
+      "1129": {"len": 1, "min_raw": "00", "max_raw": "FF", "distinct": 187, "positive_reads": 2863, "meaning": "unknown"},
+      "1132": {"len": 1, "min_raw": "10", "max_raw": "50", "distinct": 65, "positive_reads": 2860, "meaning": "unknown"},
+      "1133": {"len": 1, "min_raw": "04", "max_raw": "51", "distinct": 69, "positive_reads": 2828, "meaning": "unknown"},
+      "1143": {"len": null, "min_raw": null, "max_raw": null, "distinct": 0, "positive_reads": 0, "meaning": "unknown", "note": "in the support mask, never read"},
+      "1146": {"len": 1, "min_raw": "2F", "max_raw": "CE", "distinct": 130, "positive_reads": 2827, "meaning": "unknown"},
+      "1147": {"len": 1, "min_raw": "12", "max_raw": "92", "distinct": 53, "positive_reads": 2796, "meaning": "unknown"},
+      "1207": {"len": 2, "min_raw": "0000", "max_raw": "586E", "distinct": 1772, "positive_reads": 2851, "meaning": "unknown"},
+      "1208": {"len": 2, "min_raw": "0000", "max_raw": "1B38", "distinct": 1599, "positive_reads": 2868, "meaning": "unknown"},
+      "120B": {"len": null, "min_raw": null, "max_raw": null, "distinct": 0, "positive_reads": 0, "meaning": "unknown", "note": "in the support mask, never read"},
+      "120C": {"len": 2, "min_raw": "0000", "max_raw": "1CF3", "distinct": 1200, "positive_reads": 2861, "meaning": "unknown"},
+      "120D": {"len": 2, "min_raw": "0000", "max_raw": "0E94", "distinct": 796, "positive_reads": 2864, "meaning": "unknown"},
+      "121C": {"len": 2, "min_raw": "0075", "max_raw": "02C8", "distinct": 434, "positive_reads": 2867, "meaning": "unknown"},
+      "121F": {"len": 2, "min_raw": "0000", "max_raw": "0000", "distinct": 1, "positive_reads": 2790, "meaning": "unknown"},
+      "1302": {"len": 2, "min_raw": "20E3", "max_raw": "A0E3", "distinct": 3, "positive_reads": 2790, "meaning": "unknown"},
+      "1303": {"len": 2, "min_raw": "0006", "max_raw": "0606", "distinct": 3, "positive_reads": 2802, "meaning": "unknown"},
+      "1305": {"len": 2, "min_raw": "0008", "max_raw": "0808", "distinct": 2, "positive_reads": 2797, "meaning": "unknown"},
+      "1307": {"len": 2, "min_raw": "0084", "max_raw": "0484", "distinct": 2, "positive_reads": 2797, "meaning": "unknown"},
+      "1308": {"len": 2, "min_raw": "0082", "max_raw": "0082", "distinct": 1, "positive_reads": 2779, "meaning": "unknown"},
+      "130A": {"len": 2, "min_raw": "0080", "max_raw": "8080", "distinct": 2, "positive_reads": 2776, "meaning": "unknown"},
+      "130D": {"len": 2, "min_raw": "000F", "max_raw": "000F", "distinct": 1, "positive_reads": 2776, "meaning": "unknown"},
+      "130E": {"len": 2, "min_raw": "0027", "max_raw": "0227", "distinct": 2, "positive_reads": 2785, "meaning": "unknown"}
+    },
+    "negative_replies": {
+      "multi_7F2223": 57,
+      "multi_7F2221": 49,
+      "single_7F2221": 4,
+      "221124_no_data": 4
+    }
   }
 }

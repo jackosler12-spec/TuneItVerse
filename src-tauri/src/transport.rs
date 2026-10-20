@@ -771,7 +771,8 @@ pub fn poll_live_in(
         }
     };
     out.supported = supported.iter().copied().collect();
-    for id in wanted {
+    let nissan: Vec<u16> = wanted.iter().filter_map(|id| nissan_raw_channel_did(id)).collect();
+    for id in wanted.iter().filter(|id| nissan_raw_channel_did(id).is_none()) {
         if id == "batt" {
             if let Some((v, src)) = voltage_with_source_in(port, sess) {
                 out.values.insert("batt".into(), v as f64);
@@ -800,8 +801,28 @@ pub fn poll_live_in(
             break;
         }
     }
+    if !nissan.is_empty() && sess.no_data_streak < NO_DATA_STOP_THRESHOLD {
+        match crate::consult::nissan_poll_raw_in(port, sess, &nissan) {
+            Ok(vals) => {
+                for (did, v) in vals {
+                    match v {
+                        Ok(x) => { out.values.insert(format!("nissan_{:04X}", did), x as f64); }
+                        Err(e) => out.failed.push(format!("nissan_{:04X}: {}", did, e)),
+                    }
+                }
+            }
+            Err(e) => out.failed.extend(nissan.iter().map(|d| format!("nissan_{:04X}: {}", d, e))),
+        }
+    }
     out.no_data_streak = sess.no_data_streak;
     Ok(out)
+}
+
+/// Raw Nissan DID logging channel id: `nissan_1101` -> 0x1101 (meaning unknown).
+pub fn nissan_raw_channel_did(id: &str) -> Option<u16> {
+    let h = id.strip_prefix("nissan_")?;
+    let d = u16::from_str_radix(h, 16).ok()?;
+    crate::consult::PATROL_ZD30_SUPPORTED_IDS.contains(&d).then_some(d)
 }
 
 pub fn poll_live(port: &mut Box<dyn SerialPort + Send>, wanted: &[String]) -> Result<LivePoll, String> {
@@ -984,6 +1005,19 @@ mod tests {
             last = poll_live_in(&mut port, &mut sess, &["rpm".to_string()]).unwrap_err();
         }
         assert!(last.contains("ignition off"), "{last}");
+    }
+
+    #[test]
+    fn poll_live_handles_nissan_raw_channels() {
+        // A1 has the 10C0 / mask exchanges but no value reads: the raw channel fails, nothing is invented.
+        let (mut port, log) = patrol_port();
+        let mut sess = quick_sess();
+        let p = poll_live_in(&mut port, &mut sess, &["rpm".into(), "nissan_1101".into()]).unwrap();
+        assert!(p.values.contains_key("rpm"));
+        assert!(!p.values.contains_key("nissan_1101"));
+        assert!(p.failed.iter().any(|f| f.starts_with("nissan_1101")));
+        let sent = log.get();
+        assert_eq!(&sent[sent.len() - 2..], &["1081", "ATSH7DF"]);
     }
 
     fn patrol_port() -> (Box<dyn SerialPort + Send>, SentLog) {

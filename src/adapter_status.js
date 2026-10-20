@@ -58,8 +58,9 @@
           if (log && sc) {
             log.textContent += 'Supported IDs (meaning unknown): ' + (sc.supported_ids || []).join(' ') + '\n';
             (sc.reads || []).forEach(function (r) {
-              log.textContent += '  ' + r.id + ' = ' + (r.raw_hex != null ? r.raw_hex : ('error: ' + r.error)) + '\n';
+              log.textContent += '  ' + r.id + ' = ' + (r.raw_hex != null ? r.raw_hex : ('error: ' + r.error)) + (r.via ? ' (' + r.via + ')' : '') + '  [meaning unknown]\n';
             });
+            (sc.identity || []).forEach(function (p) { log.textContent += '  ' + p.id + ': ' + p.outcome + '\n'; });
             (sc.mask_errors || []).forEach(function (m) { log.textContent += '  mask: ' + m + '\n'; });
             log.textContent += 'Session exit: ' + sc.session_exit + '\n';
           }

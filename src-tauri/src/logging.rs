@@ -74,7 +74,7 @@ fn now_ms() -> u64 {
 }
 
 fn default_channels() -> Vec<LogChannel> {
-    vec![
+    let mut v = vec![
         LogChannel { id: "rpm".into(), name: "Engine RPM".into(), unit: "RPM".into(), pid: 0x000C, enabled: true },
         LogChannel { id: "map".into(), name: "MAP".into(), unit: "kPa".into(), pid: 0x000B, enabled: true },
         LogChannel { id: "ect".into(), name: "ECT".into(), unit: "C".into(), pid: 0x0005, enabled: true },
@@ -93,7 +93,24 @@ fn default_channels() -> Vec<LogChannel> {
         LogChannel { id: "o2b1s1".into(), name: "O2 B1S1".into(), unit: "V".into(), pid: 0x0014, enabled: false },
         LogChannel { id: "rail".into(), name: "Fuel Rail Gauge Pressure".into(), unit: "kPa".into(), pid: 0x0023, enabled: false },
         LogChannel { id: "dist_mil".into(), name: "Distance with MIL on".into(), unit: "km".into(), pid: 0x0021, enabled: false },
-    ]
+    ];
+    v.extend(nissan_raw_channels());
+    v
+}
+
+/// Optional raw channels, one per Nissan DID the reference Patrol advertises.
+/// Off by default. The value is the raw big-endian integer; the meaning is unknown.
+pub fn nissan_raw_channels() -> Vec<LogChannel> {
+    crate::consult::PATROL_ZD30_SUPPORTED_IDS
+        .iter()
+        .map(|&d| LogChannel {
+            id: format!("nissan_{:04X}", d),
+            name: format!("Nissan DID {:04X} (unknown meaning, raw)", d),
+            unit: "raw".into(),
+            pid: d,
+            enabled: false,
+        })
+        .collect()
 }
 
 fn templates() -> Vec<LogTemplate> {
@@ -102,7 +119,7 @@ fn templates() -> Vec<LogTemplate> {
         LogTemplate { id: "boost".into(), name: "Boost / Turbo".into(), description: "MAP-focused street set (Mode 01 only)".into(), pids: vec!["rpm".into(), "map".into(), "tps".into(), "load".into()], rate_hz: 20.0 },
         LogTemplate { id: "diesel".into(), name: "Diesel OBD".into(), description: "Standard SAE Mode 01 PIDs incl. 0x23 fuel rail pressure; only PIDs the ECU reports as supported are polled. No IQ/VGT (not standard PIDs).".into(), pids: vec!["rpm".into(), "map".into(), "ect".into(), "vss".into(), "maf".into(), "load".into(), "rail".into(), "batt".into()], rate_hz: 10.0 },
         LogTemplate { id: "ls1".into(), name: "LS1 / P01".into(), description: "LS1 set".into(), pids: vec!["rpm".into(), "map".into(), "tps".into(), "spark".into(), "stft".into(), "ltft".into()], rate_hz: 20.0 },
-        LogTemplate { id: "full".into(), name: "Full".into(), description: "All channels".into(), pids: default_channels().into_iter().map(|c| c.id).collect(), rate_hz: 5.0 },
+        LogTemplate { id: "full".into(), name: "Full".into(), description: "All channels".into(), pids: default_channels().into_iter().map(|c| c.id).filter(|id| !id.starts_with("nissan_")).collect(), rate_hz: 5.0 },
     ]
 }
 
@@ -481,6 +498,16 @@ mod tests {
         for c in default_channels() {
             assert!(![0x1141u16, 0x125A, 0x1171].contains(&c.pid), "{} uses a GM-only ID", c.id);
         }
+    }
+    #[test]
+    fn nissan_raw_channels_are_labelled_unknown_and_off() {
+        let n: Vec<LogChannel> = default_channels().into_iter().filter(|c| c.id.starts_with("nissan_")).collect();
+        assert_eq!(n.len(), 32);
+        for c in &n {
+            assert!(!c.enabled && c.unit == "raw" && c.name.contains("unknown meaning"), "{}", c.name);
+            assert_eq!(crate::transport::nissan_raw_channel_did(&c.id), Some(c.pid));
+        }
+        assert_eq!(crate::transport::nissan_raw_channel_did("nissan_1209"), None, "not in the mask");
     }
     #[test]
     fn import_csv_roundtrip() {
