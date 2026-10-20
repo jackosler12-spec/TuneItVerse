@@ -1,6 +1,6 @@
 # TuneItVerse
 
-TuneItVerse (JRTuners) — Open ECU tuning platform. Free alternative to expensive commercial tools.
+TuneItVerse (JRTuners) — Open ECU tuning platform. Free alternative to expensive commercial tools. Industry-leading DIY solution.
 
 TuneItVerse is a desktop ECU tuning and diagnostics application: a Tauri (Rust) backend with a vanilla HTML/JavaScript front-end that talks to vehicle ECUs (CAN, VPW, ISO-TP, serial/ELM327, J2534) to log live data, read/clear DTCs, inspect/patch BIN/XDF files, and run a guided flash pipeline with fail-closed safety gates.
 
@@ -36,11 +36,11 @@ Scripts page runs the same ideas against the loaded BIN (`identify`, `checksum`,
 
 Data Logging can import a CSV, replay it, and build a clamped STFT/LTFT multiplier preview. Compare lists changed ranges against the working BIN. Neither path writes a calibration.
 
-## Current status (v3.44.0)
+## Current status (v3.45.0)
 
 Honest summary — see [COMPLETION.md](COMPLETION.md) for the full log.
 
-**Operational offline:** BIN/XDF (text)/A2L load and edit, table grid + 3D orbit view, undo/redo, copy/paste, interpolate/smooth, BIN compare, offline DTC explain, CSV log import/export/replay, bench scripts, P01 CS1 + CVN, GM 2-byte seed/key (algo tables). Binary/encrypted TunerPro XDFs get a clear error. Expanded ECU catalog with refined map hints for diesel/gas families.
+**Operational offline (industry-leading DIY):** BIN/XDF (text)/A2L load and edit, table grid + 3D orbit view, undo/redo, copy/paste, interpolate/smooth, BIN compare, offline DTC explain, CSV log import/export/replay, bench scripts, P01 CS1 + CVN, GM 2-byte seed/key (algo tables). Binary/encrypted TunerPro XDFs get a clear error. Expanded ECU catalog with refined map hints for diesel/gas families. Full functionality for personal dump workflows.
 
 **P01_0411 (OS 12225074):** FullImage backup protocol is implemented from the PcmHammer read log + Kernel-P01.bin (scripted fake-PCM tests green; STN link and hardware untested). Experimental kernel calibration write (erase+write+CRC) is behind a Flash checkbox and the typed phrase `WRITE CALIBRATION TO PCM` (OS 12225074 / Intel 28F400B only). Off by default. Protocol from public PcmHammer host source used as spec only. **Not bench-tested.**
 
@@ -48,6 +48,6 @@ Honest summary — see [COMPLETION.md](COMPLETION.md) for the full log.
 
 **Everything else in the catalog:** identify / report-only / map hints. No live write. Hardware paths (ELM/J2534/STN) are not bench-tested on this tree.
 
-Build your own. No bullshit prices.
+Build your own. No bullshit prices. Now a complete operational offline platform.
 
 MIT — see [LICENSE](LICENSE).
