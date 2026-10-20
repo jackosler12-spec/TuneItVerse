@@ -1,6 +1,6 @@
 {
   "ecu_family": "EDC16C41",
-  "display_name": "Bosch EDC16C41 Nissan Patrol GU V Wagon (23710-VS43B / ZD30CRD variants)",
+  "display_name": "Bosch EDC16C41 Nissan Patrol GU V Wagon (23710-VS43B / ZD30CRD variants) — vehicle mapping unconfirmed",
   "part_numbers_or_os_ids": [
     "23710-VS43B",
     "392203",
@@ -44,15 +44,78 @@
     "description": "No ready XDF in reference. Map addresses below are community-typical starting points for ZD30CRD EDC16C41 and are marked unverified; refine against your own dump. Scales/offsets are typical Bosch diesel values — verify on load.",
     "eeprom": "EDC16C41 working eeprom (2 KB) - immobiliser, adaptations, coding data",
     "refined_map_addrs": {
-      "driver_wish": {"addr": "0x80000", "typical_size": "16x16", "scale": "0.1", "offset": "0", "unit": "mg/stroke", "note": "unverified community typical"},
-      "injection_quantity": {"addr": "0x82000", "typical_size": "16x16", "scale": "0.1", "offset": "0", "unit": "mg/stroke", "note": "unverified"},
-      "boost_setpoint": {"addr": "0xC0000", "typical_size": "16x16", "scale": "0.01", "offset": "0", "unit": "bar", "note": "unverified"},
-      "rail_pressure": {"addr": "0xC2000", "typical_size": "16x16", "scale": "1", "offset": "0", "unit": "bar", "note": "unverified"},
-      "vgt_duty": {"addr": "0xC4000", "typical_size": "16x16", "scale": "0.1", "offset": "0", "unit": "%", "note": "unverified"},
-      "smoke_limiter": {"addr": "0xC6000", "typical_size": "16x16", "scale": "0.1", "offset": "0", "unit": "mg/stroke", "note": "unverified"},
-      "egr_map": {"addr": "0xC8000", "typical_size": "16x16", "scale": "0.1", "offset": "0", "unit": "%", "note": "unverified"},
-      "torque_limiter": {"addr": "0xCA000", "typical_size": "16x1 or 16x16", "scale": "1", "offset": "0", "unit": "Nm", "note": "unverified"},
-      "start_of_injection": {"addr": "0xCC000", "typical_size": "16x16", "scale": "0.01", "offset": "0", "unit": "deg", "note": "unverified"}
+      "driver_wish": {
+        "addr": "0x80000",
+        "typical_size": "16x16",
+        "scale": "0.1",
+        "offset": "0",
+        "unit": "mg/stroke",
+        "note": "unverified community typical"
+      },
+      "injection_quantity": {
+        "addr": "0x82000",
+        "typical_size": "16x16",
+        "scale": "0.1",
+        "offset": "0",
+        "unit": "mg/stroke",
+        "note": "unverified"
+      },
+      "boost_setpoint": {
+        "addr": "0xC0000",
+        "typical_size": "16x16",
+        "scale": "0.01",
+        "offset": "0",
+        "unit": "bar",
+        "note": "unverified"
+      },
+      "rail_pressure": {
+        "addr": "0xC2000",
+        "typical_size": "16x16",
+        "scale": "1",
+        "offset": "0",
+        "unit": "bar",
+        "note": "unverified"
+      },
+      "vgt_duty": {
+        "addr": "0xC4000",
+        "typical_size": "16x16",
+        "scale": "0.1",
+        "offset": "0",
+        "unit": "%",
+        "note": "unverified"
+      },
+      "smoke_limiter": {
+        "addr": "0xC6000",
+        "typical_size": "16x16",
+        "scale": "0.1",
+        "offset": "0",
+        "unit": "mg/stroke",
+        "note": "unverified"
+      },
+      "egr_map": {
+        "addr": "0xC8000",
+        "typical_size": "16x16",
+        "scale": "0.1",
+        "offset": "0",
+        "unit": "%",
+        "note": "unverified"
+      },
+      "torque_limiter": {
+        "addr": "0xCA000",
+        "typical_size": "16x1 or 16x16",
+        "scale": "1",
+        "offset": "0",
+        "unit": "Nm",
+        "note": "unverified"
+      },
+      "start_of_injection": {
+        "addr": "0xCC000",
+        "typical_size": "16x16",
+        "scale": "0.01",
+        "offset": "0",
+        "unit": "deg",
+        "note": "unverified"
+      }
     },
     "unverified": true
   },
@@ -62,6 +125,20 @@
     "seed_key": true,
     "checksum": "report_only_signature",
     "write": false,
-    "hardware_bench": false
+    "hardware_bench": false,
+    "vehicle_mapping": "unconfirmed"
+  },
+  "observed_cal_ids": [
+    "0VS43B"
+  ],
+  "live_observations": {
+    "source": "Car Scanner log, OBDLink MX+, 2007 Nissan Patrol GU ZD30CRD, 2026-10-20 (redacted frames in reference/fixtures/elm_patrol_zd30_obdlink.txt)",
+    "protocol": "ISO 15765-4 CAN 11-bit 500 kbps (ATDPN A6), single ECU on 7E8",
+    "mode09_calid_0904": "0VS43B",
+    "mode09_vin_0902": "all zeros (7F 09 78 pending, then blank VIN)",
+    "mode09_cvn_090A": "NO DATA",
+    "mode01_supported": "01 04 05 0B 0C 0D 10 1C 21 23 (0100=98390011, 0120=A0000000; no 0140 range, so no PID 0x42)",
+    "nissan_can_session": "ATSH7E0, 10C0 -> 50C0, 22xxxx reads, 1081 -> 5081; 32 supported IDs, meanings unknown (see consult.rs)",
+    "mapping": "UNCONFIRMED: the cal ID 0VS43B resembles part 23710-VS43B, but nothing in the log identifies the ECU hardware as Bosch EDC16C41. Do not treat a live 0VS43B as EDC16C41 until a hardware/software ID read or a dump from this car confirms it."
   }
 }

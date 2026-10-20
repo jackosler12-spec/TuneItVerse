@@ -17,7 +17,7 @@
       "display_name": "Bosch EDC16C41 Nissan Patrol GU V Wagon",
       "bin_size_bytes": 2097152,
       "primary_protocol": "CAN/KWP",
-      "status": "identify + measured seed/key; signature block at 0x1FDF78 (report-only); expanded unverified map hints; no write"
+      "status": "identify + measured seed/key; signature block at 0x1FDF78 (report-only); expanded unverified map hints; no write; Patrol live cal ID 0VS43B observed, ECU-to-vehicle mapping unconfirmed"
     },
     {
       "id": "GM_P59",

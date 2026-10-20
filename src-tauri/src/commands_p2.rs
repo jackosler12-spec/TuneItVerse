@@ -54,6 +54,7 @@ fn read_properties() -> Result<String, String> {
     });
     match inner {
         Ok((os_id, vin, calid, ecu)) => {
+            let candidate = crate::ecu_database::candidate_for_cal_id(&calid);
             if let Ok(mut guard) = STATE.lock() {
                 if os_id != "UNREAD" { guard.last_os_id = Some(os_id.clone()); }
                 if let Some(e) = ecu.as_ref() { guard.last_family = Some(e.ecu_family.clone()); }
@@ -65,6 +66,8 @@ fn read_properties() -> Result<String, String> {
                 "hardware": ecu.as_ref().map(|e| e.hardware.clone()).unwrap_or_else(|| "UNREAD".into()),
                 "ecu_type": ecu.as_ref().map(|e| e.ecu_family.clone()).unwrap_or_else(|| "UNREAD".into()),
                 "protocol": protocol,
+                "candidate_family": candidate.as_ref().map(|c| c.0.clone()),
+                "candidate_note": candidate.as_ref().map(|c| c.1.clone()),
                 "status": "live"
             }).to_string())
         }

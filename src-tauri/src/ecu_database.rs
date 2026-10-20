@@ -52,6 +52,10 @@ pub struct EcuDbEntry {
     /// Calibration segment that guided flash may write (from authoritative repo data only).
     #[serde(default)]
     pub flash_write_segment: Option<FlashSegmentRaw>,
+    /// Calibration IDs seen live on a vehicle that *may* belong to this family.
+    /// Observation only: never used to set the family (see `candidate_for_cal_id`).
+    #[serde(default)]
+    pub observed_cal_ids: Vec<String>,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, Default)]
@@ -125,6 +129,21 @@ pub fn get_ecu_by_os_id(os_id: &str) -> Option<EcuDbEntry> {
     load_ecu_database().into_iter().find(|e| {
         e.part_numbers_or_os_ids.iter().any(|id| id.to_ascii_uppercase().contains(&os))
             || e.display_name.to_ascii_uppercase().contains(&os)
+    })
+}
+
+/// Family a live Mode 09 cal ID was *observed* alongside, with the caveat. This
+/// is a hint for the UI only; it never confirms the ECU family.
+pub fn candidate_for_cal_id(cal_id: &str) -> Option<(String, String)> {
+    let c = cal_id.trim().to_ascii_uppercase();
+    if c.is_empty() {
+        return None;
+    }
+    load_ecu_database().into_iter().find_map(|e| {
+        e.observed_cal_ids
+            .iter()
+            .any(|o| o.eq_ignore_ascii_case(&c))
+            .then(|| (e.ecu_family.clone(), format!("cal ID {} was observed on a vehicle listed for {}; hardware not confirmed", c, e.ecu_family)))
     })
 }
 
@@ -398,5 +417,18 @@ mod tests {
         assert!(!r.tables.iter().any(|t| t.id == "ve-main"));
         assert_eq!(r.pack, "tableseek-p01-p59");
         assert_eq!(r.located, 0);
+    }
+
+    #[test]
+    fn patrol_cal_id_is_observed_not_confirmed() {
+        // The live cal ID must not resolve to a confirmed family...
+        assert!(get_ecu_by_os_id("0VS43B").is_none());
+        // ...but is surfaced as an unconfirmed candidate.
+        let (fam, note) = candidate_for_cal_id("0vs43b").unwrap();
+        assert_eq!(fam, "EDC16C41");
+        assert!(note.contains("not confirmed"));
+        let raw: serde_json::Value = serde_json::from_str(EDC16_JSON).unwrap();
+        assert_eq!(raw["verified"]["vehicle_mapping"], "unconfirmed");
+        assert!(raw["live_observations"]["mapping"].as_str().unwrap().contains("UNCONFIRMED"));
     }
 }
