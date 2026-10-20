@@ -80,6 +80,20 @@ mod tests {
     }
 
     #[test]
+    fn parses_real_atrv_replies() {
+        // Real ATRV replies from the OBDLink MX+ log (Patrol + Chevrolet sessions).
+        for v in ["12.5", "12.6", "13.2", "13.4", "13.5", "13.6", "13.7", "13.8", "13.9", "14.0", "14.1", "14.2", "14.3", "14.6", "14.7", "14.8", "14.9"] {
+            let want: f32 = v.parse().unwrap();
+            assert_eq!(parse_at_rv(&format!("{v}V")), Some(want), "{v}");
+            assert_eq!(parse_at_rv(&format!("{v}V\r\r>")), Some(want), "{v} with prompt");
+        }
+        // STVR prints the number without 'V'.
+        assert_eq!(parse_at_rv("14.1\r>"), Some(14.1));
+        assert!(parse_at_rv("NO DATA\r>").is_none());
+        assert!(parse_at_rv("?\r>").is_none());
+    }
+
+    #[test]
     fn classifies_band() {
         // Warn band is 0.4 V above min_v (classify's conservative margin).
         assert_eq!(classify(12.9, 12.5), SupplyClass::Ok);

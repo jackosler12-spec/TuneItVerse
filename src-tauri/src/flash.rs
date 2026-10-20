@@ -69,11 +69,23 @@ impl AdaptiveTiming {
 /// Battery / supply voltage. Prefers OBDLink STVR (adapter pin) when the transport is ELM/STN,
 /// falls back to Mode 01 PID 0x42 (control module voltage) on raw VPW.
 pub fn read_battery_voltage(port: &mut Box<dyn SerialPort + Send>) -> Option<f32> {
-    // Adapter voltage is more reliable for the flash gate on OBDLink MX+.
-    if let Some(v) = crate::transport::read_adapter_voltage(port) {
-        return Some(v);
+    read_battery_voltage_src(port).map(|(v, _)| v)
+}
+
+/// Supply voltage plus where it came from (`adapter_stvr`, `adapter_atrv`,
+/// `pid42`, `pid42_vpw_raw`). Adapter voltage first: it is what the OBDLink MX+
+/// measures on pin 16, and many ECUs (e.g. the Patrol ZD30) do not support
+/// PID 0x42. PID 0x42 is used only when the ECU lists it (ELM path) or on the
+/// raw VPW frame path. Raw VPW frames are never written to an ELM/STN port.
+pub fn read_battery_voltage_src(port: &mut Box<dyn SerialPort + Send>) -> Option<(f32, &'static str)> {
+    if let Some((v, src)) = crate::transport::read_voltage_with_source(port) {
+        return Some((v, src.label()));
     }
-    // Raw VPW fallback: Mode 01 PID 0x42.
+    let proto = crate::transport::current_protocol();
+    if !(crate::transport::is_raw_vpw(&proto) && !crate::transport::is_elm_ascii(&proto)) {
+        return None;
+    }
+    // Raw VPW: Mode 01 PID 0x42.
     let req = build_obd_request(0x42);
     let mut timing = AdaptiveTiming::for_vpw();
     for _ in 0..3 {
@@ -82,7 +94,7 @@ pub fn read_battery_voltage(port: &mut Box<dyn SerialPort + Send>) -> Option<f32
                 timing.on_success();
                 if let Some(data) = parse_mode01_response(&resp, 0x42) {
                     if data.len() >= 2 {
-                        return Some((((data[0] as u16) << 8) | data[1] as u16) as f32 / 1000.0);
+                        return Some(((((data[0] as u16) << 8) | data[1] as u16) as f32 / 1000.0, crate::transport::VoltageSource::Pid42VpwRaw.label()));
                     }
                 }
             }
@@ -96,9 +108,9 @@ pub fn read_battery_voltage(port: &mut Box<dyn SerialPort + Send>) -> Option<f32
 }
 
 pub fn enforce_voltage_gate(port: &mut Box<dyn SerialPort + Send>, min_v: f32, logs: &mut Vec<String>) -> Result<f32, String> {
-    match read_battery_voltage(port) {
-        Some(v) => {
-            logs.push(format!("{:.2} V (min {:.2})", v, min_v));
+    match read_battery_voltage_src(port) {
+        Some((v, src)) => {
+            logs.push(format!("{:.2} V (min {:.2}, source {})", v, min_v, src));
             if v < min_v {
                 Err(format!("Voltage gate FAILED: {:.2} V", v))
             } else {
