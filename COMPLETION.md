@@ -1,4 +1,17 @@
-# TuneItVerse v3.46.0 — Nissan DID reads, adapter cleanup, response-pending handling
+# TuneItVerse v3.46.1 — Nissan session blocks, real F190/F18C frames, re-init fallback
+
+## v3.46.1 changes (2026-10-20)
+Source: Data Logger extra frames #2 (`reference/fixtures/elm_patrol_session_identity.txt`, 7E8 frames only).
+
+1. **F190/F18C.** The test now uses the real 26 Jun frames. On the Patrol both get `7E8 03 7F 22 12` inside 10C0. `22F190` sent to 7DF outside a session got NO DATA. Correction to v3.46.0: the ECU never sent `7F 22 11`; that reply came from the BCM on 765.
+2. **Nissan session blocks.** Every positive 2211/12/13xx read in the log was inside 10C0 sent to 7E0, so 10C0 is still required. The raw DID poll now copies Car Scanner's blocks. A block opens with ATSH7E0 + `10C0` (`10C01` once the CAN protocol is known), polls `NISSAN_BLOCK_SAMPLES` (4) samples, then closes with `1081(1)` + ATSH7DF. Log stop and disconnect also close the block. The block length is an approximation of the log: about 44 exchanges per block in the 20 May session. If the ECU drops the session (`7F xx 7F` / `7F xx 22`), 10C0 is re-sent mid-block. The `7F 22 7F` in that test is synthetic. Any error path sends 1081 + ATSH7DF through the Drop guard.
+3. **Re-init.** Bare STCAF1, STFAC and ATCRA were never seen answered on the MX+. They stay in the list, but a `?` reply is now logged in the session (`recovery_log`) and ignored. ATFCSM0 stays (979 OKs on the Patrol). If the 2D1/23D flood survives the re-init, the app falls back to ATZ + full warmup + defaults and retries once.
+4. **Late answer.** The real 24 Aug sequence `>190208\r7E8037F1978\r\r>1902AC\r7E8035902FF\r\r>` is a test: the `59 02 FF` in the 1902AC reply is reported as ambiguous. The test for an answer arriving after the prompt is labelled synthetic; the Data Logger found no such case in any session.
+5. **1143 / 120B.** The DB now says "advertised in mask, never read; length unknown". These are read only singly, with a 1..=8 byte check, and the length they return is reported, not assumed.
+
+**Unverified in v3.46.1:** replay-tested only. The block length is an approximation. The session-drop NRC test is synthetic. A physical 7E0 read without 10C0 was never tried in the log.
+
+## v3.46.0 — Nissan DID reads, adapter cleanup, response-pending handling
 
 ## v3.46.0 changes (2026-10-20)
 Source: further redacted frames from the same Car Scanner/OBDLink log (Data Logger agent). Committed fixtures: `reference/fixtures/elm_patrol_nissan_22reads.txt` (18 KB slice of the 2.6 MB read dump, ECU 7E8 frames only) and `reference/fixtures/elm_cleanup_and_pending.txt` (13 KB). The full dump is not committed.
@@ -8,7 +21,7 @@ Source: further redacted frames from the same Car Scanner/OBDLink log (Data Logg
 3. **Adapter cleanup.** A Drop guard restores adapter state on every exit, error or not. The ELM ISO-TP path restores `ATCAF1 ATH1 ATSH7DF`. The Nissan scan and poll restore `1081 ATSH7DF`. Replies that carry CAN frames from non-OBD IDs (the 11 Aug `2D1`/`23D` flood after `STCAF0` + `ATCM000`) trigger a re-init (`ATCAF1 STCAF1 ATCRA ATAR ATFCSM0 STFAC ATSH7DF ATH1 ATS0 ATST96`). A valid 7E8 answer in the same reply is used; otherwise there is one retry. Foreign frames are never decoded. `NO DATA` on the ISO-TP path is an error (it used to hex-decode to `0xDA`).
 4. **7F xx 78 after the prompt.** After a response-pending, the app keeps listening for up to P2* (5 s) without sending anything, even after the `>`. If an ECU is still pending when that window ends, its answer to the next request with the same SID is reported as ambiguous and discarded. Answers are matched per ECU by SID and PID/DID echo, so a stray `59 02 FF` is never taken as the answer to another request. Tests use the real multi-ECU `19 02 xx` transcripts and the Patrol `0902` case.
 
-**Unverified in v3.46.0:** replay-tested only, nothing has run on a live car from this build. DID meanings and scaling are unknown. The late-answer-after-prompt case is a synthetic test, because the log has no example of it. Two lengths are unknown: 1143 and 120B. Not every adapter supports `STCAF1`/`STFAC`/`ATFCSM0` (an unknown command answers `?` and is ignored). The F190/F18C NRCs come from the Data Logger's report and are not in the committed fixtures.
+**Unverified in v3.46.0:** replay-tested only, nothing has run on a live car from this build. DID meanings and scaling are unknown. The late-answer-after-prompt case is a synthetic test, because the log has no example of it. Two lengths are unknown: 1143 and 120B. Not every adapter supports `STCAF1`/`STFAC`/`ATFCSM0` (an unknown command answers `?` and is ignored). The F190/F18C NRCs come from the Data Logger's report and are not in the committed fixtures (corrected in v3.46.1: both are 7F 22 12 from the ECU).
 
 ## v3.45.0 — ELM/OBDLink live-data fixes from a real Patrol log
 
