@@ -1,7 +1,7 @@
 {
   "name": "tuneitverse",
   "private": true,
-  "version": "3.45.0",
+  "version": "3.46.0",
   "description": "TuneItVerse - open ECU tuning platform. v3.44.0: expanded catalog, refined maps, operational status, improved offline tools. Experimental P01 write off by default. EDC16 report-only. Not bench-tested.",
   "type": "module",
   "scripts": {

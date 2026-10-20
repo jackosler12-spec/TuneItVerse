@@ -1,4 +1,16 @@
-# TuneItVerse v3.45.0 — ELM/OBDLink live-data fixes from a real Patrol log
+# TuneItVerse v3.46.0 — Nissan DID reads, adapter cleanup, response-pending handling
+
+## v3.46.0 changes (2026-10-20)
+Source: further redacted frames from the same Car Scanner/OBDLink log (Data Logger agent). Committed fixtures: `reference/fixtures/elm_patrol_nissan_22reads.txt` (18 KB slice of the 2.6 MB read dump, ECU 7E8 frames only) and `reference/fixtures/elm_cleanup_and_pending.txt` (13 KB). The full dump is not committed.
+
+1. **Support masks.** Tested: the 2211xx/2212xx/2213xx masks decode to exactly the 30 DIDs Car Scanner polled plus 1143 and 120B (MSB of the first byte = base+1). No code change was needed.
+2. **DID value reads.** DID lengths as observed: 1101–1147 one byte, 1207–130E two bytes. 1143/120B were never read, so their length is unknown and they are read one at a time. Reads go 3 DIDs per request; every DID echo and length is checked. Any multi-read failure (`7F 22 23`, `7F 22 21`, NO DATA, mismatch) falls back to single reads. A single `7F 22 21` is retried once. Optional log channels `nissan_XXXX` ("Nissan DID XXXX (unknown meaning, raw)", off by default) log the raw big-endian value. The EDC16C41 DB entry has `nissan_did_observations` (length, min/max raw, distinct values, read counts, meaning "unknown"). F190/F18C are probed and reported as "not supported (NRC ..)". Their bytes are never stored. Replay strips Car Scanner's frame-count suffix (`221101110211042` → `22110111021104`).
+3. **Adapter cleanup.** A Drop guard restores adapter state on every exit, error or not. The ELM ISO-TP path restores `ATCAF1 ATH1 ATSH7DF`. The Nissan scan and poll restore `1081 ATSH7DF`. Replies that carry CAN frames from non-OBD IDs (the 11 Aug `2D1`/`23D` flood after `STCAF0` + `ATCM000`) trigger a re-init (`ATCAF1 STCAF1 ATCRA ATAR ATFCSM0 STFAC ATSH7DF ATH1 ATS0 ATST96`). A valid 7E8 answer in the same reply is used; otherwise there is one retry. Foreign frames are never decoded. `NO DATA` on the ISO-TP path is an error (it used to hex-decode to `0xDA`).
+4. **7F xx 78 after the prompt.** After a response-pending, the app keeps listening for up to P2* (5 s) without sending anything, even after the `>`. If an ECU is still pending when that window ends, its answer to the next request with the same SID is reported as ambiguous and discarded. Answers are matched per ECU by SID and PID/DID echo, so a stray `59 02 FF` is never taken as the answer to another request. Tests use the real multi-ECU `19 02 xx` transcripts and the Patrol `0902` case.
+
+**Unverified in v3.46.0:** replay-tested only, nothing has run on a live car from this build. DID meanings and scaling are unknown. The late-answer-after-prompt case is a synthetic test, because the log has no example of it. Two lengths are unknown: 1143 and 120B. Not every adapter supports `STCAF1`/`STFAC`/`ATFCSM0` (an unknown command answers `?` and is ignored). The F190/F18C NRCs come from the Data Logger's report and are not in the committed fixtures.
+
+## v3.45.0 — ELM/OBDLink live-data fixes from a real Patrol log
 
 ## v3.45.0 changes (2026-10-20)
 Source: Jack's Car Scanner + OBDLink MX+ log from his 2007 Nissan Patrol GU ZD30CRD (CAN 11-bit 500k), via the Data Logger agent. Only redacted adapter frames are committed (`reference/fixtures/elm_patrol_zd30_obdlink.txt`).
@@ -37,7 +49,7 @@ Source: Jack's Car Scanner + OBDLink MX+ log from his 2007 Nissan Patrol GU ZD30
 | Catalog of 14+ ECU families | Identify / report-only / structured map hints (unverified). No live write. |
 | CSV log import/export/replay, bench scripts, DTC explain | Fully operational |
 | ELM/OBDLink Mode 01 live data + logging | Parser, support masks, timing fixed; tested on replayed real Patrol frames. Not run on a live car from this build. |
-| Nissan CAN read-only scan | Implemented from observed frames; ID meanings unknown. |
+| Nissan CAN read-only scan + raw DID logging | Implemented from observed frames (3-DID reads, single fallback); ID meanings unknown. |
 | Hardware (ELM / J2534 / STN) | Code paths exist; not bench-tested on this tree. |
 
 ## Current operational status

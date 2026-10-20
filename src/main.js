@@ -2208,7 +2208,7 @@ function setupAll() {
   pollHealth();
   if (healthTimer) clearInterval(healthTimer);
   healthTimer = setInterval(pollHealth, 2500);
-  console.log('TuneItVerse UI v3.45.0');
+  console.log('TuneItVerse UI v3.46.0');
 }
 
 setupNav();
