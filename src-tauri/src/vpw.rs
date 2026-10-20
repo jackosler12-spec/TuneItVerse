@@ -160,12 +160,19 @@ pub fn vpw_checksum(data: &[u8]) -> u8 {
     data.iter().fold(0u8, |acc, &b| acc.wrapping_add(b))
 }
 
+/// Accepts the SAE J1850 CRC-8 that real VPW frames carry (verified on the
+/// Chevrolet frames in reference/fixtures, e.g. 486B104100BFBFF990 -> B5) and,
+/// for compatibility with the existing builders/tests, the additive byte.
+/// NOTE: `vpw_checksum` (additive) is what the TX builders append; real J1850
+/// uses CRC-8, so raw-VPW TX framing is unverified (ELM/STN adapters add the
+/// CRC themselves and are unaffected).
 pub fn validate_frame(frame: &[u8]) -> bool {
     if frame.len() < 2 {
         return false;
     }
     let payload = &frame[..frame.len() - 1];
-    vpw_checksum(payload) == frame[frame.len() - 1]
+    let check = frame[frame.len() - 1];
+    vpw_checksum(payload) == check || crate::elm_parse::j1850_crc8(payload) == check
 }
 
 // ── Response parsers ────────────────────────────────────
@@ -373,5 +380,18 @@ mod tests {
         assert_eq!(parse_hs_response(&enter), HsResponse::EnterOk);
         let neg = vec![0x8C, 0xF0, 0x10, 0x7F, 0xA0, 0x11];
         assert_eq!(parse_hs_response(&neg), HsResponse::Negative);
+    }
+}
+
+#[cfg(test)]
+mod j1850_crc_tests {
+    use super::*;
+    #[test]
+    fn real_vpw_frame_with_crc_parses() {
+        // Real reply 486B10 41 05 7B + CRC 06 (ECT 83 C).
+        let f = [0x48, 0x6B, 0x10, 0x41, 0x05, 0x7B, 0x06];
+        assert!(validate_frame(&f));
+        assert_eq!(parse_mode01_response(&f, 0x05), Some(vec![0x7B]));
+        assert!(!validate_frame(&[0x48, 0x6B, 0x10, 0x41, 0x05, 0x7B, 0x07]));
     }
 }
