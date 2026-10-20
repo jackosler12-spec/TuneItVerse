@@ -34,7 +34,9 @@ python3 python/ecu_scripting.py dtc P0087
 
 Scripts page runs the same ideas against the loaded BIN (`identify`, `checksum`, `correct`, `compare`, `seedkey`, `poke`, `tables`, `maplog`, `hex`, `profile`, `report`). No eval, no shell. Scripts → Self-check runs the offline operational check. Maps → Import definition pack loads hint JSON and cannot enable write.
 
-Data Logging can import a CSV, replay it, and build a clamped STFT/LTFT multiplier preview. Compare lists changed ranges against the working BIN. Neither path writes a calibration.
+Live data over ELM327/OBDLink reads the ECU's Mode 01 support masks first and polls only the PIDs it lists (incl. SAE 0x23 rail pressure); replies are parsed per line with the CAN/J1850 header stripped. A read-only Nissan CAN scan (ATSH7E0, 10C0, 22xxxx support masks, 1081) lists supported IDs with unknown meanings. These paths are tested against replayed real OBDLink MX+ frames from a 2007 Patrol ZD30CRD (`reference/fixtures/`), not against a live car from this build.
+
+Data Logging can import a CSV (including Car Scanner's long `SECONDS;PID;VALUE` export; GPS columns are dropped), replay it, and build a clamped STFT/LTFT multiplier preview. Compare lists changed ranges against the working BIN. Neither path writes a calibration.
 
 ## Current status (v3.44.0)
 
