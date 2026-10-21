@@ -115,7 +115,9 @@ pub fn parse_table_definitions(xml: &str) -> Vec<TableDef> {
         for (i, t) in root.table_data.into_iter().enumerate() {
             let rows = t.rows.parse::<usize>().unwrap_or(1);
             let cols = t.cols.parse::<usize>().unwrap_or(1);
-            let addr = if t.address.trim().is_empty() { format!("0x{:08X}", 0x8000 + i*0x100) } else { normalize_addr(&t.address) };
+            // No address in the definition -> skip; never invent one.
+            if t.address.trim().is_empty() { continue; }
+            let addr = normalize_addr(&t.address);
             out.push(TableDef {
                 id: sanitize_id(&t.name, i),
                 name: if t.name.is_empty() { format!("Table_{}", i) } else { t.name },
@@ -278,11 +280,12 @@ pub fn extract_table(bin: &[u8], def: &TableDef) -> ExtractedTable {
         return ExtractedTable { id: def.id.clone(), values, axes_x: vec![], axes_y: vec![], note };
     }
 
-    let mut idx = off;
+    if let Err(e) = eval_math(&def.math, 0.0) {
+        note = Some(format!("{}; raw values shown", e));
+    }
     for r in 0..rows {
         for c in 0..cols {
-            let raw = read_cell(bin, idx, width, signed, def.msb);
-            idx += width;
+            let raw = read_cell(bin, off + cell_index(def, r, c, rows, cols) * width, width, signed, def.msb);
             values[r][c] = apply_math(raw, &def.math);
         }
     }
@@ -298,17 +301,19 @@ pub fn extract_table(bin: &[u8], def: &TableDef) -> ExtractedTable {
 
 /// Patch new physical values back into a copy of the BIN at the exact address.
 /// Returns the patched bytes (caller can then correct checksums).
+/// Fail-closed: returns the BIN unchanged when the offset, size or math is not writable.
 pub fn patch_table(mut bin: Vec<u8>, def: &TableDef, new_values: &[Vec<f64>]) -> Vec<u8> {
-    let Ok(mut off) = resolve_table_offset(def, bin.len()) else { return bin };
+    let Ok(off) = resolve_table_offset(def, bin.len()) else { return bin };
+    if linear_coeffs(&def.math).is_err() { return bin; }
     let width = cell_width(&def.data_type);
-    let cells: usize = new_values.iter().map(|r| r.len()).sum();
-    if off + cells * width > bin.len() { return bin; }
-
-    for row in new_values {
-        for phys in row {
-            let raw = inverse_math(*phys, &def.math);
-            write_cell(&mut bin, off, width, raw, def.msb);
-            off += width;
+    let rows = new_values.len();
+    let cols = new_values.first().map(|r| r.len()).unwrap_or(0);
+    if new_values.iter().any(|r| r.len() != cols) { return bin; }
+    if off + rows * cols * width > bin.len() { return bin; }
+    for (r, row) in new_values.iter().enumerate() {
+        for (c, phys) in row.iter().enumerate() {
+            let Ok(raw) = inverse_math(*phys, &def.math) else { return bin };
+            write_cell(&mut bin, off + cell_index(def, r, c, rows, cols) * width, width, raw, def.msb);
         }
     }
     bin
@@ -342,54 +347,317 @@ fn parse_addr_strict(a: &str) -> Option<usize> {
     usize::from_str_radix(t, 16).ok()
 }
 
-fn apply_math(raw: f64, expr: &str) -> f64 {
-    let e = expr.trim().replace('x', "X");
-    if e == "X" || e.is_empty() { return raw; }
-    if let Some(k) = e.strip_prefix("X*") { if let Ok(f) = k.parse::<f64>() { return raw * f; } }
-    if let Some(k) = e.strip_prefix("X/") { if let Ok(f) = k.parse::<f64>() { return raw / f; } }
-    if let Some(k) = e.strip_prefix("X+") { if let Ok(f) = k.parse::<f64>() { return raw + f; } }
-    if let Some(k) = e.strip_prefix("X-") { if let Ok(f) = k.parse::<f64>() { return raw - f; } }
-    if e.contains("(X-") && e.contains(")/") {
-        if let Some(rest) = e.strip_prefix("(X-") {
-            if let Some(end) = rest.find(")/") {
-                let c = rest[..end].parse::<f64>().unwrap_or(0.0);
-                if let Ok(s) = rest[end+2..].parse::<f64>() { return (raw - c) / s; }
+// ---------- Scaling math ----------
+// XDF / TableSeek / A2L-style equations in X: numbers, X, + - * /, parentheses, unary minus.
+// Patching needs the inverse, so only linear equations (a*X + b, a != 0) can be written back;
+// anything else is extract-only and patch is refused (never write physical values as raw).
+
+struct MathParser<'a> { s: &'a [u8], i: usize, x: f64 }
+
+impl<'a> MathParser<'a> {
+    fn ws(&mut self) { while self.i < self.s.len() && self.s[self.i].is_ascii_whitespace() { self.i += 1; } }
+    fn peek(&mut self) -> Option<u8> { self.ws(); self.s.get(self.i).copied() }
+    fn expr(&mut self) -> Result<f64, String> {
+        let mut v = self.term()?;
+        while let Some(c) = self.peek() {
+            match c { b'+' => { self.i += 1; v += self.term()?; } b'-' => { self.i += 1; v -= self.term()?; } _ => break }
+        }
+        Ok(v)
+    }
+    fn term(&mut self) -> Result<f64, String> {
+        let mut v = self.factor()?;
+        while let Some(c) = self.peek() {
+            match c {
+                b'*' => { self.i += 1; v *= self.factor()?; }
+                b'/' => { self.i += 1; let d = self.factor()?; if d == 0.0 { return Err("division by zero".into()); } v /= d; }
+                _ => break,
             }
         }
+        Ok(v)
     }
-    if e.contains("(X+") && e.contains(")/") {
-        if let Some(rest) = e.strip_prefix("(X+") {
-            if let Some(end) = rest.find(")/") {
-                let c = rest[..end].parse::<f64>().unwrap_or(0.0);
-                if let Ok(s) = rest[end+2..].parse::<f64>() { return (raw + c) / s; }
+    fn factor(&mut self) -> Result<f64, String> {
+        match self.peek() {
+            Some(b'-') => { self.i += 1; Ok(-self.factor()?) }
+            Some(b'+') => { self.i += 1; self.factor() }
+            Some(b'(') => {
+                self.i += 1;
+                let v = self.expr()?;
+                if self.peek() != Some(b')') { return Err("missing ')'".into()); }
+                self.i += 1;
+                Ok(v)
             }
+            Some(b'X') | Some(b'x') => { self.i += 1; Ok(self.x) }
+            Some(c) if c.is_ascii_digit() || c == b'.' => {
+                let st = self.i;
+                while self.i < self.s.len() && (self.s[self.i].is_ascii_digit() || self.s[self.i] == b'.') { self.i += 1; }
+                if self.i < self.s.len() && (self.s[self.i] == b'e' || self.s[self.i] == b'E') {
+                    let save = self.i;
+                    self.i += 1;
+                    if self.i < self.s.len() && (self.s[self.i] == b'+' || self.s[self.i] == b'-') { self.i += 1; }
+                    let ds = self.i;
+                    while self.i < self.s.len() && self.s[self.i].is_ascii_digit() { self.i += 1; }
+                    if ds == self.i { self.i = save; }
+                }
+                std::str::from_utf8(&self.s[st..self.i]).ok().and_then(|t| t.parse::<f64>().ok())
+                    .ok_or_else(|| "bad number".to_string())
+            }
+            Some(c) => Err(format!("unsupported token '{}'", c as char)),
+            None => Err("unexpected end".into()),
         }
     }
-    raw
 }
 
-fn inverse_math(phys: f64, expr: &str) -> f64 {
-    let e = expr.trim().replace('x', "X");
-    if e == "X" || e.is_empty() { return phys; }
-    if let Some(k) = e.strip_prefix("X*") { if let Ok(f) = k.parse::<f64>() { return if f != 0.0 { phys / f } else { phys }; } }
-    if let Some(k) = e.strip_prefix("X/") { if let Ok(f) = k.parse::<f64>() { return phys * f; } }
-    if let Some(k) = e.strip_prefix("X+") { if let Ok(f) = k.parse::<f64>() { return phys - f; } }
-    if let Some(k) = e.strip_prefix("X-") { if let Ok(f) = k.parse::<f64>() { return phys + f; } }
-    if e.contains("(X-") && e.contains(")/") {
-        if let Some(rest) = e.strip_prefix("(X-") {
-            if let Some(end) = rest.find(")/") {
-                let c = rest[..end].parse::<f64>().unwrap_or(0.0);
-                if let Ok(s) = rest[end+2..].parse::<f64>() { return (phys * s) + c; }
-            }
+/// Evaluate a scaling equation at `x`. Errors on anything outside the supported grammar.
+pub fn eval_math(expr: &str, x: f64) -> Result<f64, String> {
+    let e = expr.trim();
+    if e.is_empty() { return Ok(x); }
+    let mut p = MathParser { s: e.as_bytes(), i: 0, x };
+    let v = p.expr().map_err(|m| format!("math '{}': {}", e, m))?;
+    if p.peek().is_some() { return Err(format!("math '{}': trailing input", e)); }
+    if !v.is_finite() { return Err(format!("math '{}': not finite", e)); }
+    Ok(v)
+}
+
+/// (a, b) for a linear equation a*X + b with a != 0, else an error (patch refused).
+pub fn linear_coeffs(expr: &str) -> Result<(f64, f64), String> {
+    let b = eval_math(expr, 0.0)?;
+    // Wide span keeps the slope accurate when the offset is large.
+    let a = (eval_math(expr, 65536.0)? - b) / 65536.0;
+    if a == 0.0 { return Err(format!("math '{}' is constant; cannot invert", expr.trim())); }
+    for t in [2.0, 7.0, 255.0, 1000.0, 65535.0, -3.0] {
+        let f = eval_math(expr, t)?;
+        let lin = a * t + b;
+        if (f - lin).abs() > 1e-9 * f.abs().max(lin.abs()).max(1.0) {
+            return Err(format!("math '{}' is not linear in X; extract-only, patch refused", expr.trim()));
         }
     }
-    phys
+    Ok((a, b))
+}
+
+fn apply_math(raw: f64, expr: &str) -> f64 {
+    eval_math(expr, raw).unwrap_or(raw)
+}
+
+fn inverse_math(phys: f64, expr: &str) -> Result<f64, String> {
+    let (a, b) = linear_coeffs(expr)?;
+    Ok((phys - b) / a)
+}
+
+/// Byte offset of cell (r, c) relative to the table start.
+fn cell_index(def: &TableDef, r: usize, c: usize, rows: usize, cols: usize) -> usize {
+    if def.row_major || rows == 1 || cols == 1 { r * cols + c } else { c * rows + r }
+}
+
+
+// ---------- TunerPro XDF (text XML, v1.x) ----------
+// Element/attribute meanings follow TunerPro's XDF editor help
+// (tunerpro.net/WebHelp/source/xdftableeditor.htm: Signed, LSB First) and RomRaider's
+// XDF importer (github.com/RomRaider/RomRaider @dafe0c3,
+// src/main/java/com/romraider/xml/ConversionLayer/XDFConversionLayer.java):
+//   mmedtypeflags 0x01 signed, 0x02 LSB first, 0x04 column-major (RomRaider "swapxy"),
+//   0x10000 IEEE float; CATEGORYMEM category is 1-based into header CATEGORY index;
+//   BASEOFFSET offset is subtracted when subtract != 0.
+// Unsupported layouts (float, strides, missing address) are skipped and reported, never guessed.
+
+#[derive(Default, Clone)]
+struct XdfAxis { addr: Option<String>, bits: Option<u32>, rows: Option<usize>, cols: Option<usize>, flags: Option<u32>,
+    major: Option<u32>, minor: Option<u32>, units: String, math: Option<String>, decimals: Option<u8>,
+    index_count: Option<usize>, labels: Vec<String> }
+
+#[derive(Default)]
+struct XdfItem { constant: bool, title: String, description: String, cats: Vec<usize>, axes: std::collections::HashMap<String, XdfAxis>,
+    own: XdfAxis }
+
+fn parse_num(v: &str) -> Option<i64> {
+    let t = v.trim();
+    if let Some(h) = t.strip_prefix("0x").or_else(|| t.strip_prefix("0X")) { i64::from_str_radix(h, 16).ok() } else { t.parse::<i64>().ok() }
+}
+
+/// Parsed TunerPro XDF: supported tables plus "title: reason" for each skipped item.
+pub struct XdfParse { pub tables: Vec<TableDef>, pub skipped: Vec<String> }
+
+pub fn parse_tunerpro_xdf(xml: &str) -> Result<XdfParse, String> {
+    use quick_xml::events::Event;
+    use quick_xml::Reader;
+    let mut rd = Reader::from_str(xml);
+    rd.trim_text(true);
+    let mut base: i64 = 0;
+    let mut def_bits: u32 = 8;
+    let mut def_signed = false;
+    let mut def_lsb = false;
+    let mut categories: std::collections::HashMap<usize, String> = Default::default();
+    let mut items: Vec<XdfItem> = Vec::new();
+    let mut cur: Option<XdfItem> = None;
+    let mut axis_id: Option<String> = None;
+    let mut text_tag = String::new();
+    let attr = |e: &quick_xml::events::BytesStart, k: &str| -> Option<String> {
+        e.attributes().flatten().find(|a| a.key.as_ref().eq_ignore_ascii_case(k.as_bytes()))
+            .and_then(|a| a.unescape_value().ok().map(|v| v.into_owned()))
+    };
+    loop {
+        let ev = rd.read_event().map_err(|e| format!("XDF XML error at byte {}: {}", rd.buffer_position(), e))?;
+        match ev {
+            Event::Eof => break,
+            Event::Start(ref e) | Event::Empty(ref e) => {
+                let is_empty = matches!(ev, Event::Empty(_));
+                let name = String::from_utf8_lossy(e.name().as_ref()).to_ascii_uppercase();
+                match name.as_str() {
+                    "BASEOFFSET" => {
+                        let off = attr(e, "offset").and_then(|v| parse_num(&v)).unwrap_or(0);
+                        let sub = attr(e, "subtract").map(|v| v.trim() != "0").unwrap_or(false);
+                        base = if sub { -off } else { off };
+                    }
+                    "DEFAULTS" => {
+                        def_bits = attr(e, "datasizeinbits").and_then(|v| parse_num(&v)).unwrap_or(8) as u32;
+                        def_signed = attr(e, "signed").map(|v| v.trim() != "0").unwrap_or(false);
+                        def_lsb = attr(e, "lsbfirst").map(|v| v.trim() != "0").unwrap_or(false);
+                    }
+                    "CATEGORY" if cur.is_none() => {
+                        if let (Some(i), Some(n)) = (attr(e, "index").and_then(|v| parse_num(&v)), attr(e, "name")) {
+                            categories.insert(i as usize, n);
+                        }
+                    }
+                    "XDFTABLE" | "XDFCONSTANT" if !is_empty => {
+                        cur = Some(XdfItem { constant: name == "XDFCONSTANT", ..Default::default() });
+                    }
+                    "XDFAXIS" if cur.is_some() && !is_empty => { axis_id = attr(e, "id").map(|v| v.to_ascii_lowercase()); }
+                    "CATEGORYMEM" => {
+                        if let (Some(it), Some(c)) = (cur.as_mut(), attr(e, "category").and_then(|v| parse_num(&v))) {
+                            if c >= 1 { it.cats.push(c as usize - 1); }
+                        }
+                    }
+                    "EMBEDDEDDATA" | "MATH" | "LABEL" => {
+                        if let Some(it) = cur.as_mut() {
+                            let ax = match axis_id.as_deref() {
+                                Some(id) => it.axes.entry(id.to_string()).or_default(),
+                                None => &mut it.own,
+                            };
+                            match name.as_str() {
+                                "EMBEDDEDDATA" => {
+                                    ax.addr = attr(e, "mmedaddress");
+                                    ax.bits = attr(e, "mmedelementsizebits").and_then(|v| parse_num(&v)).map(|v| v as u32);
+                                    ax.rows = attr(e, "mmedrowcount").and_then(|v| parse_num(&v)).map(|v| v as usize);
+                                    ax.cols = attr(e, "mmedcolcount").and_then(|v| parse_num(&v)).map(|v| v as usize);
+                                    ax.flags = attr(e, "mmedtypeflags").and_then(|v| parse_num(&v)).map(|v| v as u32);
+                                    ax.major = attr(e, "mmedmajorstridebits").and_then(|v| parse_num(&v)).map(|v| v as u32);
+                                    ax.minor = attr(e, "mmedminorstridebits").and_then(|v| parse_num(&v)).map(|v| v as u32);
+                                }
+                                "MATH" => { ax.math = attr(e, "equation"); }
+                                _ => { if let Some(v) = attr(e, "value") { ax.labels.push(v); } }
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+                if !is_empty { text_tag = name; }
+            }
+            Event::Text(t) => {
+                let v = t.unescape().map(|c| c.into_owned()).unwrap_or_default();
+                if let Some(it) = cur.as_mut() {
+                    let ax = match axis_id.as_deref() {
+                        Some(id) => Some(it.axes.entry(id.to_string()).or_default()),
+                        None => None,
+                    };
+                    match (text_tag.as_str(), ax) {
+                        ("TITLE", None) => it.title = v,
+                        ("DESCRIPTION", None) => it.description = v,
+                        ("UNITS", Some(a)) => a.units = v,
+                        ("UNITS", None) => it.own.units = v,
+                        ("DECIMALPL", Some(a)) => a.decimals = v.trim().parse().ok(),
+                        ("DECIMALPL", None) => it.own.decimals = v.trim().parse().ok(),
+                        ("INDEXCOUNT", Some(a)) => a.index_count = v.trim().parse().ok(),
+                        _ => {}
+                    }
+                }
+            }
+            Event::End(ref e) => {
+                let name = String::from_utf8_lossy(e.name().as_ref()).to_ascii_uppercase();
+                match name.as_str() {
+                    "XDFAXIS" => axis_id = None,
+                    "XDFTABLE" | "XDFCONSTANT" => { if let Some(it) = cur.take() { items.push(it); } }
+                    _ => {}
+                }
+                text_tag.clear();
+            }
+            _ => {}
+        }
+    }
+    let mut tables = Vec::new();
+    let mut skipped = Vec::new();
+    for (i, it) in items.into_iter().enumerate() {
+        let title = if it.title.trim().is_empty() { format!("XDF item {}", i) } else { it.title.trim().to_string() };
+        let z = if it.constant { it.own.clone() } else { it.axes.get("z").cloned().unwrap_or_default() };
+        let skip = |why: &str| format!("{}: {}", title, why);
+        let Some(addr_raw) = z.addr.as_deref().and_then(parse_num) else { skipped.push(skip("no data address")); continue };
+        let flags = z.flags.unwrap_or(0);
+        if flags & 0x10000 != 0 { skipped.push(skip("floating-point cells are not supported")); continue; }
+        let bits = z.bits.unwrap_or(def_bits);
+        let dtype = match (bits, flags & 0x01 != 0 || (z.flags.is_none() && def_signed)) {
+            (8, false) => "UBYTE", (8, true) => "SBYTE", (16, false) => "UWORD", (16, true) => "SWORD",
+            (32, false) => "ULONG", (32, true) => "SLONG",
+            _ => { skipped.push(skip(&format!("{}-bit cells are not supported", bits))); continue; }
+        };
+        let (rows, cols) = if it.constant { (1, 1) } else { (z.rows.unwrap_or(1).max(1), z.cols.unwrap_or(1).max(1)) };
+        let major = z.major.unwrap_or(0);
+        if (major != 0 && major != bits && rows * cols > 1) || z.minor.unwrap_or(0) != 0 {
+            skipped.push(skip("non-contiguous stride layout is not supported")); continue;
+        }
+        let addr = addr_raw + base;
+        if addr < 0 { skipped.push(skip("address below base offset")); continue; }
+        let math = z.math.clone().unwrap_or_else(|| "X".into());
+        if let Err(e) = eval_math(&math, 0.0) { skipped.push(skip(&e)); continue; }
+        let lsb = if z.flags.is_some() { flags & 0x02 != 0 } else { def_lsb };
+        let column_major = flags & 0x04 != 0;
+        let headers = |id: &str, n: usize| -> Option<String> {
+            it.axes.get(id).filter(|a| a.labels.len() == n && n > 1).map(|a| a.labels.join(","))
+        };
+        let category = it.cats.first().and_then(|c| categories.get(c).cloned());
+        tables.push(TableDef {
+            id: sanitize_id(&title, i),
+            name: title.clone(),
+            category,
+            description: it.description.trim().to_string(),
+            rows,
+            cols,
+            addr: format!("0x{:X}", addr),
+            data_type: dtype.into(),
+            math,
+            units: z.units.clone(),
+            row_major: !column_major,
+            msb: !lsb,
+            row_headers: headers("y", rows),
+            col_headers: headers("x", cols),
+            decimals: z.decimals.unwrap_or(2),
+            file_offset: true,
+            ..Default::default()
+        });
+    }
+    Ok(XdfParse { tables, skipped })
+}
+
+/// Parse report for the UI: tables plus the items that were skipped and why.
+#[tauri::command]
+pub fn parse_xdf_report(xml: String) -> Result<String, String> {
+    check_xdf_text(&xml)?;
+    if !xml.to_ascii_uppercase().contains("<XDFFORMAT") {
+        let t = parse_table_definitions(&xml);
+        return Ok(serde_json::json!({"format": "tabledata/tableseek", "tables": t.len(), "skipped": []}).to_string());
+    }
+    let r = parse_tunerpro_xdf(&xml)?;
+    Ok(serde_json::json!({"format": "tunerpro-xdf", "tables": r.tables.len(), "skipped": r.skipped}).to_string())
 }
 
 // Tauri command wrappers (registered in lib.rs)
 #[tauri::command]
 pub fn parse_xdf_definitions(xml: String) -> Result<Vec<TableDef>, String> {
     check_xdf_text(&xml)?;
+    if xml.to_ascii_uppercase().contains("<XDFFORMAT") {
+        let r = parse_tunerpro_xdf(&xml)?;
+        if r.tables.is_empty() {
+            return Err(format!("TunerPro XDF parsed but no supported tables ({} skipped: {}).", r.skipped.len(), r.skipped.iter().take(5).cloned().collect::<Vec<_>>().join("; ")));
+        }
+        return Ok(r.tables);
+    }
     let t = parse_table_definitions(&xml);
     if t.is_empty() { return Err("XDF parsed but contains no <XDFTABLE>/<XDFCONSTANT> definitions.".into()); }
     Ok(t)
@@ -411,11 +679,17 @@ pub fn extract_table_from_bin(bin_bytes: Vec<u8>, table: TableDef) -> Result<Ext
 
 #[tauri::command]
 pub fn patch_table_into_bin(req: PatchRequest) -> Result<PatchResult, String> {
-    let addr = parse_addr(&req.table.addr);
     let off = resolve_table_offset(&req.table, req.bin_bytes.len()).map_err(|e| format!("Refuse patch: {}", e))?;
+    linear_coeffs(&req.table.math).map_err(|e| format!("Refuse patch: {}", e))?;
     let esz = cell_width(&req.table.data_type);
     let rows = req.new_values.len();
     let cols = req.new_values.first().map(|r| r.len()).unwrap_or(0);
+    if req.new_values.iter().any(|r| r.len() != cols) {
+        return Err("Refuse patch: ragged value grid".into());
+    }
+    if rows * cols != req.table.rows.max(1) * req.table.cols.max(1) {
+        return Err(format!("Refuse patch: {}x{} values for a {}x{} table", rows, cols, req.table.rows, req.table.cols));
+    }
     let need = off + rows * cols * esz;
     if need > req.bin_bytes.len() {
         return Err(format!(
@@ -576,5 +850,181 @@ mod xdf_text_tests {
         let e = parse_xdf_definitions(String::from_utf8_lossy(&b).into_owned()).unwrap_err();
         assert!(e.contains("not text XML"));
         assert!(parse_xdf_definitions("<XDFFORMAT></XDFFORMAT>".into()).is_err());
+    }
+}
+
+#[cfg(test)]
+mod tunerpro_xdf_tests {
+    use super::*;
+
+    // Synthetic text XDF written for these tests (no real calibration data).
+    const XDF: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+<!-- Written by TunerPro Version 5.00 -->
+<XDFFORMAT version="1.60">
+  <XDFHEADER>
+    <flags>0x1</flags>
+    <deftitle>synthetic</deftitle>
+    <description>test only</description>
+    <BASEOFFSET offset="0x10" subtract="1" />
+    <DEFAULTS datasizeinbits="8" sigdigits="2" outputtype="1" signed="0" lsbfirst="0" float="0" />
+    <REGION type="0xFFFFFFFF" startaddress="0x0" size="0x100" regionflags="0x0" name="Binary" desc="" />
+    <CATEGORY index="0x0" name="Fuel" />
+    <CATEGORY index="0x1" name="Spark" />
+  </XDFHEADER>
+  <XDFTABLE uniqueid="0x1" flags="0x0">
+    <title>Main Spark</title>
+    <description>row-major big-endian words</description>
+    <CATEGORYMEM index="0" category="2" />
+    <XDFAXIS id="x" uniqueid="0x0">
+      <indexcount>3</indexcount>
+      <LABEL index="0" value="800" /><LABEL index="1" value="1600" /><LABEL index="2" value="2400" />
+      <MATH equation="X"><VAR id="X" /></MATH>
+    </XDFAXIS>
+    <XDFAXIS id="y" uniqueid="0x0">
+      <indexcount>2</indexcount>
+      <LABEL index="0" value="20" /><LABEL index="1" value="100" />
+      <MATH equation="X"><VAR id="X" /></MATH>
+    </XDFAXIS>
+    <XDFAXIS id="z">
+      <EMBEDDEDDATA mmedtypeflags="0x00" mmedaddress="0x30" mmedelementsizebits="16" mmedrowcount="2" mmedcolcount="3" mmedmajorstridebits="16" mmedminorstridebits="0" />
+      <units>deg</units>
+      <decimalpl>1</decimalpl>
+      <MATH equation="X*0.1"><VAR id="X" /></MATH>
+    </XDFAXIS>
+  </XDFTABLE>
+  <XDFTABLE uniqueid="0x2" flags="0x0">
+    <title>Col Major Signed LE</title>
+    <XDFAXIS id="z">
+      <EMBEDDEDDATA mmedtypeflags="0x07" mmedaddress="0x50" mmedelementsizebits="16" mmedrowcount="2" mmedcolcount="2" mmedmajorstridebits="0" mmedminorstridebits="0" />
+      <MATH equation="(X+40)/2"><VAR id="X" /></MATH>
+    </XDFAXIS>
+  </XDFTABLE>
+  <XDFCONSTANT uniqueid="0x3">
+    <title>Idle Target &amp; Offset</title>
+    <CATEGORYMEM index="0" category="1" />
+    <EMBEDDEDDATA mmedaddress="0x70" mmedelementsizebits="8" />
+    <units>rpm</units>
+    <MATH equation="X*12.5-100"><VAR id="X" /></MATH>
+  </XDFCONSTANT>
+  <XDFTABLE uniqueid="0x4"><title>Float Table</title>
+    <XDFAXIS id="z"><EMBEDDEDDATA mmedtypeflags="0x10000" mmedaddress="0x80" mmedelementsizebits="32" mmedrowcount="1" mmedcolcount="1" /></XDFAXIS>
+  </XDFTABLE>
+  <XDFTABLE uniqueid="0x5"><title>No Address</title>
+    <XDFAXIS id="z"><units>x</units></XDFAXIS>
+  </XDFTABLE>
+  <XDFTABLE uniqueid="0x6"><title>Strided</title>
+    <XDFAXIS id="z"><EMBEDDEDDATA mmedaddress="0x90" mmedelementsizebits="8" mmedrowcount="2" mmedcolcount="2" mmedmajorstridebits="16" /></XDFAXIS>
+  </XDFTABLE>
+  <XDFCONSTANT uniqueid="0x7"><title>Nonlinear</title>
+    <EMBEDDEDDATA mmedaddress="0xA0" mmedelementsizebits="8" />
+    <MATH equation="X*X"><VAR id="X" /></MATH>
+  </XDFCONSTANT>
+</XDFFORMAT>"#;
+
+    fn by_name<'a>(t: &'a [TableDef], n: &str) -> &'a TableDef {
+        t.iter().find(|d| d.name == n).unwrap_or_else(|| panic!("{} missing", n))
+    }
+
+    #[test]
+    fn math_evaluator() {
+        assert_eq!(eval_math("X", 5.0).unwrap(), 5.0);
+        assert_eq!(eval_math("", 5.0).unwrap(), 5.0);
+        assert!((eval_math("X*0.1-40", 500.0).unwrap() - 10.0).abs() < 1e-9);
+        assert!((eval_math("(X+40)/2", 10.0).unwrap() - 25.0).abs() < 1e-9);
+        assert!((eval_math("-x/4 + 1.5e1", 8.0).unwrap() - 13.0).abs() < 1e-9);
+        assert!(eval_math("X^2", 1.0).is_err());
+        assert!(eval_math("X/0", 1.0).is_err());
+        assert!(eval_math("sin(X)", 1.0).is_err());
+        let (a, b) = linear_coeffs("X*0.1-40").unwrap();
+        assert!((a - 0.1).abs() < 1e-12 && (b + 40.0).abs() < 1e-12, "{} {}", a, b);
+        assert!(linear_coeffs("X*X").unwrap_err().contains("not linear"));
+        assert!(linear_coeffs("5").is_err());
+        assert!((inverse_math(25.0, "(X+40)/2").unwrap() - 10.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn parses_tables_constants_and_reports_skips() {
+        let r = parse_tunerpro_xdf(XDF).unwrap();
+        assert_eq!(r.tables.len(), 4, "{:?}", r.skipped);
+        let s = by_name(&r.tables, "Main Spark");
+        assert_eq!((s.rows, s.cols), (2, 3));
+        assert_eq!(s.addr, "0x20", "0x30 minus BASEOFFSET 0x10 (subtract=1)");
+        assert_eq!(s.data_type, "UWORD");
+        assert!(s.msb && s.row_major);
+        assert_eq!(s.category.as_deref(), Some("Spark"));
+        assert_eq!(s.col_headers.as_deref(), Some("800,1600,2400"));
+        assert_eq!(s.row_headers.as_deref(), Some("20,100"));
+        assert_eq!(s.decimals, 1);
+        let c = by_name(&r.tables, "Col Major Signed LE");
+        assert_eq!(c.data_type, "SWORD");
+        assert!(!c.msb && !c.row_major);
+        let k = by_name(&r.tables, "Idle Target & Offset");
+        assert_eq!((k.rows, k.cols, k.data_type.as_str(), k.units.as_str()), (1, 1, "UBYTE", "rpm"));
+        assert_eq!(k.category.as_deref(), Some("Fuel"));
+        let sk = r.skipped.join(" | ");
+        assert!(sk.contains("Float Table: floating-point"), "{}", sk);
+        assert!(sk.contains("No Address: no data address"), "{}", sk);
+        assert!(sk.contains("Strided: non-contiguous"), "{}", sk);
+        assert!(by_name(&r.tables, "Nonlinear").math == "X*X");
+        let via_cmd = parse_xdf_definitions(XDF.to_string()).unwrap();
+        assert_eq!(via_cmd.len(), 4);
+        let rep: serde_json::Value = serde_json::from_str(&parse_xdf_report(XDF.to_string()).unwrap()).unwrap();
+        assert_eq!(rep["format"], "tunerpro-xdf");
+        assert_eq!(rep["skipped"].as_array().unwrap().len(), 3);
+    }
+
+    #[test]
+    fn extract_patch_round_trip_row_and_column_major() {
+        let r = parse_tunerpro_xdf(XDF).unwrap();
+        let mut bin = vec![0u8; 0x100];
+        // Main Spark @0x20, BE words 10,20,30 / 40,50,60 -> x0.1
+        for (i, v) in [10u16, 20, 30, 40, 50, 60].iter().enumerate() {
+            bin[0x20 + 2 * i..0x22 + 2 * i].copy_from_slice(&v.to_be_bytes());
+        }
+        // Col-major LE signed @0x40: storage order (r0c0, r1c0, r0c1, r1c1) = -40, 0, 2, 4
+        for (i, v) in [-40i16, 0, 2, 4].iter().enumerate() {
+            bin[0x40 + 2 * i..0x42 + 2 * i].copy_from_slice(&v.to_le_bytes());
+        }
+        bin[0x60] = 10; // Idle: 10*12.5-100 = 25
+        let spark = by_name(&r.tables, "Main Spark");
+        let e = extract_table(&bin, spark);
+        assert_eq!(e.values, vec![vec![1.0, 2.0, 3.0], vec![4.0, 5.0, 6.0]]);
+        let cm = by_name(&r.tables, "Col Major Signed LE");
+        let e2 = extract_table(&bin, cm);
+        assert_eq!(e2.values, vec![vec![0.0, 21.0], vec![20.0, 22.0]]);
+        let idle = by_name(&r.tables, "Idle Target & Offset");
+        assert_eq!(extract_table(&bin, idle).values, vec![vec![25.0]]);
+
+        // Patch the column-major table and read the bytes back in storage order.
+        let out = patch_table_into_bin(PatchRequest { bin_bytes: bin.clone(), table: cm.clone(), new_values: vec![vec![1.0, 3.0], vec![2.0, 4.0]] }).unwrap();
+        let raw: Vec<i16> = (0..4).map(|i| i16::from_le_bytes([out.patched_bytes[0x40 + 2 * i], out.patched_bytes[0x41 + 2 * i]])).collect();
+        assert_eq!(raw, vec![-38, -36, -34, -32], "column-major storage, inverse of (X+40)/2");
+        assert_eq!(extract_table(&out.patched_bytes, cm).values, vec![vec![1.0, 3.0], vec![2.0, 4.0]]);
+        // Only those 8 bytes changed.
+        let changed = bin.iter().zip(&out.patched_bytes).filter(|(a, b)| a != b).count();
+        assert!(changed <= 8 && changed > 0);
+
+        let out2 = patch_table_into_bin(PatchRequest { bin_bytes: bin.clone(), table: spark.clone(), new_values: vec![vec![1.5, 2.0, 3.0], vec![4.0, 5.0, 6.0]] }).unwrap();
+        assert_eq!(&out2.patched_bytes[0x20..0x22], &15u16.to_be_bytes());
+    }
+
+    #[test]
+    fn nonlinear_or_wrong_shape_patch_is_refused() {
+        let r = parse_tunerpro_xdf(XDF).unwrap();
+        let bin = vec![0u8; 0x100];
+        let nl = by_name(&r.tables, "Nonlinear");
+        let e = patch_table_into_bin(PatchRequest { bin_bytes: bin.clone(), table: nl.clone(), new_values: vec![vec![4.0]] }).unwrap_err();
+        assert!(e.contains("not linear"), "{}", e);
+        assert_eq!(patch_table(bin.clone(), nl, &[vec![4.0]]), bin, "library patch is fail-closed too");
+        let spark = by_name(&r.tables, "Main Spark");
+        assert!(patch_table_into_bin(PatchRequest { bin_bytes: bin.clone(), table: spark.clone(), new_values: vec![vec![1.0]] }).unwrap_err().contains("values for a 2x3"));
+    }
+
+    #[test]
+    fn tabledata_without_address_is_skipped_not_invented() {
+        let xml = r#"<ArrayOfTableData><TableData><TableName>A</TableName><Address></Address></TableData><TableData><TableName>B</TableName><Address>0x10</Address></TableData></ArrayOfTableData>"#;
+        let t = parse_table_definitions(xml);
+        assert_eq!(t.len(), 1);
+        assert_eq!(t[0].name, "B");
     }
 }

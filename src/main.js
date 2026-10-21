@@ -1425,9 +1425,18 @@ async function loadBinFile() {
 }
 
 async function applyDefinitionText(text, source) {
-  let defs, list;
+  let defs, list, skippedNote = '';
   try {
     if (/BEGIN CHARACTERISTIC/i.test(text)) defs = await invokeCmd('parse_a2l_definitions', { text });
+    else if (/<XDFFORMAT/i.test(text)) {
+      const rep = parseMaybe(await invokeCmd('parse_xdf_report', { xml: text })) || {};
+      defs = rep.tables || [];
+      const sk = rep.skipped || [];
+      if (sk.length) {
+        skippedNote = ' Skipped ' + sk.length + ' unsupported item(s): ' + sk.slice(0, 5).join('; ') + (sk.length > 5 ? '…' : '');
+        console.warn('XDF skipped items', sk);
+      }
+    }
     else defs = await invokeCmd('parse_xdf_definitions', { xml: text });
   } catch (e) {
     setTablesStatus((source || 'Definition') + ': ' + e);
@@ -1435,13 +1444,13 @@ async function applyDefinitionText(text, source) {
   }
   list = Array.isArray(defs) ? defs : parseMaybe(defs);
   if (!list || !list.length) {
-    setTablesStatus((source || 'Definition') + ' parsed but no tables found');
+    setTablesStatus((source || 'Definition') + ' parsed but no tables found.' + skippedNote);
     return;
   }
   currentTables = list;
   rebuildCategoryChips();
   renderTableList();
-  setTablesStatus((source || 'Definitions') + ' loaded: ' + list.length + ' tables. Select one to extract from the BIN.');
+  setTablesStatus((source || 'Definitions') + ' loaded: ' + list.length + ' tables. Select one to extract from the BIN.' + skippedNote);
 }
 
 async function loadXdfFile() {
