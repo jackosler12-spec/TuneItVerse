@@ -82,7 +82,7 @@ These fix the issues that make guided flash dangerous or misleading.
 - Reference folder and ecu_database/ remain the source of truth for algorithms and maps.
 
 ## Success Criteria for v2.0 — ACHIEVED ✅
-- Can safely backup, unlock, flash, and verify a known-good P01 and EDC16C41 without relying on placeholders or Mode-22-as-bulk.
+- Can safely backup, unlock, flash, and verify a known-good P01 and EDC16C41 without relying on placeholders or Mode-22-as-bulk. **Correction (v3.47.0):** not achieved on hardware. The P01 write is experimental and not bench-tested; EDC16C41 write is off (checksum report-only).
 - Voltage is enforced. ✅
 - New ECUs can be added via structured DB entry + algorithm without core rewrite.
 - J2534 devices work when DLL present.
@@ -92,3 +92,5 @@ Build your own. No more bullshit prices.
 
 ---
 Updated 2026-08-09: Priority 0 fully landed. v2.0.0 declared production-ready for supported ECUs.
+
+Updated 2026-10-21 (v3.47.0): the "production-ready" claim above was premature. Nothing has been bench-tested. The in-app Capabilities page and COMPLETION.md are the current, sourced status.

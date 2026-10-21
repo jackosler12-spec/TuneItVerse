@@ -38,17 +38,34 @@ Live data over ELM327/OBDLink reads the ECU's Mode 01 support masks first and po
 
 Data Logging can import a CSV (including Car Scanner's long `SECONDS;PID;VALUE` export; GPS columns are dropped), replay it, and build a clamped STFT/LTFT multiplier preview. Compare lists changed ranges against the working BIN. Neither path writes a calibration.
 
-## Current status (v3.44.0)
+## Current status (v3.47.0)
 
-Honest summary — see [COMPLETION.md](COMPLETION.md) for the full log.
+This is the honest summary. [COMPLETION.md](COMPLETION.md) has the full log, and the in-app **Capabilities** page shows the per-family matrix with a source for every status.
 
-**Operational offline:** BIN/XDF (text)/A2L load and edit, table grid + 3D orbit view, undo/redo, copy/paste, interpolate/smooth, BIN compare, offline DTC explain, CSV log import/export/replay, bench scripts, P01 CS1 + CVN, GM 2-byte seed/key (algo tables). Binary/encrypted TunerPro XDFs get a clear error. Expanded ECU catalog with refined map hints for diesel/gas families.
+**Operational offline:**
+- BIN, text TunerPro XDF and A2L load and edit. The XDF reader supports BASEOFFSET, categories, signed / LSB-first / column-major cells and linear scaling math. Float, strided and non-linear items are skipped or refused and listed.
+- Table grid with 3D orbit view, undo/redo, copy/paste, interpolate/smooth, and diff highlight against the loaded and reference BIN.
+- BIN compare.
+- Recent files and an unsaved-changes guard.
+- Offline DTC explain.
+- CSV log import/export/replay.
+- Bench scripts.
+- P01 CS1/CS2 + CVN.
+- GM 2-byte seed/key (algorithm tables).
+- Binary or encrypted TunerPro XDFs get a clear error.
 
-**P01_0411 (OS 12225074):** FullImage backup protocol is implemented from the PcmHammer read log + Kernel-P01.bin (scripted fake-PCM tests green; STN link and hardware untested). Experimental kernel calibration write (erase+write+CRC) is behind a Flash checkbox and the typed phrase `WRITE CALIBRATION TO PCM` (OS 12225074 / Intel 28F400B only). Off by default. Protocol from public PcmHammer host source used as spec only. **Not bench-tested.**
+**P01_0411 (OS 12225074):**
+- The FullImage backup protocol is implemented from the PcmHammer read log + Kernel-P01.bin. Scripted fake-PCM tests pass; the STN link and hardware are untested.
+- The experimental kernel calibration write (erase+write+CRC) is off by default. It sits behind a Flash checkbox and the typed phrase `WRITE CALIBRATION TO PCM`, and is limited to OS 12225074 / Intel 28F400B.
+- The protocol comes from public PcmHammer host source, used as a spec only. **Not bench-tested.**
 
-**EDC16C41:** Identify + measured 4-byte seed/key. Checksum is **report-only** (RSA-like 136-byte signature block at 0x1FDF78 detected on 392203 images). No flash segment, no write.
+**GM P59 / P10 / P12:** identify only, from PcmHammer `PcmInfo.cs`: size, key-algorithm index, and a 2618-entry OS ID → PCM type map. The P01 checksum corrector refuses these images.
 
-**Everything else in the catalog:** identify / report-only / map hints. No live write. Hardware paths (ELM/J2534/STN) are not bench-tested on this tree.
+**EDC16C41:** Identify + measured 4-byte seed/key. Checksum is **report-only**: an RSA-like 136-byte signature block at 0x1FDF78 is detected on 392203 images. No flash segment, no write.
+
+**Everything else in the catalog:** identify / report-only / unverified map hints. No write. Hardware paths (ELM/J2534/STN) are not bench-tested on this tree.
+
+Tests: `cargo test --lib` from `src-tauri/`, and `npm test` (frontend consistency check). Set `TIV_P01_BIN=/path/to/your/p01.bin` to also run the private-dump checksum tests; the dump is never committed.
 
 Build your own. No bullshit prices.
 
