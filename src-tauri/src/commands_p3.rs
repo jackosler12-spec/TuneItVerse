@@ -167,6 +167,13 @@ pub fn run() {
             if let Ok(d) = app.path().app_data_dir() { crate::audit_log::set_dir(d); }
             Ok(())
         })
+        .on_window_event(|_window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                if !crate::file_dialog::confirm_close_with_unsaved() {
+                    api.prevent_close();
+                }
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             list_serial_ports, get_connection_health, connect_ecu, disconnect_ecu, auto_detect_protocol,
             st_identify, st_read_voltage, st_set_protocol, st_open_protocol, st_set_timeout,
@@ -185,7 +192,7 @@ pub fn run() {
             unlock_level1, unlock_level2, bosch_uds_unlock,
             scripting::list_script_helpers, scripting::run_bench_script,
             v29_tools::identify_bin_cmd, v29_tools::compare_bins_cmd, v29_tools::map_from_log_cmd, v29_tools::export_workspace_cmd, v29_tools::import_workspace_cmd, v29_tools::patch_bin_bytes_cmd,
-            file_dialog::dialog_open_file, file_dialog::dialog_save_bytes, file_dialog::dialog_save_text,
+            file_dialog::dialog_open_file, file_dialog::dialog_save_bytes, file_dialog::dialog_save_text, file_dialog::open_recent_file, file_dialog::set_unsaved_changes,
             cs_guard::scan_checksum_candidates_cmd,
             j2534_list::j2534_list_devices, j2534::j2534_connect, j2534::j2534_connect_vpw, j2534::j2534_disconnect,
             j2534::j2534_write, j2534::j2534_read, j2534::j2534_set_data_rate,
