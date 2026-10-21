@@ -50,7 +50,8 @@
       });
       const obj = parseMaybe(raw);
       if (obj && obj.mutated && Array.isArray(obj.bin) && window.currentBin) {
-        window.currentBin = new Uint8Array(obj.bin);
+        if (typeof window.setWorkingBin === 'function') window.setWorkingBin(new Uint8Array(obj.bin), 'Script changed the working BIN — Save BIN to keep it.');
+        else window.currentBin = new Uint8Array(obj.bin);
         if (typeof window.enableSave === 'function') window.enableSave(true);
       }
       if (out) out.textContent = typeof obj === 'string' ? obj : JSON.stringify(obj, null, 2);

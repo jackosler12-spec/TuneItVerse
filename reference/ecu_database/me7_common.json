@@ -18,7 +18,7 @@
   "bin_size_bytes": 1048576,
   "flash_memory_map": {
     "full_flash": "512KB or 1MB dumps depending on mask",
-    "cal_region": "Confirm against your personal dump \u2014 community axis maps vary by SW"
+    "cal_region": "Confirm against your personal dump — community axis maps vary by SW"
   },
   "checksum": {
     "type": "bosch_me7_block_additive_or_crc16",
@@ -46,7 +46,7 @@
   },
   "notes": "Starter family for 1MB ME7 dumps. Confirm OS on your own bench read. Personal dumps only. Unverified catalog entry. Refusing live write and checksum correction.",
   "sources": [
-    "Community ME7.x dump size conventions (512KB/1MB); exact CS layout varies by SW \u2014 report-only until a measured table exists.",
+    "Community ME7.x dump size conventions (512KB/1MB); exact CS layout varies by SW — report-only until a measured table exists.",
     "No XDF or logged flash session in this repo for ME7."
   ],
   "verified": {
@@ -55,5 +55,32 @@
     "seed_key": false,
     "write": false,
     "hardware_bench": false
+  },
+  "hardware_tested": false,
+  "capabilities": {
+    "identify": {
+      "status": "unverified",
+      "source": "BIN size / OS-string tokens only. Sizes collide across catalog families. No dump, logged session or cited document for this in reference/."
+    },
+    "read": {
+      "status": "not_supported",
+      "source": "No read/backup path exposed in the UI for this family. No dump, logged session or cited document for this in reference/."
+    },
+    "checksum": {
+      "status": "report_only",
+      "source": "Report-only. correct_checksums refuses 1 MB images (no verified ME7 routine)."
+    },
+    "seed_key": {
+      "status": "not_supported",
+      "source": "security.rs returns KeyAlgorithmUnverified; no key is sent. Add dump-derived pairs to seed_tables.json."
+    },
+    "write": {
+      "status": "not_supported",
+      "source": "Not in write_families(); guided flash refuses."
+    },
+    "map_hints": {
+      "status": "unverified",
+      "source": "Placeholder addresses carried from earlier catalog passes. No cited source; they are NOT from a dump or definition file. Confirm against your own dump + XDF/A2L before editing."
+    }
   }
 }

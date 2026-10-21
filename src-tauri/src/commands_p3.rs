@@ -17,21 +17,21 @@ fn compare_p01_gm_seed(seed_hex: String, algo: Option<u32>, scan: Option<bool>) 
 }
 #[tauri::command] fn validate_bin_checksums_summary_cmd(data: Vec<u8>) -> Result<String, String> {
     if crate::cs_guard::p01_corrector_blocked(&data) {
-        let fam = if crate::cs_guard::p59_blocks_p01_corrector(&data) { "GM_P59" } else { "HONDA_KEIHIN" };
+        let fam = crate::cs_guard::blocked_family_label(&data);
         return Ok(format!("Checksum validation for {} ({} bytes) using report-only: P01 additive blocked\n", fam, data.len()));
     }
     checksum::validate_bin_checksums_summary(&data)
 }
 #[tauri::command] fn validate_checksums_cmd(data: Vec<u8>) -> Result<String, String> {
     if crate::cs_guard::p01_corrector_blocked(&data) {
-        let fam = if crate::cs_guard::p59_blocks_p01_corrector(&data) { "GM_P59" } else { "HONDA_KEIHIN" };
+        let fam = crate::cs_guard::blocked_family_label(&data);
         return Ok(json!({"ecu_family":fam,"all_valid":false,"method_used":"report-only: P01 additive blocked","regions":[]}).to_string());
     }
     Ok(serde_json::to_string_pretty(&checksum::validate_checksums(&data)?).unwrap_or_else(|_| "{}".into()))
 }
 #[tauri::command] fn correct_bin_checksums(data: Vec<u8>) -> Result<Vec<u8>, String> {
     if crate::cs_guard::p01_corrector_blocked(&data) {
-        return Err("Honda or P59 OS on this image. P01 additive correction is blocked.".into());
+        return Err(format!("{} image. P01 additive correction is blocked.", crate::cs_guard::blocked_family_label(&data)));
     }
     Ok(checksum::correct_checksums(&data)?.data)
 }
@@ -167,25 +167,32 @@ pub fn run() {
             if let Ok(d) = app.path().app_data_dir() { crate::audit_log::set_dir(d); }
             Ok(())
         })
+        .on_window_event(|_window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                if !crate::file_dialog::confirm_close_with_unsaved() {
+                    api.prevent_close();
+                }
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             list_serial_ports, get_connection_health, connect_ecu, disconnect_ecu, auto_detect_protocol,
             st_identify, st_read_voltage, st_set_protocol, st_open_protocol, st_set_timeout,
             st_clear_filters, st_set_pass_filter, st_set_flow_control_filter,
             st_start_monitor, st_stop_monitor, st_capture_monitor, st_enter_sleep, st_set_sleep_wake,
             st_read_pp, st_write_pp, st_stpx, st_adapter_status, elm_session_info, nissan_can_scan,
-            list_supported_protocols, list_supported_ecus, list_ecu_catalog, get_ecu_info, read_properties, read_ecu_data,
+            list_supported_protocols, list_supported_ecus, list_ecu_catalog, family_capabilities, get_ecu_info, read_properties, read_ecu_data,
             get_logging_templates, log_get_status, log_start, log_stop, log_set_channels, log_apply_template,
             log_capture_sample, log_set_demo_mode, log_get_samples, log_clear, log_export_csv, log_import_csv,
             compute_seed_key, gm_key_table_info, compare_p01_gm_seed, read_dtcs_cmd, read_freeze_frame_cmd, clear_dtcs_cmd, dtc::explain_dtcs_cmd,
             validate_bin_checksums_summary_cmd, validate_checksums_cmd, correct_bin_checksums,
-            xdf::parse_xdf_definitions, xdf::extract_table_from_bin, xdf::patch_table_into_bin, xdf::table_delta_cmd,
+            xdf::parse_xdf_definitions, xdf::parse_xdf_report, xdf::extract_table_from_bin, xdf::patch_table_into_bin, xdf::table_delta_cmd,
             a2l::parse_a2l_definitions, a2l::parse_a2l_summary,
             table_tools::table_math_cmd, table_tools::apply_stft_preview_cmd,
             auto_load_tables_for_bin, get_tuning_advice, guided_flash_pipeline, p01_full_backup, audit_log_entries, compare_bin_to_ecu, verify_after_write,
             unlock_level1, unlock_level2, bosch_uds_unlock,
             scripting::list_script_helpers, scripting::run_bench_script,
             v29_tools::identify_bin_cmd, v29_tools::compare_bins_cmd, v29_tools::map_from_log_cmd, v29_tools::export_workspace_cmd, v29_tools::import_workspace_cmd, v29_tools::patch_bin_bytes_cmd,
-            file_dialog::dialog_open_file, file_dialog::dialog_save_bytes, file_dialog::dialog_save_text,
+            file_dialog::dialog_open_file, file_dialog::dialog_save_bytes, file_dialog::dialog_save_text, file_dialog::open_recent_file, file_dialog::set_unsaved_changes,
             cs_guard::scan_checksum_candidates_cmd,
             j2534_list::j2534_list_devices, j2534::j2534_connect, j2534::j2534_connect_vpw, j2534::j2534_disconnect,
             j2534::j2534_write, j2534::j2534_read, j2534::j2534_set_data_rate,

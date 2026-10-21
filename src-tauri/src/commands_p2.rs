@@ -18,10 +18,16 @@ fn list_ecu_catalog() -> Result<String, String> {
             "checksum": e.checksum.r#type,
             "security": e.security_access.r#type,
             "write_allowed": crate::ecu_database::write_path_live(&e.ecu_family),
-            "status": if crate::ecu_database::write_path_live(&e.ecu_family) { "write path live" } else { "identify/report — write blocked until measured corrector" },
+            "status": if crate::ecu_database::write_path_live(&e.ecu_family) { "experimental write (off by default, not bench-tested)" } else { "identify/report — write blocked until measured corrector" },
+            "capabilities": e.capabilities,
         }))
         .collect();
     Ok(json!(rows).to_string())
+}
+/// Per-family capability/status matrix (status + source per capability).
+#[tauri::command]
+fn family_capabilities() -> Result<String, String> {
+    Ok(ecu_database::capability_matrix().to_string())
 }
 #[tauri::command]
 fn get_ecu_info(family_or_os: String) -> Result<String, String> {

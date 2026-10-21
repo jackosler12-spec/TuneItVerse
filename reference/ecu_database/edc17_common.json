@@ -1,8 +1,18 @@
 {
   "ecu_family": "EDC17_COMMON",
   "display_name": "Bosch EDC17 (common diesel platforms - VAG/Ford/others)",
-  "part_numbers_or_os_ids": ["EDC17CP14", "EDC17C46", "EDC17CP44", "EDC17C50", "common software versions"],
-  "vehicles": ["VW/Audi/Skoda/Seat TDI", "Ford Transit / common-rail diesels", "various European diesel platforms"],
+  "part_numbers_or_os_ids": [
+    "EDC17CP14",
+    "EDC17C46",
+    "EDC17CP44",
+    "EDC17C50",
+    "common software versions"
+  ],
+  "vehicles": [
+    "VW/Audi/Skoda/Seat TDI",
+    "Ford Transit / common-rail diesels",
+    "various European diesel platforms"
+  ],
   "hardware": "Bosch EDC17 series (Tricore based)",
   "protocol": "CAN / UDS (ISO 15765) primary, KWP fallback",
   "bin_size_bytes": 2097152,
@@ -12,14 +22,17 @@
   },
   "checksum": {
     "type": "bosch_edc17_multipoint (CRC32 / proprietary variants)",
-    "description": "EDC17 uses multipoint checksums similar to EDC16 but with Tricore specific and more regions. Primary use community CRC32 multipoint or WinOLS-compatible. Correction via same practical force-to-0 approach until exact poly verified against dumps. Extend checksum.rs EDC16 path for EDC17 sizes (shared 2MB path).",
+    "description": "Report-only. No measured EDC17 checksum layout in reference/; correct_checksums refuses 2 MB images.",
     "reference_files": [],
-    "notes": "Verify with your own dumps + WinOLS or public tools. Do not flash uncorrected bins. Fully wired in v0.8.0."
+    "routine": "report-only (correct_checksums refuses this size)"
   },
   "security_access": {
     "type": "UDS Service 0x27 seed-key (Bosch standard levels)",
     "reference": "security.rs patterns + 2byte-keys.txt for known public algos; full Bosch seedkey often proprietary",
-    "levels": ["Level 1 diagnostic", "Level 3 programming / flash"]
+    "levels": [
+      "Level 1 diagnostic",
+      "Level 3 programming / flash"
+    ]
   },
   "maps_and_xdf": {
     "has_xdf": false,
@@ -34,5 +47,35 @@
       "vgt_duty": "0xCA000"
     }
   },
-  "notes": "Fully operational in v0.8.0 for industry-leading DIY. Protocol ready via existing CAN/UDS multi-frame. Checksum and exact maps require per-software verification from personal dumps. Expands DIY coverage beyond EDC16/P01 without commercial lock-in. Safe guided pipeline + table editor fully supported."
+  "notes": "Fully operational in v0.8.0 for industry-leading DIY. Protocol ready via existing CAN/UDS multi-frame. Checksum and exact maps require per-software verification from personal dumps. Expands DIY coverage beyond EDC16/P01 without commercial lock-in. Safe guided pipeline + table editor fully supported.",
+  "sources": [
+    "No dump, logged session or cited document for this family in reference/. Catalog facts (vendor, protocol class, size) are general and unverified."
+  ],
+  "hardware_tested": false,
+  "capabilities": {
+    "identify": {
+      "status": "unverified",
+      "source": "BIN size / OS-string tokens only. Sizes collide across catalog families. No dump, logged session or cited document for this in reference/."
+    },
+    "read": {
+      "status": "not_supported",
+      "source": "No read/backup path exposed in the UI for this family. No dump, logged session or cited document for this in reference/."
+    },
+    "checksum": {
+      "status": "report_only",
+      "source": "Report-only. No measured EDC17 checksum layout in reference/; correct_checksums refuses 2 MB images."
+    },
+    "seed_key": {
+      "status": "not_supported",
+      "source": "security.rs returns KeyAlgorithmUnverified; no key is sent. Add dump-derived pairs to seed_tables.json."
+    },
+    "write": {
+      "status": "not_supported",
+      "source": "Not in write_families(); guided flash refuses."
+    },
+    "map_hints": {
+      "status": "unverified",
+      "source": "Placeholder addresses carried from earlier catalog passes. No cited source; they are NOT from a dump or definition file. Confirm against your own dump + XDF/A2L before editing."
+    }
+  }
 }

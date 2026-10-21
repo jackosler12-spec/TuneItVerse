@@ -1751,3 +1751,41 @@ html, body { overflow: hidden; }
   overflow: auto;
 }
 #log-replay-index { width: 12rem; }
+
+/* ---------- v3.47.0: capabilities, diff highlight, status bar, shortcuts ---------- */
+.cap-badge {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: var(--text-xs);
+  border: 1px solid var(--border-subtle);
+  white-space: nowrap;
+  cursor: help;
+}
+.cap-verified_dump, .cap-verified_log { background: rgba(0, 196, 120, 0.18); color: #3ddc97; }
+.cap-public_source, .cap-reference_doc { background: rgba(80, 150, 255, 0.16); color: #7fb2ff; }
+.cap-experimental { background: rgba(255, 170, 0, 0.18); color: #ffb648; }
+.cap-report_only { background: rgba(160, 160, 160, 0.16); color: var(--text-muted); }
+.cap-unverified { background: rgba(255, 120, 60, 0.14); color: #ff9a6a; }
+.cap-not_supported, .cap-missing { background: transparent; color: var(--text-faint); }
+.cap-legend { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 10px; }
+.cap-legend p { flex-basis: 100%; margin: 4px 0 0; }
+.cap-table td { vertical-align: top; }
+.cap-strip { display: inline-flex; gap: 8px; align-items: center; margin-left: 8px; }
+.cap-strip-item { font-size: var(--text-xs); color: var(--text-muted); }
+.map-table td.cell-refdiff { outline: 2px dashed #7fb2ff; outline-offset: -3px; }
+.legend-edited { box-shadow: inset 0 -2px 0 var(--warning, #ffb648); padding: 0 3px; }
+.legend-refdiff { outline: 1px dashed #7fb2ff; padding: 0 3px; }
+.recent-select { max-width: 220px; }
+.status-left.status-dirty { color: var(--warning, #ffb648); }
+.shortcut-help {
+  position: fixed; inset: 0; background: rgba(0, 0, 0, 0.55);
+  display: flex; align-items: center; justify-content: center; z-index: 1000;
+}
+.shortcut-help[hidden] { display: none; }
+.shortcut-card {
+  background: var(--surface, #111818); color: var(--text); border: 1px solid var(--border-subtle);
+  border-radius: 10px; padding: 16px 20px; max-width: 640px; box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+}
+.shortcut-card h3 { margin-top: 0; }
+.editor-tools { display: flex; flex-wrap: wrap; gap: 8px; }

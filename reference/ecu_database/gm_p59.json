@@ -1,50 +1,73 @@
 {
   "ecu_family": "GM_P59",
-  "display_name": "GM P59 PCM (Truck/SUV 2003-2007)",
-  "part_numbers_or_os_ids": ["12586243", "12602801", "P59"],
-  "vehicles": ["Chevrolet Silverado", "GMC Sierra", "Chevrolet Tahoe", "GM Truck LS swaps"],
-  "hardware": "P59 (E67/E38 variants)",
+  "display_name": "GM P59 PCM (Truck/SUV, catalog)",
+  "part_numbers_or_os_ids": [
+    "12590777 (P59a hybrid, PcmInfo.cs)",
+    "12579405",
+    "12587603",
+    "P59"
+  ],
+  "vehicles": [
+    "Chevrolet Silverado",
+    "GMC Sierra",
+    "Chevrolet Tahoe",
+    "GM Truck LS swaps"
+  ],
+  "hardware": "GM P59 (PcmHammer: 1 MiB image, kernel Kernel-P01.bin @0xFF8000)",
   "protocol": "J1850 VPW / CAN (some)",
-  "bin_size_bytes": 524288,
+  "bin_size_bytes": 1048576,
   "flash_memory_map": {
-    "os_region": "0x00000-0x1FFFF",
-    "cal_a": "0x20000-0x3FFFF",
-    "cal_b": "0x40000-0x7FFFF"
+    "full_flash": "0x00000-0xFFFFF (PcmInfo.cs ImageSize 1 MiB, ImageBaseAddress 0)"
   },
   "checksum": {
-    "type": "gm_p59_additive_correction",
-    "description": "P59 uses additive checksum with correction word(s) near end of cal region. Similar to P01 but different locations.",
-    "reference_files": ["Kernel-P59.bin (future)", "P59 checksum notes"],
-    "routine": "Port from P01 checksum.rs with adjusted offsets",
-    "notes": "Verify with known-good bin before write. Correction often at 0x7FFC in cal blocks."
+    "type": "report_only",
+    "description": "No measured P59 checksum layout in reference/. The P01 corrector is refused on P59 OS IDs/strings.",
+    "reference_files": [],
+    "routine": null
   },
   "security_access": {
-    "type": "GM seed-key (2-byte or 4-byte variants)",
-    "reference": "GmKeys.cs and 2byte-keys.txt",
-    "levels": ["Level 1 (read)", "Level 2 (write/flash)"]
+    "type": "GM 2-byte seed/key, algorithm 40 (0x28)",
+    "reference": "PcmInfo.cs KeyAlgorithm = 40; table in reference/GmKeys.cs",
+    "levels": [
+      "Level 1 (PcmHammer unlock)"
+    ]
   },
   "maps_and_xdf": {
-    "has_xdf": true,
-    "xdf_file": "OS-P59-xxx.xdf (community)",
-    "description": "Spark, fuel, VE, timing, trans, torque management tables for P59. Addresses below are community-typical starting points for truck LS and are marked unverified; refine against your own dump or a text XDF.",
-    "kernel_for_flash": "Kernel-P59.bin (to be added)",
-    "additional_defs": ["Parameters.Standard.xml subset"],
-    "eeprom": "Possible on some variants",
-    "refined_map_addrs": {
-      "ve_table": {"addr": "0x30000", "typical_size": "22x19", "scale": "0.1", "offset": "0", "unit": "%", "note": "unverified typical truck cal region"},
-      "spark_advance": {"addr": "0x32000", "typical_size": "15x15", "scale": "0.25", "offset": "0", "unit": "deg", "note": "unverified"},
-      "torque_management": {"addr": "0x34000", "typical_size": "16x16", "scale": "1", "offset": "0", "unit": "Nm", "note": "unverified"},
-      "idle_spark": {"addr": "0x36000", "typical_size": "8x8", "scale": "0.25", "offset": "0", "unit": "deg", "note": "unverified"},
-      "fuel_trim": {"addr": "0x38000", "typical_size": "8x1", "scale": "0.1", "offset": "0", "unit": "%", "note": "unverified"}
-    },
-    "unverified": true
+    "has_xdf": false,
+    "description": "Earlier unsourced address hints were removed in v3.47.0. Load a text XDF for your OS."
   },
-  "communication_kernels": ["Kernel-P59.bin"],
-  "notes": "P59 is evolution of P01 for trucks/SUVs. Very similar VPW protocol and security. Checksum locations differ slightly — use dedicated routine. Good candidate for next full integration after P01. Map hints expanded for offline editor.",
-  "verified": {
-    "identify": true,
-    "checksum": "catalog_only",
-    "write": false,
-    "hardware_bench": false
+  "communication_kernels": [
+    "PcmHammer uses Kernel-P01.bin for P59 (PcmInfo.cs); not used by this app"
+  ],
+  "notes": "P59 per PcmHammer PcmInfo.cs is a 1 MiB image read/written with the P01 kernel. This app identifies only; correction and write are refused. 12586243 / 12602801 (listed before v3.47) are not in PcmInfo.cs and were dropped from part numbers; the cs_guard string check still blocks the P01 corrector on them.",
+  "sources": [
+    "github.com/PcmHammer/PcmHammer @ 033cb039 Apps/PcmLibrary/Misc/PcmInfo.cs (case PcmType.P59, OSID switch)"
+  ],
+  "hardware_tested": false,
+  "capabilities": {
+    "identify": {
+      "status": "public_source",
+      "source": "53 P59 OS IDs and the 1 MiB image size from github.com/PcmHammer/PcmHammer @ 033cb039 Apps/PcmLibrary/Misc/PcmInfo.cs. No P59 dump in reference/."
+    },
+    "read": {
+      "status": "not_supported",
+      "source": "PcmHammer reads P59 with Kernel-P01.bin; this app's FullImage backup is P01-only."
+    },
+    "checksum": {
+      "status": "report_only",
+      "source": "P01 corrector refused on P59 OS IDs/strings. No measured P59 checksum layout in reference/."
+    },
+    "seed_key": {
+      "status": "public_source",
+      "source": "PcmInfo.cs KeyAlgorithm 40 (0x28, same table as P01, reference/GmKeys.cs). Offline calculator only; never tried on a P59 from this app."
+    },
+    "write": {
+      "status": "not_supported",
+      "source": "Not in write_families()."
+    },
+    "map_hints": {
+      "status": "not_supported",
+      "source": "The v3.44 P59 addresses had no source and were removed in v3.47.0. Load a text XDF for your OS."
+    }
   }
 }

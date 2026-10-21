@@ -87,7 +87,8 @@ const PAGE_TITLES = {
   flash: ['Flash', 'Identify → voltage → backup → write → verify.'],
   scripts: ['Scripts', 'Bench CLI helpers. Not an embedded interpreter.'],
   inspect: ['Inspect', 'Hex window, entropy, and a tune report. Does not enable write.'],
-  compare: ['Compare', 'Changed ranges between the working BIN and a second dump.']
+  compare: ['Compare', 'Changed ranges between the working BIN and a second dump.'],
+  capabilities: ['Capabilities', 'Per-family status and source. Verified means a real dump or log, never a bench test.']
 };
 
 function escapeHtml(s) {
@@ -369,8 +370,10 @@ function undoBin() {
   binRedo.push(currentBin.slice());
   currentBin = binUndo.pop();
   syncGlobals();
-  setTablesStatus('BIN undo — image restored. Checksum is not re-run until you validate.');
+  setTablesStatus('BIN undo — image restored.');
+  setBinDirty(true);
   validateCurrentBinChecksums();
+  if (currentTable) refreshCurrentTableValues();
 }
 
 function redoBin() {
@@ -379,7 +382,9 @@ function redoBin() {
   currentBin = binRedo.pop();
   syncGlobals();
   setTablesStatus('BIN redo');
+  setBinDirty(true);
   validateCurrentBinChecksums();
+  if (currentTable) refreshCurrentTableValues();
 }
 
 function readToolValue() {
@@ -533,6 +538,75 @@ function syncGlobals() {
   window.currentValues = currentValues;
   window.lastMapFromLog = lastMapFromLog;
 }
+
+// ---------- Working BIN state (dirty flag shared with the native close guard) ----------
+let binDirty = false;
+let binLabel = '';
+let refValues = null;
+
+function emitBinState() {
+  try {
+    document.dispatchEvent(new CustomEvent('tiv:bin-state', {
+      detail: { dirty: binDirty, label: binLabel, size: currentBin ? currentBin.length : 0 }
+    }));
+  } catch (_) {}
+}
+
+function setBinDirty(on) {
+  binDirty = !!on;
+  window.__binDirty = binDirty;
+  const chip = document.getElementById('bin-dirty-chip');
+  if (chip) chip.hidden = !binDirty;
+  try { Promise.resolve(invokeCmd('set_unsaved_changes', { dirty: binDirty })).catch(() => {}); } catch (_) {}
+  emitBinState();
+}
+window.isBinDirty = () => binDirty;
+
+// Ask before an action would discard unsaved BIN edits.
+function confirmDiscard(what) {
+  if (!binDirty) return true;
+  return confirm('The working BIN has unsaved edits. ' + (what || 'Continue') + ' and discard them?');
+}
+window.confirmDiscard = confirmDiscard;
+
+// Overlays (Correct CS, scripts) must replace the BIN through here so Save BIN
+// writes what the user sees, undo works, and the dirty flag is set.
+function setWorkingBin(bytes, reason) {
+  if (!bytes || !bytes.length) return;
+  snapshotBin();
+  currentBin = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  syncGlobals();
+  enableSave(true);
+  setBinDirty(true);
+  if (reason) setTablesStatus(reason);
+  validateCurrentBinChecksums();
+  if (currentTable) refreshCurrentTableValues();
+}
+window.setWorkingBin = setWorkingBin;
+
+async function refreshCurrentTableValues() {
+  if (!currentBin || !currentTable) return;
+  try {
+    const extracted = await invokeCmd('extract_table_from_bin', { bin_bytes: binBytes(currentBin), table: currentTable });
+    const vals = extracted.values || extracted;
+    if (Array.isArray(vals)) { currentValues = vals; syncGlobals(); renderCurrentEditor(); }
+  } catch (_) {}
+}
+
+// Reference values for the selected table (cells that differ get outlined).
+async function refreshRefValues() {
+  refValues = null;
+  if (!referenceBin || !currentBin || !currentTable || referenceBin.length !== currentBin.length) return;
+  try {
+    const extracted = await invokeCmd('extract_table_from_bin', { bin_bytes: binBytes(referenceBin), table: currentTable });
+    const vals = extracted.values || extracted;
+    refValues = Array.isArray(vals) ? vals : null;
+  } catch (_) { refValues = null; }
+}
+
+window.addEventListener('beforeunload', (e) => {
+  if (binDirty) { e.preventDefault(); e.returnValue = ''; }
+});
 
 function setStatus(msg) {
   const el = document.getElementById('status-center');
@@ -1211,7 +1285,11 @@ async function loadReferenceBin() {
     const res = await openNativeFile('bin');
     if (res.cancelled) { setTablesStatus('Reference open cancelled.'); return; }
     referenceBin = res.bytes instanceof Uint8Array ? res.bytes : new Uint8Array(res.bytes);
-    setTablesStatus('Reference loaded (' + referenceBin.length + ' bytes). Cell delta compares it to the working BIN.');
+    const same = currentBin && currentBin.length === referenceBin.length;
+    setTablesStatus('Reference loaded (' + referenceBin.length + ' bytes). ' +
+      (same ? 'Cells that differ from it are outlined.' : 'Size differs from the working BIN; no cell outline.'));
+    await refreshRefValues();
+    renderCurrentEditor();
   } catch (e) {
     setTablesStatus('Reference error: ' + e);
   }
@@ -1303,6 +1381,11 @@ async function ingestBinBytes(bytes, label) {
   currentBin = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
   syncGlobals();
   enableSave(true);
+  binUndo = [];
+  binRedo = [];
+  refValues = null;
+  binLabel = label || 'BIN';
+  setBinDirty(false);
   const short = (label || 'BIN').replace(/^.*[\\/]/, '');
   setBinChip(short + ' · ' + currentBin.length.toLocaleString() + ' bytes', true);
   try {
@@ -1330,19 +1413,30 @@ async function ingestBinBytes(bytes, label) {
 async function loadBinFile() {
   setTablesStatus('Opening BIN…');
   try {
+    if (!confirmDiscard('Open another BIN')) { setTablesStatus('Open cancelled (unsaved edits kept).'); return; }
     const res = await openNativeFile('bin');
     if (res.cancelled) { setTablesStatus('Open cancelled.'); return; }
     if (!res.bytes || !res.bytes.length) throw new Error('File was empty');
     await ingestBinBytes(res.bytes, res.path || 'BIN');
+    if (res.path) document.dispatchEvent(new CustomEvent('tiv:file-opened', { detail: { path: res.path, kind: 'bin' } }));
   } catch (e) {
     setTablesStatus('Load BIN failed: ' + e);
   }
 }
 
 async function applyDefinitionText(text, source) {
-  let defs, list;
+  let defs, list, skippedNote = '';
   try {
     if (/BEGIN CHARACTERISTIC/i.test(text)) defs = await invokeCmd('parse_a2l_definitions', { text });
+    else if (/<XDFFORMAT/i.test(text)) {
+      const rep = parseMaybe(await invokeCmd('parse_xdf_report', { xml: text })) || {};
+      defs = rep.tables || [];
+      const sk = rep.skipped || [];
+      if (sk.length) {
+        skippedNote = ' Skipped ' + sk.length + ' unsupported item(s): ' + sk.slice(0, 5).join('; ') + (sk.length > 5 ? '…' : '');
+        console.warn('XDF skipped items', sk);
+      }
+    }
     else defs = await invokeCmd('parse_xdf_definitions', { xml: text });
   } catch (e) {
     setTablesStatus((source || 'Definition') + ': ' + e);
@@ -1350,13 +1444,13 @@ async function applyDefinitionText(text, source) {
   }
   list = Array.isArray(defs) ? defs : parseMaybe(defs);
   if (!list || !list.length) {
-    setTablesStatus((source || 'Definition') + ' parsed but no tables found');
+    setTablesStatus((source || 'Definition') + ' parsed but no tables found.' + skippedNote);
     return;
   }
   currentTables = list;
   rebuildCategoryChips();
   renderTableList();
-  setTablesStatus((source || 'Definitions') + ' loaded: ' + list.length + ' tables. Select one to extract from the BIN.');
+  setTablesStatus((source || 'Definitions') + ' loaded: ' + list.length + ' tables. Select one to extract from the BIN.' + skippedNote);
 }
 
 async function loadXdfFile() {
@@ -1365,6 +1459,7 @@ async function loadXdfFile() {
     const res = await openNativeFile('xdf');
     if (res.cancelled) { setTablesStatus('Open cancelled.'); return; }
     await applyDefinitionText(res.text || '', res.path || 'XDF');
+    if (res.path) document.dispatchEvent(new CustomEvent('tiv:file-opened', { detail: { path: res.path, kind: 'xdf' } }));
   } catch (e) {
     setTablesStatus('Load XDF failed: ' + e);
   }
@@ -1384,6 +1479,7 @@ async function loadA2l() {
     currentTables = list;
     renderTableList();
     setTablesStatus('A2L loaded: ' + list.length + ' characteristics. Confirm addresses on your dump.');
+    if (res.path) document.dispatchEvent(new CustomEvent('tiv:file-opened', { detail: { path: res.path, kind: 'a2l' } }));
   } catch (e) {
     setTablesStatus('A2L parse error: ' + e);
   }
@@ -1531,6 +1627,7 @@ async function selectTable(idx) {
         currentTable.row_headers = extracted.axes_y.map((v) => (typeof v === 'number' ? String(v) : v)).join(',');
     }
     originalValues = currentValues ? JSON.parse(JSON.stringify(currentValues)) : null;
+    await refreshRefValues();
     renderCurrentEditor();
     updateSidePanel();
     if (st) st.textContent = 'Selected: ' + currentTable.name;
@@ -1585,11 +1682,19 @@ function renderCurrentEditor() {
         row.forEach((v, ci) => {
           const num = typeof v === 'number' ? v : parseFloat(v);
           const bg = Number.isFinite(num) ? heatColor(num, min, max) : 'transparent';
-          html += '<td contenteditable="true" data-r="' + ri + '" data-c="' + ci + '" style="background:' + bg + '">' + fmt(v) + '</td>';
+          const cls = [];
+          let tip = '';
+          const o = originalValues && originalValues[ri] ? originalValues[ri][ci] : undefined;
+          if (typeof o === 'number' && Number.isFinite(num) && Math.abs(o - num) > 1e-9) { cls.push('modified'); tip += 'was ' + fmt(o) + ' '; }
+          const rv = refValues && refValues[ri] ? refValues[ri][ci] : undefined;
+          if (typeof rv === 'number' && Number.isFinite(num) && Math.abs(rv - num) > 1e-9) { cls.push('cell-refdiff'); tip += 'ref ' + fmt(rv); }
+          html += '<td contenteditable="true" data-r="' + ri + '" data-c="' + ci + '"' +
+            (cls.length ? ' class="' + cls.join(' ') + '"' : '') + (tip ? ' title="' + escapeHtml(tip.trim()) + '"' : '') +
+            ' style="background:' + bg + '">' + fmt(v) + '</td>';
         });
         html += '</tr>';
       });
-      html += '</tbody></table><div class="table-editor-footer"><button id="btn-apply-patch" class="btn btn-primary" type="button">Apply Patch + Auto Checksum</button><span class="muted">min ' + min.toFixed(dec) + ' → max ' + max.toFixed(dec) + ' · drag to select · +/− · Ctrl+C/V/Z</span></div>';
+      html += '</tbody></table><div class="table-editor-footer"><button id="btn-apply-patch" class="btn btn-primary" type="button">Apply Patch + Auto Checksum</button><span class="muted">min ' + min.toFixed(dec) + ' → max ' + max.toFixed(dec) + ' · drag to select · +/− · Ctrl+C/V/Z · <span class="legend-edited">edited</span> <span class="legend-refdiff">≠ reference</span></span></div>';
       el.innerHTML = html;
     }
     document.getElementById('btn-apply-patch')?.addEventListener('click', applyCurrentPatch);
@@ -1666,6 +1771,11 @@ function updateSidePanel() {
 
 async function applyCurrentPatch() {
   if (!currentBin || !currentTable || !currentValues) { alert('Load BIN and select table'); return; }
+  if (/^UNVERIFIED/.test(String(currentTable.description || '')) &&
+      !confirm('This table address is an UNVERIFIED catalog hint with no cited source. Writing it may corrupt the image. Patch anyway?')) {
+    setTablesStatus('Patch cancelled: unverified table address.');
+    return;
+  }
   snapshotBin();
   try {
     const res = await invokeCmd('patch_table_into_bin', {
@@ -1674,6 +1784,7 @@ async function applyCurrentPatch() {
     if (res && res.patched_bytes) {
       currentBin = new Uint8Array(res.patched_bytes);
       syncGlobals();
+      setBinDirty(true);
       const st = document.getElementById('tables-status');
       if (st) st.textContent = (res.message || 'Patched') + ' — auto-correcting checksums…';
       try {
@@ -1715,6 +1826,9 @@ async function savePatchedBin() {
     const res = await saveNativeBytes(currentBin, 'tuned.bin');
     if (res && res.cancelled) { setTablesStatus('Save cancelled.'); return; }
     setTablesStatus('Saved ' + currentBin.length + ' bytes' + (res && res.path ? ' to ' + res.path : ''));
+    if (res && res.path) binLabel = res.path;
+    setBinDirty(false);
+    if (res && res.path) document.dispatchEvent(new CustomEvent('tiv:file-opened', { detail: { path: res.path, kind: 'bin' } }));
   } catch (e) {
     setTablesStatus('Save failed: ' + e);
   }
@@ -1839,6 +1953,7 @@ async function pokeHex() {
     const out = await invokeCmd('patch_bin_bytes_cmd', { data: Array.from(currentBin), offset: off >>> 0, bytes });
     currentBin = out instanceof Uint8Array ? out : new Uint8Array(out);
     syncGlobals();
+    setBinDirty(true);
     const st = document.getElementById('tables-status');
     if (st) st.textContent = 'Poked ' + bytes.length + ' byte(s) at 0x' + off.toString(16).toUpperCase();
     renderCurrentEditor();
@@ -2160,8 +2275,6 @@ function bindAppClicks() {
     'btn-import-workspace': importWorkspace,
     'btn-scan-cs': scanCs,
     'btn-hex-poke': pokeHex,
-    'btn-tbl-scale': () => runMath('scale'),
-    'btn-tbl-offset': () => runMath('add'),
     'btn-tbl-set': () => runMath('set'),
     'btn-tbl-add': () => runMath('add'),
     'btn-tbl-mul': () => runMath('scale'),
@@ -2208,7 +2321,7 @@ function setupAll() {
   pollHealth();
   if (healthTimer) clearInterval(healthTimer);
   healthTimer = setInterval(pollHealth, 2500);
-  console.log('TuneItVerse UI v3.46.1');
+  console.log('TuneItVerse UI v3.47.0');
 }
 
 setupNav();

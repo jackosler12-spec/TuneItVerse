@@ -1,6 +1,6 @@
 # TuneItVerse Product Direction
 
-**Updated:** 2026-09-30  
+**Updated:** 2026-10-21 (v3.47.0 status correction)  
 **Status:** Software-first. VerseLink Apex PCB work is parked.
 
 ## Decision
@@ -15,7 +15,7 @@ TuneItVerse v3.35+ on Windows:
 
 - Identify / checksum / patch personal BIN dumps
 - Guided flash with fail-closed voltage gate, honest backup quality, live verify
-- Write path advertised only for **P01_0411** and **EDC16C41**
+- The only write path is an **experimental** P01_0411 kernel calibration write. It is off by default, behind a typed confirm, and not bench-tested.
 - Live data + DTCs via ELM ASCII (CAN/UDS) and raw VPW when selected
 - J2534 when a vendor DLL is present
 - Offline seed/key for GM 2-byte tables and dump-derived `seed_tables.json` pairs
@@ -38,12 +38,12 @@ See `reference/adapters/supported_adapters.json`.
 
 | Family | Vehicle focus | Write |
 |---|---|---|
-| P01_0411 | Holden / GM LS1 0411 PCM | Live path |
-| EDC16C41 | Nissan Patrol GU ZD30CRD | Live path |
-| GM_P59 | Truck/SUV PCM | Identify only until measured checksum words exist |
+| P01_0411 | Holden / GM LS1 0411 PCM | Experimental (off by default, not bench-tested) |
+| EDC16C41 | Nissan Patrol GU ZD30CRD | Off (checksum report-only; signature block) |
+| GM_P59 / GM_P10 / GM_P12 | GM PCMs | Identify only (PcmHammer PcmInfo.cs) |
 | TRANSTRON_4HK1 | Isuzu FRR 4HK1 | Catalog only until a personal dump + protocol notes land |
 
-Everything else in the catalog is identify / map-hint only. No fake write flags.
+Everything else in the catalog is identify / map-hint only. No fake write flags. The in-app Capabilities page lists every family's per-capability status and source.
 
 ## Out of scope until hardware is outsourced
 

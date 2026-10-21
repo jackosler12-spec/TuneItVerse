@@ -23,8 +23,9 @@ pub fn looks_like_honda(data: &[u8]) -> bool {
 const GM_P01_MARKERS: &[&str] = &[
     "P01",
     "12225074", "12200411",
-    "12576171", "12576106", "12579256", "12579405",
-    "12583560", "12586242", "12587603", "12589806",
+    // 12579405 and 12587603 removed in v3.47.0: PcmHammer PcmInfo.cs lists both as P59.
+    "12576171", "12576106", "12579256",
+    "12583560", "12586242", "12589806",
     "12593358", "12596165",
     "12602871", "12612384", "12623914",
 ];
@@ -77,8 +78,24 @@ pub fn p59_blocks_p01_corrector(data: &[u8]) -> bool {
     is_p01_size(data.len()) && looks_like_gm_p59(data) && !looks_like_gm_p01(data)
 }
 
+/// The image's own binary OS ID (0x504, OS checksum valid) is a non-P01 GM PCM
+/// per PcmHammer PcmInfo.cs. The P01 segment layout is not verified there.
+pub fn gm_other_blocks_p01_corrector(data: &[u8]) -> Option<String> {
+    crate::gm_osid::non_p01_binary_os(data).map(|(os, t)| {
+        format!("OS {} is a GM {} per PcmHammer PcmInfo.cs; P01 corrector refused", os, t)
+    })
+}
+
 pub fn p01_corrector_blocked(data: &[u8]) -> bool {
-    honda_blocks_p01_corrector(data) || p59_blocks_p01_corrector(data)
+    honda_blocks_p01_corrector(data) || p59_blocks_p01_corrector(data) || gm_other_blocks_p01_corrector(data).is_some()
+}
+
+/// Family label for a blocked P01 corrector (report text only).
+pub fn blocked_family_label(data: &[u8]) -> String {
+    if let Some((_, t)) = crate::gm_osid::non_p01_binary_os(data) {
+        return crate::gm_osid::family_for_type(t).map(str::to_string).unwrap_or_else(|| format!("GM_{}", t));
+    }
+    if p59_blocks_p01_corrector(data) { "GM_P59".into() } else { "HONDA_KEIHIN".into() }
 }
 
 pub fn scan_checksum_candidates(data: &[u8]) -> serde_json::Value {
