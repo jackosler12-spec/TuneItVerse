@@ -61,7 +61,7 @@
       body.innerHTML = list.map((e) =>
         '<tr><td>' + (e.ecu_family || '') + '</td><td>' + (e.hardware || '') + '</td><td>' + (e.protocol || '') +
         '</td><td>' + (e.bin_size_bytes || '') + '</td><td>' + (e.checksum || '') + '</td><td>' + (e.security || '') +
-        '</td><td>' + (e.write_allowed ? 'LIVE' : 'blocked') + '</td></tr>'
+        '</td><td>' + (e.write_allowed ? 'EXPERIMENTAL (off by default)' : 'blocked') + '</td></tr>'
       ).join('');
       const famSel = document.getElementById('seed-family');
       if (famSel && list.length) {
@@ -130,7 +130,9 @@
         return;
       }
       const out = await cmd('correct_bin_checksums', { data: Array.from(bin) });
-      window.currentBin = out instanceof Uint8Array ? out : new Uint8Array(out);
+      const fixed = out instanceof Uint8Array ? out : new Uint8Array(out);
+      if (typeof window.setWorkingBin === 'function') window.setWorkingBin(fixed, 'Checksums corrected — Save BIN to keep them.');
+      else window.currentBin = fixed;
       const summary = await cmd('validate_bin_checksums_summary_cmd', { data: Array.from(window.currentBin) });
       if (cs) cs.textContent = JSON.stringify(probe.report || {}, null, 2) + '\n\n' + (typeof summary === 'string' ? summary : '');
       const save = document.getElementById('btn-save-patched');
@@ -202,7 +204,8 @@
       const res = parseMaybe(raw) || {};
       if (out) out.textContent = JSON.stringify(res, null, 2);
       if (res.mutated && Array.isArray(res.bin) && res.bin.length) {
-        window.currentBin = new Uint8Array(res.bin);
+        if (typeof window.setWorkingBin === 'function') window.setWorkingBin(new Uint8Array(res.bin), 'Script changed the working BIN — Save BIN to keep it.');
+        else window.currentBin = new Uint8Array(res.bin);
         const save = document.getElementById('btn-save-patched');
         if (save) save.disabled = false;
       }

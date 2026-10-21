@@ -19,6 +19,9 @@
       <button type="button" class="nav-item" data-view="tables">Maps</button>
       <button type="button" class="nav-item" data-view="flash">Flash</button>
       <button type="button" class="nav-item" data-view="scripts">Scripts</button>
+      <button type="button" class="nav-item" data-view="inspect">Inspect</button>
+      <button type="button" class="nav-item" data-view="compare">Compare</button>
+      <button type="button" class="nav-item" data-view="capabilities">Capabilities</button>
     </nav>
     <div class="sidebar-footer">
       <div class="connection-status">
@@ -212,6 +215,17 @@
               <p class="muted" id="log-spark-hint">Chart stays empty until a live or imported sample exists.</p>
             </div>
             <div class="panel quiet-panel">
+              <div class="panel-header"><span class="panel-title">Log studio (preview only, never writes)</span></div>
+              <div class="toolbar-group">
+                <button id="btn-log-summary" class="btn btn-sm" type="button">Summary</button>
+                <button id="btn-log-replay" class="btn btn-sm" type="button">Replay</button>
+                <button id="btn-log-replay-stop" class="btn btn-sm" type="button">Stop replay</button>
+                <button id="btn-log-suggest" class="btn btn-sm" type="button">Trim suggestion</button>
+                <input id="log-replay-index" type="range" min="0" max="0" value="0" aria-label="replay frame">
+              </div>
+              <pre id="log-replay-readout" class="mono-block log-box scroll-pane">Import a CSV or record a log, then Summary / Replay.</pre>
+            </div>
+            <div class="panel quiet-panel">
               <div class="panel-header"><span class="panel-title">Recent samples</span></div>
               <div class="scroll-pane table-scroll">
               <table id="log-table" class="data-table"><thead id="log-thead"></thead><tbody id="log-tbody"></tbody></table>
@@ -275,11 +289,26 @@
           <button id="btn-import-workspace" class="btn" type="button">Import</button>
           <button id="btn-map-from-log" class="btn" type="button">Map from log</button>
         </div>
+        <div class="toolbar-sep"></div>
+        <div class="toolbar-group">
+          <span class="toolbar-label">Reference</span>
+          <button id="btn-load-reference" class="btn" type="button" title="Load a stock/reference BIN; differing cells are outlined">Load reference</button>
+          <button id="btn-cell-delta" class="btn" type="button" title="Per-cell delta of the selected table vs the reference">Cell delta</button>
+          <button id="btn-bin-undo" class="btn" type="button" title="Undo last BIN-level change (Ctrl+Alt+Z)">BIN undo</button>
+          <button id="btn-bin-redo" class="btn" type="button" title="Redo BIN-level change (Ctrl+Alt+Y)">BIN redo</button>
+        </div>
+        <div class="toolbar-sep"></div>
+        <div class="toolbar-group">
+          <span class="toolbar-label">Recent</span>
+          <select id="recent-files" class="recent-select" title="Reopen a recent BIN / XDF / A2L"><option value="">Recent files…</option></select>
+        </div>
         <div class="toolbar-status" id="tables-status">Load a BIN to locate maps. No ECU required.</div>
       </div>
       <div class="bin-strip">
         <span class="bin-chip" id="bin-chip">No BIN loaded</span>
         <span class="bin-chip muted" id="bin-ident-chip">Family unresolved</span>
+        <span class="bin-chip muted" id="bin-dirty-chip" hidden>Unsaved edits</span>
+        <span id="bin-cap-strip" class="cap-strip"></span>
       </div>
       <div class="tables-layout">
         <aside class="tables-list-panel panel quiet-panel">
@@ -330,6 +359,31 @@
               <button id="btn-tbl-mul" class="btn" type="button" title="Multiply selected">×</button>
               <button id="btn-tbl-inc" class="btn" type="button" title="Increment (+)">▲</button>
               <button id="btn-tbl-dec" class="btn" type="button" title="Decrement (-)">▼</button>
+              <button id="btn-tbl-pct" class="btn" type="button" title="Change selected by value %">%</button>
+              <button id="btn-tbl-clamp" class="btn" type="button" title="Clamp selected to min,max">Clamp</button>
+            </div>
+            <div class="toolbar-group">
+              <span class="toolbar-label">Shape</span>
+              <button id="btn-tbl-smooth" class="btn" type="button" title="Smooth selection">Smooth</button>
+              <button id="btn-tbl-smooth-h" class="btn" type="button" title="Smooth rows">Smooth H</button>
+              <button id="btn-tbl-smooth-v" class="btn" type="button" title="Smooth columns">Smooth V</button>
+              <button id="btn-tbl-interp" class="btn" type="button" title="Interpolate selection">Interp</button>
+              <button id="btn-tbl-interp-h" class="btn" type="button" title="Interpolate rows">Interp H</button>
+              <button id="btn-tbl-interp-v" class="btn" type="button" title="Interpolate columns">Interp V</button>
+            </div>
+            <div class="toolbar-group">
+              <span class="toolbar-label">Edit</span>
+              <button id="btn-tbl-copy" class="btn" type="button" title="Copy (Ctrl+C)">Copy</button>
+              <button id="btn-tbl-paste" class="btn" type="button" title="Paste (Ctrl+V)">Paste</button>
+              <button id="btn-tbl-undo" class="btn" type="button" title="Undo (Ctrl+Z)">Undo</button>
+              <button id="btn-tbl-redo" class="btn" type="button" title="Redo (Ctrl+Y)">Redo</button>
+              <button id="btn-tbl-stft" class="btn" type="button" title="STFT preview from the imported log (never auto-writes)">STFT preview</button>
+            </div>
+            <div class="toolbar-group">
+              <span class="toolbar-label">Hex poke</span>
+              <input id="hex-poke-off" class="tool-value mono" placeholder="offset hex" spellcheck="false">
+              <input id="hex-poke-val" class="tool-value mono" placeholder="bytes hex" spellcheck="false">
+              <button id="btn-hex-poke" class="btn" type="button" title="Write raw bytes into the working BIN (undoable)">Poke</button>
             </div>
           </div>
         </section>
@@ -341,6 +395,13 @@
         <div class="toolbar-group">
           <span class="toolbar-label">P01</span>
           <button id="btn-p01-backup" class="btn btn-primary" type="button">P01 full backup</button>
+        </div>
+        <div class="toolbar-sep"></div>
+        <div class="toolbar-group">
+          <span class="toolbar-label">Live</span>
+          <button id="btn-compare-bin" class="btn" type="button" title="Read back and compare the working BIN with the ECU (read-only)">Compare BIN to ECU</button>
+          <button id="btn-verify-write" class="btn" type="button" title="Live read-back verify (read-only)">Verify after write</button>
+          <button id="btn-show-risk" class="btn btn-danger" type="button" title="Shows the write gates. P01 only, experimental, off by default.">Show write gates</button>
         </div>
         <div class="toolbar-status" id="flash-status">Identify first. Guided flash stays fail-closed.</div>
       </div>
@@ -379,6 +440,53 @@
       </div>
     </div>
 
+    <div id="view-inspect" class="content content--hidden view-page" data-view-panel="inspect" hidden>
+      <div class="page-toolbar">
+        <div class="toolbar-group">
+          <span class="toolbar-label">Working BIN</span>
+          <label>Offset <input id="inspect-offset" class="tool-value mono" value="0x0" spellcheck="false"></label>
+          <label>Length <input id="inspect-len" class="tool-value mono" value="256" spellcheck="false"></label>
+          <button id="btn-inspect-hex" class="btn" type="button">Hex window</button>
+          <button id="btn-inspect-profile" class="btn" type="button">Entropy profile</button>
+          <button id="btn-inspect-report" class="btn btn-primary" type="button">Tune report</button>
+        </div>
+        <div class="toolbar-status" id="inspect-status">Load a BIN on Maps first. Inspect never enables write.</div>
+      </div>
+      <div class="view-body scroll-pane">
+        <pre id="inspect-output" class="mono-block log-box"></pre>
+      </div>
+    </div>
+
+    <div id="view-compare" class="content content--hidden view-page" data-view-panel="compare" hidden>
+      <div class="page-toolbar">
+        <div class="toolbar-group">
+          <span class="toolbar-label">BIN diff</span>
+          <button id="btn-compare-load" class="btn" type="button">Load compare BIN</button>
+          <button id="btn-compare-run" class="btn btn-primary" type="button">Diff report</button>
+        </div>
+        <div class="toolbar-status">Working BIN (Maps) vs a second dump. Read-only.</div>
+      </div>
+      <div class="view-body scroll-pane">
+        <pre id="compare-report" class="mono-block log-box">Load the working BIN on Maps, then load a compare BIN here.</pre>
+      </div>
+    </div>
+
+    <div id="view-capabilities" class="content content--hidden view-page" data-view-panel="capabilities" hidden>
+      <div class="page-toolbar">
+        <div class="toolbar-group">
+          <span class="toolbar-label">ECU database</span>
+          <button id="btn-cap-refresh" class="btn btn-primary" type="button">Refresh</button>
+        </div>
+        <div class="toolbar-status" id="cap-status">What each family can do, and where that claim comes from. Nothing here is bench-tested.</div>
+      </div>
+      <div class="view-body scroll-pane">
+        <div id="cap-legend" class="cap-legend"></div>
+        <div id="cap-matrix"></div>
+      </div>
+    </div>
+
+    <div id="shortcut-help" class="shortcut-help" hidden role="dialog" aria-label="Keyboard shortcuts"></div>
+
     <footer class="status-bar">
       <div class="status-left" id="status-left">TuneItVerse 3.46.1</div>
       <div class="status-center" id="status-center">No invented live values</div>
@@ -393,5 +501,6 @@
   <script src="v340.js"></script>
   <script src="v341.js"></script>
   <script src="adapter_status.js"></script>
+  <script src="v347.js"></script>
 </body>
 </html>

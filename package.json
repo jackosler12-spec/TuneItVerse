@@ -2,7 +2,7 @@
   "name": "tuneitverse",
   "private": true,
   "version": "3.46.1",
-  "description": "TuneItVerse - open ECU tuning platform. v3.44.0: expanded catalog, refined maps, operational status, improved offline tools. Experimental P01 write off by default. EDC16 report-only. Not bench-tested.",
+  "description": "TuneItVerse - open ECU tuning platform. Offline BIN/XDF/A2L tools, per-family capability status with sources. Experimental P01 write off by default and not bench-tested. EDC16 checksum report-only.",
   "type": "module",
   "scripts": {
     "tauri": "tauri",
@@ -13,7 +13,8 @@
     "build:win-exe": "tauri build --target x86_64-pc-windows-msvc && node scripts/copy-installer.js",
     "bump-version": "node scripts/bump-version.js",
     "check": "tauri info",
-    "test": "node -e \"const p=require('./package.json'); if(!p.name||!p.scripts.build) process.exit(1); console.log('ok', p.name, p.version);\""
+    "test": "node scripts/check-frontend.mjs",
+    "check:frontend": "node scripts/check-frontend.mjs"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.11.4"
