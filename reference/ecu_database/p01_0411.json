@@ -89,5 +89,32 @@
     "checksum_cs1": true,
     "checksum_cvn_os": true,
     "full_backup_protocol": true
+  },
+  "hardware_tested": false,
+  "capabilities": {
+    "identify": {
+      "status": "verified_dump",
+      "source": "Binary OS ID @0x504 with a valid OS segment checksum on reference/LS1 PCM P01 12225074.bin; OS ID -> P01 per github.com/PcmHammer/PcmHammer @ 033cb039 Apps/PcmLibrary/Misc/PcmInfo.cs."
+    },
+    "read": {
+      "status": "verified_log",
+      "source": "Kernel Mode 35 full read; frames match reference/PcmHammer_debugLog_20260504@180810.txt (real read session). Fake-PCM tested; this build has not read a real PCM."
+    },
+    "checksum": {
+      "status": "verified_dump",
+      "source": "CS1 16-bit wordsum (segment table @0x514) and CS2 CRC-16/ARC reproduce the stored words and stock OS CVN 717A (reference/stockcvn.xml) on the 12225074 image."
+    },
+    "seed_key": {
+      "status": "verified_log",
+      "source": "GM algorithm 0x28 (reference/GmKeys.cs): seed 16CB -> key C837 matches the 'Unlock succeeded' exchange in reference/PcmHammer_debugLog_20260504@180810.txt."
+    },
+    "write": {
+      "status": "experimental",
+      "source": "Kernel calibration write (0x8000-0x1FFFF) per public PcmHammer host source @033cb039. Off by default: experimental_p01_write + typed phrase + FullImage backup + voltage gate. Never bench-tested."
+    },
+    "map_hints": {
+      "status": "public_source",
+      "source": "TableSeek definitions from reference/P01-P59.xml, located per image (tables missing from the dump are reported, not guessed)."
+    }
   }
 }

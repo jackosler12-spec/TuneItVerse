@@ -1,0 +1,79 @@
+{
+  "ecu_family": "GM_P10",
+  "display_name": "GM P10 PCM (catalog)",
+  "part_numbers_or_os_ids": [
+    "12213305",
+    "12571911",
+    "12575262",
+    "12579238",
+    "12587430",
+    "12577956",
+    "12579357",
+    "12584138",
+    "12584594",
+    "12587608",
+    "12588012",
+    "12589825",
+    "12590965",
+    "12595726",
+    "12597031",
+    "12623317"
+  ],
+  "vehicles": [],
+  "hardware": "GM P10 (PcmHammer: no slave CPU; service numbers 12576463 / 12574976)",
+  "protocol": "J1850 VPW (PcmHammer kernel Kernel-P10.bin @ 0xFFB800)",
+  "bin_size_bytes": 524288,
+  "flash_memory_map": {
+    "full_flash": "0x00000-0x7FFFF (PcmInfo.cs ImageSize 512 KiB, ImageBaseAddress 0)"
+  },
+  "checksum": {
+    "type": "not_supported",
+    "description": "PcmHammer reports ChecksumSupport for P10, but no P10 layout is measured here. P01 corrector is refused on P10 OS IDs.",
+    "reference_files": [],
+    "routine": null
+  },
+  "security_access": {
+    "type": "GM 2-byte seed/key, algorithm 66",
+    "reference": "PcmInfo.cs KeyAlgorithm = 66; table in reference/GmKeys.cs",
+    "levels": [
+      "Level 1 (PcmHammer unlock)"
+    ]
+  },
+  "maps_and_xdf": {
+    "has_xdf": false,
+    "description": "No P10 definitions in reference/.",
+    "kernel_for_flash": "reference/Kernel-P10.bin (not used by this app)"
+  },
+  "notes": "Catalog entry from PcmHammer's public PcmInfo.cs. 512 KiB collides with P01: the OS ID decides. Identify/offline only.",
+  "sources": [
+    "github.com/PcmHammer/PcmHammer @ 033cb039 Apps/PcmLibrary/Misc/PcmInfo.cs (case PcmType.P10 and OSID switch)",
+    "reference/Kernel-P10.bin (file present, unused)"
+  ],
+  "hardware_tested": false,
+  "capabilities": {
+    "identify": {
+      "status": "unverified",
+      "source": "P10 OS IDs from github.com/PcmHammer/PcmHammer @ 033cb039 Apps/PcmLibrary/Misc/PcmInfo.cs. This app reads the binary OS ID with the P01 layout (@0x504); that layout is not verified on a P10 image and there is no P10 dump in reference/."
+    },
+    "read": {
+      "status": "not_supported",
+      "source": "PcmHammer uses Kernel-P10.bin @0xFFB800; this app has no P10 read path."
+    },
+    "checksum": {
+      "status": "not_supported",
+      "source": "P01 corrector refused when the binary OS ID is a P10 OS. No P10 checksum layout in reference/."
+    },
+    "seed_key": {
+      "status": "public_source",
+      "source": "PcmInfo.cs KeyAlgorithm 66 (GM 2-byte table, reference/GmKeys.cs). Offline calculator only; never tried on a P10."
+    },
+    "write": {
+      "status": "not_supported",
+      "source": "Not in write_families()."
+    },
+    "map_hints": {
+      "status": "not_supported",
+      "source": "No sourced P10 definitions in reference/."
+    }
+  }
+}

@@ -1,8 +1,19 @@
 {
   "ecu_family": "MED17_COMMON",
   "display_name": "Bosch MED17 (VW/Audi/Seat/Skoda common gasoline turbo)",
-  "part_numbers_or_os_ids": ["MED17.5", "MED17.1", "0261xxxxxx common HW", "many OS variants like 8K0 907 115"],
-  "vehicles": ["VW Golf GTI MK6/MK7", "Audi A3/A4 2.0TFSI", "Seat Leon Cupra", "Skoda Octavia vRS", "Many EA888 gen1/2/3 applications"],
+  "part_numbers_or_os_ids": [
+    "MED17.5",
+    "MED17.1",
+    "0261xxxxxx common HW",
+    "many OS variants like 8K0 907 115"
+  ],
+  "vehicles": [
+    "VW Golf GTI MK6/MK7",
+    "Audi A3/A4 2.0TFSI",
+    "Seat Leon Cupra",
+    "Skoda Octavia vRS",
+    "Many EA888 gen1/2/3 applications"
+  ],
   "hardware": "Bosch MED17.x gasoline direct injection ECU",
   "protocol": "CAN @ 500kbps + UDS (ISO 15765 / ISO-TP multi-frame)",
   "bin_size_bytes": 2097152,
@@ -12,14 +23,20 @@
   },
   "checksum": {
     "type": "bosch_med17_crc32_multiregion + additive fallback",
-    "description": "Multiple CRC32 regions (poly 0xEDB88320) over map blocks + OS. Correction values patched at end of regions. Public algorithms in tuning community (similar to WinOLS MED17 plugin). Always verify corrected bin with original CS before flash. Shared multipoint path with EDC family in checksum.rs for 2MB bins.",
-    "reference_files": ["public example bins from personal dumps only"],
-    "routine": "Rust multipoint_crc fully operational for MED17/EDC in v0.8.0"
+    "description": "Report-only. No measured MED17 checksum layout in reference/; correct_checksums refuses 2 MB images.",
+    "reference_files": [
+      "public example bins from personal dumps only"
+    ],
+    "routine": "report-only (correct_checksums refuses this size)"
   },
   "security_access": {
     "type": "UDS 0x27 Security Access (multiple levels)",
     "reference": "security.rs + common public seed/key tables for MED17 (level 1 diagnostic, level 2 extended, level 3 flash/programming)",
-    "levels": ["Level 1: OBD diagnostics / DTC / live data", "Level 2: Calibration read/write", "Level 3: Flash programming / kernel upload"]
+    "levels": [
+      "Level 1: OBD diagnostics / DTC / live data",
+      "Level 2: Calibration read/write",
+      "Level 3: Flash programming / kernel upload"
+    ]
   },
   "maps_and_xdf": {
     "has_xdf": false,
@@ -33,5 +50,35 @@
       "lambda_target": "0x32000"
     }
   },
-  "notes": "Fully operational in v0.8.0. MED17 is very common in modern VW group cars. Protocol: full UDS via CAN in Rust (iso_tp + kwp extensions). Security access uses public known algorithms. Checksum: multipoint CRC similar to EDC16. **For personal use only - always bench read your own ECU first, never flash unverified bins.** Use with cheap OBDLink or J2534 interface. Industry-leading free path."
+  "notes": "Fully operational in v0.8.0. MED17 is very common in modern VW group cars. Protocol: full UDS via CAN in Rust (iso_tp + kwp extensions). Security access uses public known algorithms. Checksum: multipoint CRC similar to EDC16. **For personal use only - always bench read your own ECU first, never flash unverified bins.** Use with cheap OBDLink or J2534 interface. Industry-leading free path.",
+  "sources": [
+    "No dump, logged session or cited document for this family in reference/. Catalog facts (vendor, protocol class, size) are general and unverified."
+  ],
+  "hardware_tested": false,
+  "capabilities": {
+    "identify": {
+      "status": "unverified",
+      "source": "BIN size / OS-string tokens only. Sizes collide across catalog families. No dump, logged session or cited document for this in reference/."
+    },
+    "read": {
+      "status": "not_supported",
+      "source": "No read/backup path exposed in the UI for this family. No dump, logged session or cited document for this in reference/."
+    },
+    "checksum": {
+      "status": "report_only",
+      "source": "Report-only. No measured MED17 checksum layout in reference/; correct_checksums refuses 2 MB images."
+    },
+    "seed_key": {
+      "status": "not_supported",
+      "source": "security.rs returns KeyAlgorithmUnverified; no key is sent. Add dump-derived pairs to seed_tables.json."
+    },
+    "write": {
+      "status": "not_supported",
+      "source": "Not in write_families(); guided flash refuses."
+    },
+    "map_hints": {
+      "status": "unverified",
+      "source": "Placeholder addresses carried from earlier catalog passes. No cited source; they are NOT from a dump or definition file. Confirm against your own dump + XDF/A2L before editing."
+    }
+  }
 }

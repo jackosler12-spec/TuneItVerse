@@ -1,8 +1,15 @@
 {
   "ecu_family": "TRIONIC8",
   "display_name": "Saab / GM Trionic 8",
-  "part_numbers_or_os_ids": ["T8", "TRIONIC8", "55353238"],
-  "vehicles": ["Saab 9-3", "Saab 9-5 Trionic 8"],
+  "part_numbers_or_os_ids": [
+    "T8",
+    "TRIONIC8",
+    "55353238"
+  ],
+  "vehicles": [
+    "Saab 9-3",
+    "Saab 9-5 Trionic 8"
+  ],
   "hardware": "Trionic 8",
   "protocol": "CAN / GMLAN",
   "bin_size_bytes": 2097152,
@@ -18,14 +25,46 @@
   "security_access": {
     "type": "GM/Saab seed/key — measured table required",
     "reference": "seed_tables.json",
-    "levels": ["Level 1", "Level 2"]
+    "levels": [
+      "Level 1",
+      "Level 2"
+    ]
   },
   "maps_and_xdf": {
     "has_xdf": false,
     "xdf_file": null,
-    "description": "Use a personal XDF. Catalog does not invent T8 addresses.",
-    "refined_map_addrs": null
+    "description": "Use a personal XDF. Catalog does not invent T8 addresses."
   },
   "communication_kernels": [],
-  "notes": "Identify by OS string. Writes blocked."
+  "notes": "Identify by OS string. Writes blocked.",
+  "sources": [
+    "No dump, logged session or cited document for this family in reference/. Catalog facts (vendor, protocol class, size) are general and unverified."
+  ],
+  "hardware_tested": false,
+  "capabilities": {
+    "identify": {
+      "status": "unverified",
+      "source": "BIN size / OS-string tokens only. Sizes collide across catalog families. No dump, logged session or cited document for this in reference/."
+    },
+    "read": {
+      "status": "not_supported",
+      "source": "No read/backup path exposed in the UI for this family. No dump, logged session or cited document for this in reference/."
+    },
+    "checksum": {
+      "status": "report_only",
+      "source": "Report-only. No T8 checksum layout in reference/."
+    },
+    "seed_key": {
+      "status": "not_supported",
+      "source": "security.rs returns KeyAlgorithmUnverified; no key is sent. Add dump-derived pairs to seed_tables.json."
+    },
+    "write": {
+      "status": "not_supported",
+      "source": "Not in write_families(); guided flash refuses."
+    },
+    "map_hints": {
+      "status": "not_supported",
+      "source": "No catalog addresses. Load an XDF/A2L for your own file."
+    }
+  }
 }

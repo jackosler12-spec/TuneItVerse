@@ -1,8 +1,15 @@
 {
   "ecu_family": "EDC15_COMMON",
   "display_name": "Bosch EDC15 (PD / VE diesel community)",
-  "part_numbers_or_os_ids": ["EDC15", "EDC15P+", "EDC15C"],
-  "vehicles": ["VW/Audi PD TDI", "early common-rail Bosch diesel"],
+  "part_numbers_or_os_ids": [
+    "EDC15",
+    "EDC15P+",
+    "EDC15C"
+  ],
+  "vehicles": [
+    "VW/Audi PD TDI",
+    "early common-rail Bosch diesel"
+  ],
   "hardware": "Bosch EDC15",
   "protocol": "KWP / CAN",
   "bin_size_bytes": 1048576,
@@ -19,7 +26,10 @@
   "security_access": {
     "type": "Bosch seed/key — measured table required",
     "reference": "Drop pairs in seed_tables.json from a personal dump",
-    "levels": ["Diagnostic", "Programming"]
+    "levels": [
+      "Diagnostic",
+      "Programming"
+    ]
   },
   "maps_and_xdf": {
     "has_xdf": false,
@@ -32,5 +42,35 @@
     }
   },
   "communication_kernels": [],
-  "notes": "Catalog + identify only. Writes stay blocked until a measured corrector and seed table exist."
+  "notes": "Catalog + identify only. Writes stay blocked until a measured corrector and seed table exist.",
+  "sources": [
+    "No dump, logged session or cited document for this family in reference/. Catalog facts (vendor, protocol class, size) are general and unverified."
+  ],
+  "hardware_tested": false,
+  "capabilities": {
+    "identify": {
+      "status": "unverified",
+      "source": "BIN size / OS-string tokens only. Sizes collide across catalog families. No dump, logged session or cited document for this in reference/."
+    },
+    "read": {
+      "status": "not_supported",
+      "source": "No read/backup path exposed in the UI for this family. No dump, logged session or cited document for this in reference/."
+    },
+    "checksum": {
+      "status": "report_only",
+      "source": "Report-only. correct_checksums refuses 1 MB images."
+    },
+    "seed_key": {
+      "status": "not_supported",
+      "source": "security.rs returns KeyAlgorithmUnverified; no key is sent. Add dump-derived pairs to seed_tables.json."
+    },
+    "write": {
+      "status": "not_supported",
+      "source": "Not in write_families(); guided flash refuses."
+    },
+    "map_hints": {
+      "status": "unverified",
+      "source": "Placeholder addresses carried from earlier catalog passes. No cited source; they are NOT from a dump or definition file. Confirm against your own dump + XDF/A2L before editing."
+    }
+  }
 }

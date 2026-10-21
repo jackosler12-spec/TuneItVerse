@@ -17,21 +17,21 @@ fn compare_p01_gm_seed(seed_hex: String, algo: Option<u32>, scan: Option<bool>) 
 }
 #[tauri::command] fn validate_bin_checksums_summary_cmd(data: Vec<u8>) -> Result<String, String> {
     if crate::cs_guard::p01_corrector_blocked(&data) {
-        let fam = if crate::cs_guard::p59_blocks_p01_corrector(&data) { "GM_P59" } else { "HONDA_KEIHIN" };
+        let fam = crate::cs_guard::blocked_family_label(&data);
         return Ok(format!("Checksum validation for {} ({} bytes) using report-only: P01 additive blocked\n", fam, data.len()));
     }
     checksum::validate_bin_checksums_summary(&data)
 }
 #[tauri::command] fn validate_checksums_cmd(data: Vec<u8>) -> Result<String, String> {
     if crate::cs_guard::p01_corrector_blocked(&data) {
-        let fam = if crate::cs_guard::p59_blocks_p01_corrector(&data) { "GM_P59" } else { "HONDA_KEIHIN" };
+        let fam = crate::cs_guard::blocked_family_label(&data);
         return Ok(json!({"ecu_family":fam,"all_valid":false,"method_used":"report-only: P01 additive blocked","regions":[]}).to_string());
     }
     Ok(serde_json::to_string_pretty(&checksum::validate_checksums(&data)?).unwrap_or_else(|_| "{}".into()))
 }
 #[tauri::command] fn correct_bin_checksums(data: Vec<u8>) -> Result<Vec<u8>, String> {
     if crate::cs_guard::p01_corrector_blocked(&data) {
-        return Err("Honda or P59 OS on this image. P01 additive correction is blocked.".into());
+        return Err(format!("{} image. P01 additive correction is blocked.", crate::cs_guard::blocked_family_label(&data)));
     }
     Ok(checksum::correct_checksums(&data)?.data)
 }
@@ -173,7 +173,7 @@ pub fn run() {
             st_clear_filters, st_set_pass_filter, st_set_flow_control_filter,
             st_start_monitor, st_stop_monitor, st_capture_monitor, st_enter_sleep, st_set_sleep_wake,
             st_read_pp, st_write_pp, st_stpx, st_adapter_status, elm_session_info, nissan_can_scan,
-            list_supported_protocols, list_supported_ecus, list_ecu_catalog, get_ecu_info, read_properties, read_ecu_data,
+            list_supported_protocols, list_supported_ecus, list_ecu_catalog, family_capabilities, get_ecu_info, read_properties, read_ecu_data,
             get_logging_templates, log_get_status, log_start, log_stop, log_set_channels, log_apply_template,
             log_capture_sample, log_set_demo_mode, log_get_samples, log_clear, log_export_csv, log_import_csv,
             compute_seed_key, gm_key_table_info, compare_p01_gm_seed, read_dtcs_cmd, read_freeze_frame_cmd, clear_dtcs_cmd, dtc::explain_dtcs_cmd,

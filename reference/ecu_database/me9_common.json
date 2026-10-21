@@ -1,8 +1,15 @@
 {
   "ecu_family": "ME9_COMMON",
   "display_name": "Bosch ME9 / ME9.1 gasoline",
-  "part_numbers_or_os_ids": ["ME9", "ME9.1", "ME9.2"],
-  "vehicles": ["VW/Audi 2.0T early", "Holden/Opel ME9 applications"],
+  "part_numbers_or_os_ids": [
+    "ME9",
+    "ME9.1",
+    "ME9.2"
+  ],
+  "vehicles": [
+    "VW/Audi 2.0T early",
+    "Holden/Opel ME9 applications"
+  ],
   "hardware": "Bosch ME9",
   "protocol": "CAN / KWP",
   "bin_size_bytes": 2097152,
@@ -18,7 +25,10 @@
   "security_access": {
     "type": "Bosch seed/key — measured table required",
     "reference": "seed_tables.json",
-    "levels": ["Diagnostic", "Programming"]
+    "levels": [
+      "Diagnostic",
+      "Programming"
+    ]
   },
   "maps_and_xdf": {
     "has_xdf": false,
@@ -30,5 +40,35 @@
     }
   },
   "communication_kernels": [],
-  "notes": "Size collides with other 2 MB Bosch families. OS string wins. Write path stays fail-closed."
+  "notes": "Size collides with other 2 MB Bosch families. OS string wins. Write path stays fail-closed.",
+  "sources": [
+    "No dump, logged session or cited document for this family in reference/. Catalog facts (vendor, protocol class, size) are general and unverified."
+  ],
+  "hardware_tested": false,
+  "capabilities": {
+    "identify": {
+      "status": "unverified",
+      "source": "BIN size / OS-string tokens only. Sizes collide across catalog families. No dump, logged session or cited document for this in reference/."
+    },
+    "read": {
+      "status": "not_supported",
+      "source": "No read/backup path exposed in the UI for this family. No dump, logged session or cited document for this in reference/."
+    },
+    "checksum": {
+      "status": "report_only",
+      "source": "Report-only. correct_checksums refuses 2 MB images."
+    },
+    "seed_key": {
+      "status": "not_supported",
+      "source": "security.rs returns KeyAlgorithmUnverified; no key is sent. Add dump-derived pairs to seed_tables.json."
+    },
+    "write": {
+      "status": "not_supported",
+      "source": "Not in write_families(); guided flash refuses."
+    },
+    "map_hints": {
+      "status": "unverified",
+      "source": "Placeholder addresses carried from earlier catalog passes. No cited source; they are NOT from a dump or definition file. Confirm against your own dump + XDF/A2L before editing."
+    }
+  }
 }

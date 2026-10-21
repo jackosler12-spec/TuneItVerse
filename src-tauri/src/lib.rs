@@ -26,6 +26,7 @@ mod scripting;
 mod security;
 mod seed_tables;
 mod gm_keys;
+mod gm_osid;
 mod p01_gm_compare;
 mod table_tools;
 mod tableseek;

@@ -1,8 +1,14 @@
 {
   "ecu_family": "SIMOS18",
   "display_name": "Continental Simos 18 (EA888 Gen3)",
-  "part_numbers_or_os_ids": ["SIMOS18", "SIMOS18.1", "SIMOS18.10"],
-  "vehicles": ["VW/Audi/Skoda EA888 Gen3"],
+  "part_numbers_or_os_ids": [
+    "SIMOS18",
+    "SIMOS18.1",
+    "SIMOS18.10"
+  ],
+  "vehicles": [
+    "VW/Audi/Skoda EA888 Gen3"
+  ],
   "hardware": "Continental Simos 18",
   "protocol": "CAN / UDS",
   "bin_size_bytes": 4194304,
@@ -18,14 +24,46 @@
   "security_access": {
     "type": "UDS SecurityAccess — measured table required",
     "reference": "seed_tables.json",
-    "levels": ["Diagnostic", "Programming"]
+    "levels": [
+      "Diagnostic",
+      "Programming"
+    ]
   },
   "maps_and_xdf": {
     "has_xdf": false,
     "xdf_file": null,
-    "description": "Load an A2L/XDF from your own file. No invented map pack.",
-    "refined_map_addrs": null
+    "description": "Load an A2L/XDF from your own file. No invented map pack."
   },
   "communication_kernels": [],
-  "notes": "Identify by 4 MB size + OS string. Flash/corrector blocked until you add measured routines."
+  "notes": "Identify by 4 MB size + OS string. Flash/corrector blocked until you add measured routines.",
+  "sources": [
+    "No dump, logged session or cited document for this family in reference/. Catalog facts (vendor, protocol class, size) are general and unverified."
+  ],
+  "hardware_tested": false,
+  "capabilities": {
+    "identify": {
+      "status": "unverified",
+      "source": "BIN size / OS-string tokens only. Sizes collide across catalog families. No dump, logged session or cited document for this in reference/."
+    },
+    "read": {
+      "status": "not_supported",
+      "source": "No read/backup path exposed in the UI for this family. No dump, logged session or cited document for this in reference/."
+    },
+    "checksum": {
+      "status": "report_only",
+      "source": "Report-only. No corrector for 4 MB images."
+    },
+    "seed_key": {
+      "status": "not_supported",
+      "source": "security.rs returns KeyAlgorithmUnverified; no key is sent. Add dump-derived pairs to seed_tables.json."
+    },
+    "write": {
+      "status": "not_supported",
+      "source": "Not in write_families(); guided flash refuses."
+    },
+    "map_hints": {
+      "status": "not_supported",
+      "source": "No catalog addresses. Load an XDF/A2L for your own file."
+    }
+  }
 }

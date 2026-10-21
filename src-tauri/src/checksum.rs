@@ -411,6 +411,13 @@ pub fn validate_checksums(data: &[u8]) -> Result<ChecksumReport, String> {
             method_used: "report-only: P59 OS on P01-sized image — P01 additive blocked".into(), cvns: vec![],
         });
     }
+    if let Some(why) = crate::cs_guard::gm_other_blocks_p01_corrector(data) {
+        return Ok(ChecksumReport {
+            regions: vec![], valid_count: 0, fixed_count: 0, failed_count: 0, all_valid: false,
+            ecu_family: crate::cs_guard::blocked_family_label(data),
+            method_used: format!("report-only: {}", why), cvns: vec![],
+        });
+    }
     if is_p01_size(data.len()) { validate_p01_checksums(data) }
     else if data.len() == EDC16_FLASH_SIZE { Ok(edc16_report_only()) }
     else {
@@ -433,6 +440,9 @@ pub fn correct_checksums(data: &[u8]) -> Result<CorrectedCal, String> {
     }
     if crate::cs_guard::p59_blocks_p01_corrector(data) {
         return Err("P59 OS string on this image. P01 additive correction is blocked until measured P59 CS words exist.".into());
+    }
+    if let Some(why) = crate::cs_guard::gm_other_blocks_p01_corrector(data) {
+        return Err(format!("{}.", why));
     }
     if is_p01_size(data.len()) { correct_p01_checksums(data) }
     else if data.len() == EDC16_FLASH_SIZE { Err(EDC16_CS_UNSUPPORTED.into()) }
@@ -492,6 +502,36 @@ pub(crate) mod tests {
         assert!(correct_checksums(&d).is_err());
         // The old region table really does fail on the stock image.
         assert!(EDC16_CRC32_REGIONS.iter().all(|reg| !validate_crc32_region(&d, reg)));
+    }
+    /// Test helper: rewrite only the OS segment CS word so the image's OS checksum validates.
+    pub(crate) fn p01_os_cs_fix(d: &mut [u8]) -> bool {
+        let Ok(segs) = p01_segments(d) else { return false };
+        let want = p01_expected_cs(d, &segs[0]);
+        write_u16_be(d, segs[0].cs_addr, want);
+        p01_binary_os_id(d).is_some()
+    }
+    fn with_os_id(os: u32) -> Vec<u8> {
+        let mut d = synthetic_p01();
+        d[0x504..0x508].copy_from_slice(&os.to_be_bytes());
+        // Recompute CS words directly (the public corrector may refuse non-P01 OS IDs).
+        correct_p01_checksums(&d).unwrap().data
+    }
+    #[test]
+    fn non_p01_gm_os_refuses_p01_corrector() {
+        // PcmHammer PcmInfo.cs: 12590777 = P59, 12213305 = P10.
+        for os in [12590777u32, 12213305] {
+            let mut d = with_os_id(os);
+            assert_eq!(p01_binary_os_id(&d), Some(os));
+            let r = validate_checksums(&d).unwrap();
+            assert!(r.method_used.starts_with("report-only") && !r.all_valid, "{:?}", r.method_used);
+            d[0x9000] ^= 0xFF;
+            let e = correct_checksums(&d).unwrap_err();
+            assert!(e.contains("PcmHammer"), "{}", e);
+        }
+        // A P01 OS ID still corrects.
+        let mut d = with_os_id(12225074);
+        d[0x9000] ^= 0xFF;
+        assert!(correct_checksums(&d).unwrap().report.all_valid);
     }
     #[test]
     fn validate_unknown_size_is_report_only() {

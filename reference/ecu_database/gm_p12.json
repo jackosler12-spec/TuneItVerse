@@ -1,0 +1,79 @@
+{
+  "ecu_family": "GM_P12",
+  "display_name": "GM P12 PCM (Atlas I4/I5/I6, catalog)",
+  "part_numbers_or_os_ids": [
+    "12597521 (service no.)",
+    "12569773 (P12b service no.)",
+    "12604440",
+    "12606374",
+    "12606375",
+    "12606400",
+    "12610624",
+    "12609805",
+    "12611642",
+    "12613422",
+    "12618164"
+  ],
+  "vehicles": [
+    "Saturn Ion Redline 2.0L (PcmInfo.cs comments)",
+    "Chevrolet Cobalt SS 2.0L (PcmInfo.cs comments)",
+    "Atlas I5 L52 3.5L",
+    "Atlas I6 LL8 4.2L (2006-2007 Trailblazer)"
+  ],
+  "hardware": "GM P12 (PcmHammer: slave CPU present). P12b = 2 MiB flash variant.",
+  "protocol": "J1850 VPW (PcmHammer kernel Kernel-P12.bin @ 0xFF2000; upstream comment 'or FF0000?')",
+  "bin_size_bytes": 1048576,
+  "flash_memory_map": {
+    "full_flash": "P12 0x00000-0xFFFFF (1 MiB); P12b 2 MiB (PcmInfo.cs ImageSize)"
+  },
+  "checksum": {
+    "type": "not_supported",
+    "description": "No P12 checksum layout in reference/.",
+    "reference_files": [],
+    "routine": null
+  },
+  "security_access": {
+    "type": "GM 2-byte seed/key, algorithm 91",
+    "reference": "PcmInfo.cs KeyAlgorithm = 91; table in reference/GmKeys.cs",
+    "levels": [
+      "Level 1 (PcmHammer unlock)"
+    ]
+  },
+  "maps_and_xdf": {
+    "has_xdf": false,
+    "description": "No P12 definitions in reference/.",
+    "kernel_for_flash": "reference/Kernel-P12.bin (not used by this app)"
+  },
+  "notes": "Catalog entry from PcmHammer's public PcmInfo.cs. P12b (2 MiB) shares this entry; bin_size_bytes is the 1 MiB P12. Identify/offline only.",
+  "sources": [
+    "github.com/PcmHammer/PcmHammer @ 033cb039 Apps/PcmLibrary/Misc/PcmInfo.cs (case PcmType.P12 / P12b and OSID switch, incl. vehicle comments)",
+    "reference/Kernel-P12.bin (file present, unused)"
+  ],
+  "hardware_tested": false,
+  "capabilities": {
+    "identify": {
+      "status": "unverified",
+      "source": "P12/P12b OS IDs from github.com/PcmHammer/PcmHammer @ 033cb039 Apps/PcmLibrary/Misc/PcmInfo.cs (P12 1 MiB, P12b 2 MiB). No P12 dump in reference/; OS ID location in a P12 image not verified here."
+    },
+    "read": {
+      "status": "not_supported",
+      "source": "PcmHammer uses Kernel-P12.bin (base 0xFF2000, upstream comment 'or FF0000?'); this app has no P12 read path."
+    },
+    "checksum": {
+      "status": "not_supported",
+      "source": "No P12 checksum layout in reference/."
+    },
+    "seed_key": {
+      "status": "public_source",
+      "source": "PcmInfo.cs KeyAlgorithm 91 (GM 2-byte table, reference/GmKeys.cs). Offline calculator only; never tried on a P12."
+    },
+    "write": {
+      "status": "not_supported",
+      "source": "Not in write_families()."
+    },
+    "map_hints": {
+      "status": "not_supported",
+      "source": "No sourced P12 definitions in reference/."
+    }
+  }
+}

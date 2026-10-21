@@ -92,19 +92,23 @@ pub fn identify_bin(data: &[u8]) -> serde_json::Value {
     let mut os_hits = match_os_ids(&strings);
     // GM P01 stores the OS ID as a binary u32, not ASCII. Trust it only when the
     // OS segment checksum validates.
-    let p01_bin_os = crate::checksum::p01_binary_os_id(data);
-    if let Some(os) = p01_bin_os {
-        let tok = os.to_string();
-        if let Some(e) = ecu_database::get_ecu_by_family("P01_0411") {
-            if e.part_numbers_or_os_ids.iter().any(|id| id.trim() == tok) {
-                os_hits.insert(0, json!({"family": e.ecu_family, "matched": tok, "display_name": e.display_name, "source": "binary OS ID @0x504, OS checksum valid"}));
-            }
+    // GM stores the OS ID as a binary u32 @0x504 (P01 layout), not ASCII. Trust it only
+    // when the OS segment checksum validates; the PCM type comes from PcmHammer PcmInfo.cs.
+    let gm_bin_os = crate::checksum::p01_binary_os_id(data);
+    let gm_pcm_type = gm_bin_os.and_then(crate::gm_osid::pcm_type);
+    let p01_bin_os = gm_bin_os.filter(|_| gm_pcm_type == Some("P01"));
+    if let (Some(os), Some(t)) = (gm_bin_os, gm_pcm_type) {
+        if let Some(e) = crate::gm_osid::family_for_type(t).and_then(ecu_database::get_ecu_by_family) {
+            os_hits.retain(|h| h.get("family").and_then(|v| v.as_str()) != Some(e.ecu_family.as_str()));
+            os_hits.insert(0, json!({"family": e.ecu_family, "matched": os.to_string(), "display_name": e.display_name,
+                "source": format!("binary OS ID @0x504 (OS checksum valid) = PcmHammer type {}", t)}));
         }
     }
     let family_by_os = os_hits.first().and_then(|h| h.get("family").and_then(|v| v.as_str()).map(|s| s.to_string()));
     let family_by_size = size_matches.first().map(|e| e.ecu_family.clone());
     let honda_os = crate::cs_guard::looks_like_honda(data);
-    let gm_p01_os = crate::cs_guard::looks_like_gm_p01(data) || p01_bin_os.is_some();
+    let gm_other_os = crate::cs_guard::gm_other_blocks_p01_corrector(data);
+    let gm_p01_os = (crate::cs_guard::looks_like_gm_p01(data) && gm_other_os.is_none()) || p01_bin_os.is_some();
     let gm_p59_os = crate::cs_guard::looks_like_gm_p59(data);
     let size_collision = size_matches.len() > 1;
     let family = if honda_os && !gm_p01_os {
@@ -118,12 +122,15 @@ pub fn identify_bin(data: &[u8]) -> serde_json::Value {
     } else {
         family_by_size.clone()
     };
+    // Only a family with a verified corrector is correction-safe (EDC16C41 is report-only).
     let correction_safe = match family.as_deref() {
-        Some("P01_0411") if !honda_os && !gm_p59_os => true,
-        Some("EDC16C41") if size == crate::checksum_sizes::EDC16_FLASH_SIZE => true,
-        _ => false,
+        Some(f) => ecu_database::CHECKSUM_CORRECTOR_FAMILIES.iter().any(|c| c.eq_ignore_ascii_case(f))
+            && !honda_os && !gm_p59_os && gm_other_os.is_none(),
+        None => false,
     };
-    let write_allowed = matches!(family.as_deref(), Some("P01_0411") | Some("EDC16C41")) && correction_safe;
+    // Write is advertised only where code has a path (P01, experimental, off by default).
+    let write_allowed = family.as_deref().map(ecu_database::write_path_live).unwrap_or(false) && correction_safe;
+    let capabilities = family.as_deref().and_then(ecu_database::get_ecu_by_family).and_then(|e| e.capabilities);
     let display = family.as_ref().and_then(|f| ecu_database::get_ecu_by_family(f).map(|e| e.display_name));
     let families_same_size: Vec<String> = size_matches.iter().map(|e| e.ecu_family.clone()).collect();
     let head_n = size.min(4096);
@@ -145,12 +152,19 @@ pub fn identify_bin(data: &[u8]) -> serde_json::Value {
         "gm_p01_os": gm_p01_os,
         "p01_binary_os_id": p01_bin_os,
         "gm_p59_os": gm_p59_os,
+        "gm_binary_os_id": gm_bin_os,
+        "gm_pcm_type": gm_pcm_type,
+        "gm_pcm_type_source": if gm_pcm_type.is_some() { crate::gm_osid::source() } else { String::new() },
+        "capabilities": capabilities,
+        "write_status": if write_allowed { "experimental: off by default (experimental_p01_write + typed phrase), not bench-tested" } else { "not available for this image" },
         "size_collision": size_collision,
         "correction_safe": correction_safe,
         "write_allowed": write_allowed,
         "write_families": ecu_database::write_families(),
         "app_version": crate::APP_VERSION,
-        "notes": if honda_os && !gm_p01_os {
+        "notes": if let Some(why) = gm_other_os.as_deref() {
+            why
+        } else if honda_os && !gm_p01_os {
             "Honda OS string. P01 additive correction is blocked."
         } else if gm_p59_os && !gm_p01_os {
             "P59 OS string. P01 additive and write stay blocked until measured P59 CS words exist."
@@ -319,6 +333,43 @@ mod tests {
         let mut bad = d.clone();
         bad[0x30000] ^= 1;
         assert!(identify_bin(&bad)["p01_binary_os_id"].is_null());
+    }
+
+    #[test]
+    fn non_p01_gm_os_identifies_as_its_own_family_and_blocks() {
+        let mut d = crate::checksum::tests::synthetic_p01();
+        // PcmInfo.cs: 12213305 is a P10 OS.
+        d[0x504..0x508].copy_from_slice(&12213305u32.to_be_bytes());
+        // Fix the OS checksum word directly so the binary OS ID is trusted.
+        let os_sum = crate::checksum::tests::p01_os_cs_fix(&mut d);
+        assert!(os_sum);
+        let v = identify_bin(&d);
+        assert_eq!(v["gm_pcm_type"], "P10", "{}", v);
+        assert_eq!(v["family"], "GM_P10");
+        assert_eq!(v["correction_safe"], false);
+        assert_eq!(v["write_allowed"], false);
+        assert!(v["p01_binary_os_id"].is_null());
+        assert_eq!(v["capabilities"]["write"]["status"], "not_supported");
+    }
+
+    #[test]
+    fn edc16_reference_is_not_correction_safe_or_writable() {
+        let p = concat!(env!("CARGO_MANIFEST_DIR"), "/../reference/NissanPatrol_2010_EDC16C41_392203.bin");
+        let v = identify_bin(&std::fs::read(p).unwrap());
+        assert_eq!(v["correction_safe"], false, "EDC16C41 checksum is report-only");
+        assert_eq!(v["write_allowed"], false, "EDC16C41 has no write path");
+    }
+
+    #[test]
+    fn p01_reference_reports_experimental_write_and_capabilities() {
+        let p = concat!(env!("CARGO_MANIFEST_DIR"), "/../reference/LS1 PCM P01 12225074.bin");
+        let v = identify_bin(&std::fs::read(p).unwrap());
+        assert_eq!(v["family"], "P01_0411");
+        assert_eq!(v["gm_pcm_type"], "P01");
+        assert_eq!(v["correction_safe"], true);
+        assert_eq!(v["write_allowed"], true);
+        assert!(v["write_status"].as_str().unwrap().starts_with("experimental"));
+        assert_eq!(v["capabilities"]["checksum"]["status"], "verified_dump");
     }
 
     #[test]
