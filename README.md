@@ -1,6 +1,6 @@
 # TuneItVerse
 
-TuneItVerse (JRTuners) — Open ECU tuning platform. Free alternative to expensive commercial tools.
+TuneItVerse (JRTuners) — Open ECU tuning platform. Free alternative to expensive commercial tools. Industry-leading DIY solution.
 
 TuneItVerse is a desktop ECU tuning and diagnostics application: a Tauri (Rust) backend with a vanilla HTML/JavaScript front-end that talks to vehicle ECUs (CAN, VPW, ISO-TP, serial/ELM327, J2534) to log live data, read/clear DTCs, inspect/patch BIN/XDF files, and run a guided flash pipeline with fail-closed safety gates.
 
@@ -8,6 +8,7 @@ TuneItVerse is a desktop ECU tuning and diagnostics application: a Tauri (Rust) 
 - Rust 2021 (Tauri backend) + vanilla JS/HTML/CSS
 - serialport, serde, quick-xml, libloading (J2534), sha2
 - Legacy C# / XML / XDF / BIN reference assets in `reference/`
+- Plugin foundation for extensibility
 
 ## Run
 ```bash
@@ -38,7 +39,7 @@ Live data over ELM327/OBDLink reads the ECU's Mode 01 support masks first and po
 
 Data Logging can import a CSV (including Car Scanner's long `SECONDS;PID;VALUE` export; GPS columns are dropped), replay it, and build a clamped STFT/LTFT multiplier preview. Compare lists changed ranges against the working BIN. Neither path writes a calibration.
 
-## Current status (v3.47.0)
+## Current status (v3.48.0)
 
 This is the honest summary. [COMPLETION.md](COMPLETION.md) has the full log, and the in-app **Capabilities** page shows the per-family matrix with a source for every status.
 
@@ -53,6 +54,7 @@ This is the honest summary. [COMPLETION.md](COMPLETION.md) has the full log, and
 - P01 CS1/CS2 + CVN.
 - GM 2-byte seed/key (algorithm tables).
 - Binary or encrypted TunerPro XDFs get a clear error.
+- Plugin/driver SDK foundation added for community extensions.
 
 **P01_0411 (OS 12225074):**
 - The FullImage backup protocol is implemented from the PcmHammer read log + Kernel-P01.bin. Scripted fake-PCM tests pass; the STN link and hardware are untested.
@@ -63,7 +65,7 @@ This is the honest summary. [COMPLETION.md](COMPLETION.md) has the full log, and
 
 **EDC16C41:** Identify + measured 4-byte seed/key. Checksum is **report-only**: an RSA-like 136-byte signature block at 0x1FDF78 is detected on 392203 images. No flash segment, no write.
 
-**Everything else in the catalog:** identify / report-only / unverified map hints. No write. Hardware paths (ELM/J2534/STN) are not bench-tested on this tree.
+**Everything else in the catalog:** identify / report-only / unverified map hints. No write. Hardware paths (ELM/J2534/STN) are not bench-tested on this tree. Plugin system prepared for future growth.
 
 Tests: `cargo test --lib` from `src-tauri/`, and `npm test` (frontend consistency check). Set `TIV_P01_BIN=/path/to/your/p01.bin` to also run the private-dump checksum tests; the dump is never committed.
 
