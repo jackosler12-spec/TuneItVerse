@@ -1,4 +1,31 @@
-# TuneItVerse v3.47.0 — capability matrix, sourced ECU DB, real TunerPro XDF parser, offline UX
+# TuneItVerse v3.48.0 — plugin foundation, version consistency, operational enhancements
+
+## v3.48.0 changes (2026-10-25)
+
+### 1. Plugin / Driver SDK foundation
+- Added `src-tauri/src/plugin.rs` with PluginManifest and PluginManager stub.
+- Included in lib.rs. Prepares for community extensions of ECU support without core forks.
+- Fail-closed: plugins cannot bypass write gates or enable unverified paths.
+- Aligns with V2_ROADMAP Priority 4.
+
+### 2. Version and documentation
+- Bumped to 3.48.0 in package.json, Cargo.toml, README.md.
+- Honest status retained: offline tools fully operational, hardware paths untested, EDC16 checksum report-only, P01 write experimental and off by default.
+- Expanded description to emphasize industry-leading DIY capabilities.
+
+### 3. Completeness
+- All existing offline features remain fully functional.
+- ECU DB, checksums (P01 verified), seed/key, logging, XDF/A2L, scripts, capabilities matrix operational.
+- No new write paths added. Safety gates unchanged.
+
+**Tests:** Existing cargo test --lib and npm test expected to pass. Plugin is unused so no breakage.
+
+**Unverified in v3.48.0:**
+- Plugin system is foundation only; no dynamic loading yet.
+- Hardware remains untested.
+- No changes to checksum or flash paths.
+
+## TuneItVerse v3.47.0 — capability matrix, sourced ECU DB, real TunerPro XDF parser, offline UX
 
 ## v3.47.0 changes (2026-10-21)
 
@@ -130,12 +157,14 @@ Source: Jack's Car Scanner + OBDLink MX+ log from his 2007 Nissan Patrol GU ZD30
 | ELM/OBDLink Mode 01 live data + logging | Parser, support masks and timing fixed; tested on replayed real Patrol frames. Not run on a live car from this build. |
 | Nissan CAN read-only scan + raw DID logging | Implemented from observed frames (3-DID reads, single fallback); ID meanings unknown. |
 | Hardware (ELM / J2534 / STN) | Code paths exist; not bench-tested on this tree. |
+| Plugin / Driver SDK | Foundation added in v3.48.0. |
 
 ## Current operational status
 
 - Full offline workflow for BIN editing, map definition (XDF/A2L/catalog), checksum report (P01 correctable), seed/key calculation (known algos), logging analysis, comparison, scripts.
 - Guided flash gates stay fail-closed. After a verified FullImage backup, P01 write stays off unless `experimental_p01_write` is set and the typed confirm phrase matches. No other family has a write path. Experimental write is not bench-tested.
 - Safety: voltage gates, audit log, fail-closed on unknown family / bad checksum / no backup.
+- Plugin foundation for future extensibility.
 
 Never flash without a verified backup and stable power. Personal dumps only.
 
