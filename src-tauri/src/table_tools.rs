@@ -1,4 +1,4 @@
-//! Table math used by tuners: scale, offset, smooth, STFT preview.
+//! Table math used by tuners: scale, offset, smooth, STFT preview, average, min/max, normalize.
 //! Never writes the ECU. Preview only unless the user patches the BIN.
 
 use serde::{Deserialize, Serialize};
@@ -194,6 +194,78 @@ pub fn percent(values: &[Vec<f64>], pct: f64) -> Result<TableMathResult, String>
     })
 }
 
+pub fn average_table(values: &[Vec<f64>]) -> Result<TableMathResult, String> {
+    let (rows, cols) = dims(values)?;
+    let mut sum = 0.0;
+    let mut count = 0.0;
+    for row in values {
+        for &cell in row {
+            sum += cell;
+            count += 1.0;
+        }
+    }
+    let avg = if count > 0.0 { sum / count } else { 0.0 };
+    fill(values, avg).map(|mut r| {
+        r.message = format!("set to table average {:.3}", avg);
+        r
+    })
+}
+
+pub fn min_table(values: &[Vec<f64>]) -> Result<TableMathResult, String> {
+    let _ = dims(values)?;
+    let mut min_v = f64::MAX;
+    for row in values {
+        for &cell in row {
+            if cell < min_v { min_v = cell; }
+        }
+    }
+    if min_v == f64::MAX { min_v = 0.0; }
+    fill(values, min_v).map(|mut r| {
+        r.message = format!("set to table min {:.3}", min_v);
+        r
+    })
+}
+
+pub fn max_table(values: &[Vec<f64>]) -> Result<TableMathResult, String> {
+    let _ = dims(values)?;
+    let mut max_v = f64::MIN;
+    for row in values {
+        for &cell in row {
+            if cell > max_v { max_v = cell; }
+        }
+    }
+    if max_v == f64::MIN { max_v = 0.0; }
+    fill(values, max_v).map(|mut r| {
+        r.message = format!("set to table max {:.3}", max_v);
+        r
+    })
+}
+
+pub fn normalize(values: &[Vec<f64>]) -> Result<TableMathResult, String> {
+    let (rows, cols) = dims(values)?;
+    let mut min_v = f64::MAX;
+    let mut max_v = f64::MIN;
+    for row in values {
+        for &cell in row {
+            if cell < min_v { min_v = cell; }
+            if cell > max_v { max_v = cell; }
+        }
+    }
+    if (max_v - min_v).abs() < 1e-12 {
+        return Ok(TableMathResult { values: values.to_vec(), cells_changed: 0, message: "normalize: no range".into() });
+    }
+    let mut out = values.to_vec();
+    let mut n = 0;
+    for row in &mut out {
+        for cell in row {
+            let next = (*cell - min_v) / (max_v - min_v);
+            if (next - *cell).abs() > 1e-12 { n += 1; }
+            *cell = next;
+        }
+    }
+    Ok(TableMathResult { values: out, cells_changed: n, message: format!("normalized [{:.3}, {:.3}] → [0, 1]", min_v, max_v) })
+}
+
 pub fn apply_op(req: TableMathRequest) -> Result<TableMathResult, String> {
     match req.op.to_ascii_lowercase().as_str() {
         "scale" | "multiply" | "mul" => scale(&req.values, req.factor.unwrap_or(1.0)),
@@ -204,6 +276,10 @@ pub fn apply_op(req: TableMathRequest) -> Result<TableMathResult, String> {
         "interp_v" | "interpolate_v" => interpolate_v(&req.values),
         "clamp" => clamp_range(&req.values, req.offset.unwrap_or(f64::MIN), req.factor.unwrap_or(f64::MAX)),
         "percent" | "pct" => percent(&req.values, req.factor.or(req.offset).unwrap_or(0.0)),
+        "average" | "avg" | "mean" => average_table(&req.values),
+        "min" => min_table(&req.values),
+        "max" => max_table(&req.values),
+        "normalize" | "norm" => normalize(&req.values),
         other => Err(format!("unknown table op '{}'", other)),
     }
 }
@@ -245,5 +321,12 @@ mod tests {
         assert_eq!(c.values[0], vec![0.0, 3.0, 10.0]);
         let pct = percent(&vec![vec![100.0]], -10.0).unwrap();
         assert!((pct.values[0][0] - 90.0).abs() < 1e-9);
+        let avg = average_table(&vec![vec![10.0, 20.0], vec![30.0, 40.0]]).unwrap();
+        assert!((avg.values[0][0] - 25.0).abs() < 1e-9);
+        let mn = min_table(&vec![vec![10.0, 5.0]]).unwrap();
+        assert!((mn.values[0][0] - 5.0).abs() < 1e-9);
+        let norm = normalize(&vec![vec![0.0, 100.0]]).unwrap();
+        assert!((norm.values[0][0] - 0.0).abs() < 1e-9);
+        assert!((norm.values[0][1] - 1.0).abs() < 1e-9);
     }
 }
