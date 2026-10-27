@@ -1,3 +1,18 @@
+# TuneItVerse v3.48.0 — expanded ECU catalog (MED9_COMMON)
+
+## v3.48.0 changes (2026-10-27)
+
+### 1. ECU database (index 1.27, 17 families)
+- Added **MED9_COMMON**: Bosch MED9 gasoline (VW/Audi community catalog). Identify/report-only/unverified map hints. No write, no checksum corrector, hardware_tested: false.
+- Schema remains validated. All capabilities sourced honestly.
+
+### 2. Version sync
+- package.json, Cargo.toml, tauri.conf.json bumped to 3.48.0.
+
+**Unverified in v3.48.0:**
+- No new hardware paths. Offline tools unchanged and still operational.
+- New family is catalog-only until a personal dump arrives.
+
 # TuneItVerse v3.47.0 — capability matrix, sourced ECU DB, real TunerPro XDF parser, offline UX
 
 ## v3.47.0 changes (2026-10-21)

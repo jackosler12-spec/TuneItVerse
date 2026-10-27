@@ -1,7 +1,7 @@
 {
-  "version": "1.26",
-  "updated": "2026-10-21",
-  "description": "Master index of TuneItVerse ECU database entries. v3.47.0: per-capability status + source on every family (schema validated by ecu_database.rs tests), GM P10/P12 added from PcmHammer PcmInfo.cs, P59 corrected to 1 MiB.",
+  "version": "1.27",
+  "updated": "2026-10-27",
+  "description": "Master index of TuneItVerse ECU database entries. v3.48.0: added MED9_COMMON catalog family (unverified).",
   "families": [
     {
       "id": "P01_0411",
@@ -14,7 +14,7 @@
     {
       "id": "EDC16C41",
       "file": "edc16c41_nissan_patrol.json",
-      "display_name": "Bosch EDC16C41 Nissan Patrol GU V Wagon (23710-VS43B / ZD30CRD variants) — vehicle mapping unconfirmed",
+      "display_name": "Bosch EDC16C41 Nissan Patrol GU V Wagon (23710-VS43B / ZD30CRD variants) \u2014 vehicle mapping unconfirmed",
       "bin_size_bytes": 2097152,
       "primary_protocol": "CAN/KWP",
       "status": "identify: verified_dump, read: not_supported, checksum: report_only, seed_key: reference_doc, write: not_supported, map_hints: unverified"
@@ -130,6 +130,14 @@
       "bin_size_bytes": 1048576,
       "primary_protocol": "J1850 VPW (PcmHammer kernel Kernel-P12.bin @ 0xFF2000; upstream comment 'or FF0000?')",
       "status": "identify: unverified, read: not_supported, checksum: not_supported, seed_key: public_source, write: not_supported, map_hints: not_supported"
+    },
+    {
+      "id": "MED9_COMMON",
+      "file": "med9_common.json",
+      "display_name": "Bosch MED9 (VW/Audi gasoline community catalog)",
+      "bin_size_bytes": 2097152,
+      "primary_protocol": "CAN/KWP",
+      "status": "identify: unverified, read: not_supported, checksum: report_only, seed_key: not_supported, write: not_supported, map_hints: unverified"
     }
   ],
   "notes": "Statuses describe what is measured in-repo. Only P01_0411 has FullImage backup + experimental kernel write (typed confirm). Offline map editor, BIN tools, logging replay, scripts fully operational. Hardware paths exist but untested. Personal dumps only; cite sources; mark unverified. Index 1.25 adds structured map hints (addr/size/scale/unit) for EDC16C41, P59, and Transtron.",

@@ -1,0 +1,47 @@
+{
+  "ecu_family": "MED9_COMMON",
+  "display_name": "Bosch MED9 (VW/Audi gasoline, community catalog)",
+  "part_numbers_or_os_ids": [
+    "common MED9.1 / MED9.5 variants",
+    "example OS IDs from community dumps"
+  ],
+  "vehicles": [
+    "VW Golf / Jetta 2.0T FSI",
+    "Audi A3 / A4 TFSI early"
+  ],
+  "hardware": "Bosch MED9 family",
+  "protocol": "CAN / KWP2000 / UDS",
+  "bin_size_bytes": 2097152,
+  "checksum": {
+    "type": "report-only multipoint (public community notes)",
+    "description": "MED9 typically uses multiple CRC regions; no verified corrector in this build. Report-only.",
+    "status": "report_only"
+  },
+  "security_access": {
+    "type": "UDS 0x27 seed-key",
+    "notes": "Standard Bosch levels; specific tables require personal dump pairs in seed_tables.json"
+  },
+  "maps_and_xdf": {
+    "has_xdf": false,
+    "description": "Unverified community typical map locations for fuel, timing, boost. Refine on your dump.",
+    "refined_map_addrs": {
+      "spark_advance": {
+        "addr": "0xA0000",
+        "typical_size": "16x16",
+        "scale": "0.75",
+        "unit": "deg",
+        "note": "UNVERIFIED hint (no cited source)"
+      }
+    }
+  },
+  "capabilities": {
+    "identify": {"status": "unverified", "source": "community catalog"},
+    "read": {"status": "not_supported", "source": "no protocol implementation"},
+    "checksum": {"status": "report_only", "source": "no public verified corrector"},
+    "seed_key": {"status": "not_supported", "source": "requires measured pairs"},
+    "write": {"status": "not_supported", "source": "no write path"},
+    "map_hints": {"status": "unverified", "source": "typical addresses only"}
+  },
+  "hardware_tested": false,
+  "notes": "Added in v3.48.0 as catalog entry. Personal dump required for any real support. No write."
+}
