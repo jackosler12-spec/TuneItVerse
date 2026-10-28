@@ -1,7 +1,7 @@
 {
-  "version": "1.26",
-  "updated": "2026-10-21",
-  "description": "Master index of TuneItVerse ECU database entries. v3.47.0: per-capability status + source on every family (schema validated by ecu_database.rs tests), GM P10/P12 added from PcmHammer PcmInfo.cs, P59 corrected to 1 MiB.",
+  "version": "1.27",
+  "updated": "2026-10-28",
+  "description": "Master index of TuneItVerse ECU database entries. v3.48.0: version alignment, documentation polish, catalog remains 16 families with sourced capabilities.",
   "families": [
     {
       "id": "P01_0411",
@@ -132,7 +132,7 @@
       "status": "identify: unverified, read: not_supported, checksum: not_supported, seed_key: public_source, write: not_supported, map_hints: not_supported"
     }
   ],
-  "notes": "Statuses describe what is measured in-repo. Only P01_0411 has FullImage backup + experimental kernel write (typed confirm). Offline map editor, BIN tools, logging replay, scripts fully operational. Hardware paths exist but untested. Personal dumps only; cite sources; mark unverified. Index 1.25 adds structured map hints (addr/size/scale/unit) for EDC16C41, P59, and Transtron.",
+  "notes": "Statuses describe what is measured in-repo. Only P01_0411 has FullImage backup + experimental kernel write (typed confirm). Offline map editor, BIN tools, logging replay, scripts fully operational. Hardware paths exist but untested. Personal dumps only; cite sources; mark unverified. v3.48.0 aligns versions and docs.",
   "status_enum": [
     "verified_dump",
     "verified_log",
