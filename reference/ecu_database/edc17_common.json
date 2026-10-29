@@ -21,10 +21,10 @@
     "calibration_region": "Map blocks often starting ~0x80000 range (verify per SW)"
   },
   "checksum": {
-    "type": "bosch_edc17_multipoint (CRC32 / proprietary variants)",
-    "description": "Report-only. No measured EDC17 checksum layout in reference/; correct_checksums refuses 2 MB images.",
+    "type": "bosch_medc17_crc32_add32_add16 (experimental detection via FADECAFE magic)",
+    "description": "Experimental: detects MEDC17-style blocks (open-source port of ConnorHowell/medc17-checksum-tool). ADD32 correction available; CRC32 report-only. Verify on personal dumps.",
     "reference_files": [],
-    "routine": "report-only (correct_checksums refuses this size)"
+    "routine": "medc17_checksum.rs detect/report/correct_add32"
   },
   "security_access": {
     "type": "UDS Service 0x27 seed-key (Bosch standard levels)",
@@ -62,8 +62,8 @@
       "source": "No read/backup path exposed in the UI for this family. No dump, logged session or cited document for this in reference/."
     },
     "checksum": {
-      "status": "report_only",
-      "source": "Report-only. No measured EDC17 checksum layout in reference/; correct_checksums refuses 2 MB images."
+      "status": "experimental",
+      "source": "Port of MIT open-source medc17-checksum-tool (CRC32/ADD32/ADD16 block detection). Not verified on dump yet."
     },
     "seed_key": {
       "status": "not_supported",
