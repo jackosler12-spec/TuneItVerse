@@ -1,3 +1,23 @@
+# TuneItVerse v3.48.0 — experimental MEDC17 checksum support
+
+## v3.48.0 changes (2026-10-29)
+
+### Experimental Bosch MED17 / EDC17 checksum detection
+- Ported block detection and ADD32 correction from the open-source MIT [medc17-checksum-tool](https://github.com/ConnorHowell/medc17-checksum-tool) (ConnorHowell).
+- Detects FADECAFE/CAFEAFFE magic structures typical of Bosch MEDC17 firmware.
+- Reports CRC32 / ADD32 / ADD16 regions with validity.
+- Basic ADD32 correction available (CRC32 matrix-solve is stubbed; report-only for complex cases).
+- New Tauri commands: `medc17_checksum_report`, `medc17_correct_add32`.
+- EDC17_COMMON and MED17_COMMON DB entries updated to `checksum: experimental` with source citation.
+- ECU DB index 1.27.
+- **Not verified on personal dumps yet. Experimental. Hardware paths still untested.**
+
+All prior features from v3.47.0 remain. Offline BIN/XDF/A2L, P01 verified checksums, capability matrix, etc. stay operational.
+
+**Tests:** cargo test --lib should still pass (new module is additive). Hardware unverified.
+
+Build your own. No bullshit prices.
+
 # TuneItVerse v3.47.0 — capability matrix, sourced ECU DB, real TunerPro XDF parser, offline UX
 
 ## v3.47.0 changes (2026-10-21)
@@ -125,6 +145,7 @@ Source: Jack's Car Scanner + OBDLink MX+ log from his 2007 Nissan Patrol GU ZD30
 | GM P59 / P10 / P12 | Identify only (PcmHammer PcmInfo.cs). No checksum, read or write. |
 | EDC16C41 checksum | Report-only (signature). |
 | EDC16C41 write | Off. |
+| EDC17 / MED17 checksum | Experimental (MEDC17 block detection + ADD32). Not dump-verified. |
 | Other catalog families | Identify / report-only / unverified map hints. No write. |
 | CSV log import/export/replay, bench scripts, DTC explain | Operational offline |
 | ELM/OBDLink Mode 01 live data + logging | Parser, support masks and timing fixed; tested on replayed real Patrol frames. Not run on a live car from this build. |
@@ -148,5 +169,6 @@ Never flash without a verified backup and stable power. Personal dumps only.
 5. Bench-test the experimental P01 kernel cal write on your STN + PCM (protocol from public PcmHammer host source; still hardware-unverified). FullImage backup already exists.
 6. Licensed GM 5-byte keys. We do not ship that library.
 7. Isuzu FRR Transtron dump + protocol notes before any 4HK1 write work.
+8. Verify the experimental MEDC17 checksum corrector on your personal EDC17/MED17 dumps.
 
 Build your own. No bullshit prices.
