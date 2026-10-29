@@ -38,9 +38,11 @@ Live data over ELM327/OBDLink reads the ECU's Mode 01 support masks first and po
 
 Data Logging can import a CSV (including Car Scanner's long `SECONDS;PID;VALUE` export; GPS columns are dropped), replay it, and build a clamped STFT/LTFT multiplier preview. Compare lists changed ranges against the working BIN. Neither path writes a calibration.
 
-## Current status (v3.47.0)
+## Current status (v3.48.0)
 
 This is the honest summary. [COMPLETION.md](COMPLETION.md) has the full log, and the in-app **Capabilities** page shows the per-family matrix with a source for every status.
+
+**v3.48.0:** Experimental MEDC17 (EDC17/MED17) checksum block detection + ADD32 correction ported from open-source tool. Report-only for CRC32. Not dump-verified.
 
 **Operational offline:**
 - BIN, text TunerPro XDF and A2L load and edit. The XDF reader supports BASEOFFSET, categories, signed / LSB-first / column-major cells and linear scaling math. Float, strided and non-linear items are skipped or refused and listed.
@@ -62,6 +64,8 @@ This is the honest summary. [COMPLETION.md](COMPLETION.md) has the full log, and
 **GM P59 / P10 / P12:** identify only, from PcmHammer `PcmInfo.cs`: size, key-algorithm index, and a 2618-entry OS ID → PCM type map. The P01 checksum corrector refuses these images.
 
 **EDC16C41:** Identify + measured 4-byte seed/key. Checksum is **report-only**: an RSA-like 136-byte signature block at 0x1FDF78 is detected on 392203 images. No flash segment, no write.
+
+**EDC17 / MED17:** Experimental checksum block detection (FADECAFE magic) and ADD32 correction. CRC32 report-only. Not verified on dumps.
 
 **Everything else in the catalog:** identify / report-only / unverified map hints. No write. Hardware paths (ELM/J2534/STN) are not bench-tested on this tree.
 
