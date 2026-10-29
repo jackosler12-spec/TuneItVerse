@@ -1,7 +1,7 @@
 {
-  "version": "1.26",
-  "updated": "2026-10-21",
-  "description": "Master index of TuneItVerse ECU database entries. v3.47.0: per-capability status + source on every family (schema validated by ecu_database.rs tests), GM P10/P12 added from PcmHammer PcmInfo.cs, P59 corrected to 1 MiB.",
+  "version": "1.27",
+  "updated": "2026-10-29",
+  "description": "Master index of TuneItVerse ECU database entries. v3.47.0: per-capability status + source on every family (schema validated by ecu_database.rs tests), GM P10/P12 added from PcmHammer PcmInfo.cs, P59 corrected to 1 MiB. v3.48.0: experimental MEDC17 checksum detection/correction ported from open-source tool for EDC17/MED17.",
   "families": [
     {
       "id": "P01_0411",
@@ -33,7 +33,7 @@
       "display_name": "Bosch MED17 (VW/Audi/Seat/Skoda common gasoline turbo)",
       "bin_size_bytes": 2097152,
       "primary_protocol": "CAN/UDS",
-      "status": "identify: unverified, read: not_supported, checksum: report_only, seed_key: not_supported, write: not_supported, map_hints: unverified"
+      "status": "identify: unverified, read: not_supported, checksum: experimental, seed_key: not_supported, write: not_supported, map_hints: unverified"
     },
     {
       "id": "EDC17_COMMON",
@@ -41,7 +41,7 @@
       "display_name": "Bosch EDC17 (common diesel platforms - VAG/Ford/others)",
       "bin_size_bytes": 2097152,
       "primary_protocol": "CAN/UDS",
-      "status": "identify: unverified, read: not_supported, checksum: report_only, seed_key: not_supported, write: not_supported, map_hints: unverified"
+      "status": "identify: unverified, read: not_supported, checksum: experimental, seed_key: not_supported, write: not_supported, map_hints: unverified"
     },
     {
       "id": "ME7_COMMON",
