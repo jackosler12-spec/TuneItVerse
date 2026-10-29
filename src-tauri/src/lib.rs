@@ -43,6 +43,7 @@ mod voltage_watch;
 mod p01_backup;
 mod p01_write;
 mod audit_log;
+mod medc17_checksum;
 
 use tauri::Emitter;
 
