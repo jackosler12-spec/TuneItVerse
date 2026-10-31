@@ -1,7 +1,7 @@
 [package]
 name = "TuneItVerse"
-version = "3.48.0"
-description = "ECU Tuning platform for JRTuners. v3.48.0: Maps table CSV export, version polish. Experimental P01 write off by default. EDC16 report-only. Not bench-tested."
+version = "3.49.0"
+description = "ECU Tuning platform for JRTuners. v3.49.0: Maps table CSV export+import completed. Offline tools fully operational. Experimental P01 write off by default. EDC16 report-only. Not bench-tested."
 authors = ["JRTuners"]
 edition = "2021"
 
