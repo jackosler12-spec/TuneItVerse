@@ -1,8 +1,8 @@
 {
   "name": "tuneitverse",
   "private": true,
-  "version": "3.48.0",
-  "description": "TuneItVerse - open ECU tuning platform. Offline BIN/XDF/A2L tools, per-family capability status with sources. Experimental P01 write off by default and not bench-tested. EDC16 checksum report-only. v3.48.0 adds Maps table CSV export.",
+  "version": "3.49.0",
+  "description": "TuneItVerse - open ECU tuning platform. Offline BIN/XDF/A2L tools, per-family capability status with sources. Experimental P01 write off by default and not bench-tested. EDC16 checksum report-only. v3.49.0 completes Maps table CSV export + import. Offline tools fully operational.",
   "type": "module",
   "scripts": {
     "tauri": "tauri",
