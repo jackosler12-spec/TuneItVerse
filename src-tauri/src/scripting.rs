@@ -60,7 +60,7 @@ fn parse_offset(tok: &str) -> Result<usize, String> {
 
 fn help_text() -> Value {
     json!({
-        "language": "TuneItVerse bench script v3.28",
+        "language": "TuneItVerse bench script v3.50",
         "commands": [
             "identify                 — family / OS / size / correction_safe",
             "checksum                 — validate known families (report-only for Honda/P59)",
@@ -72,6 +72,7 @@ fn help_text() -> Value {
             "tables                   — locate TableSeek / catalog maps",
             "maplog                   — occupancy heatmap from imported / live log",
             "hex OFFSET [LEN]        — hex+ASCII window (max 4096 bytes)",
+            "stats [OFFSET LEN]       — byte stats (min/max/avg/entropy) over range or whole image",
             "profile                  — block entropy, empty/erased ratios",
             "report                   — markdown identify + checksum + profile",
             "help                     — this list"
@@ -195,6 +196,47 @@ fn run_line(state: &mut ScriptState, line: &str) -> Result<Value, String> {
             let len = parts.next().map(parse_offset).transpose()?.unwrap_or(256);
             crate::bin_inspect::hex_window(&state.bin, off, len)
         }
+        "stats" => {
+            if state.bin.is_empty() {
+                return Err("No working BIN.".into());
+            }
+            let off = parse_offset(parts.next().unwrap_or("0")).unwrap_or(0);
+            let len = parts.next().map(parse_offset).transpose()?.unwrap_or(state.bin.len().saturating_sub(off));
+            let end = off.saturating_add(len).min(state.bin.len());
+            if off >= state.bin.len() || end <= off {
+                return Err("stats range empty or past end".into());
+            }
+            let slice = &state.bin[off..end];
+            let mut min = 255u8;
+            let mut max = 0u8;
+            let mut sum = 0u64;
+            let mut hist = [0u32; 256];
+            for &b in slice {
+                if b < min { min = b; }
+                if b > max { max = b; }
+                sum += b as u64;
+                hist[b as usize] += 1;
+            }
+            let avg = if !slice.is_empty() { sum as f64 / slice.len() as f64 } else { 0.0 };
+            // Simple Shannon entropy
+            let mut entropy = 0.0;
+            let n = slice.len() as f64;
+            for &c in &hist {
+                if c > 0 {
+                    let p = c as f64 / n;
+                    entropy -= p * p.log2();
+                }
+            }
+            Ok(json!({
+                "offset": off,
+                "length": end - off,
+                "min": min,
+                "max": max,
+                "avg": avg,
+                "entropy_bits": entropy,
+                "unique_bytes": hist.iter().filter(|&&c| c > 0).count()
+            }))
+        }
         "profile" => {
             if state.bin.is_empty() {
                 return Err("No working BIN.".into());
@@ -315,6 +357,13 @@ pub fn list_script_helpers() -> Result<String, String> {
             "description": "Hex+ASCII at an offset. Same path as Inspect.",
             "command": "hex 0 256",
             "cli": "python3 python/ecu_scripting.py hex path/to/dump.bin 0 256"
+        },
+        {
+            "id": "stats",
+            "name": "Range stats",
+            "description": "Min/max/avg/entropy over a byte range or whole image.",
+            "command": "stats 0x1000 256",
+            "cli": null
         },
         {
             "id": "report",

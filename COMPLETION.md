@@ -1,3 +1,23 @@
+# TuneItVerse v3.50.0 — Bench script range stats for offline analysis
+
+## v3.50.0 changes
+
+### Changes
+- **Script `stats` command**: Bench scripts now support `stats [OFFSET LEN]` to compute min/max/avg/entropy/unique-byte count over a range (or whole image). Useful for quickly characterizing dumps or map regions without external tools.
+- Version synced to 3.50.0 across package.json, Cargo.toml, tauri.conf.json, installer, UI.
+- Docs refreshed. No change to write paths, checksum correctors, or hardware status. Everything remains honest: hardware_tested false, P01 write experimental and not bench-tested, EDC16 checksum report-only.
+
+### Still missing for full industry-leading operational status
+- Bench-tested hardware paths (ELM/J2534/STN on real ECUs).
+- Verified checksum correctors and FullImage read/write for families beyond P01.
+- Measured seed/key tables for additional ECUs (user dumps only).
+- Full async I/O for long transfers.
+- BDM/JTAG/bench mode.
+- Driver plugin SDK.
+- Community-sourced map definitions with citations for more families.
+
+Offline BIN/XDF/A2L/logging/scripts remain fully operational. Build your own.
+
 # TuneItVerse v3.49.0 — Maps table CSV export + import completed
 
 ## v3.49.0 changes

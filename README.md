@@ -18,7 +18,7 @@ npm run build    # release desktop binary + copy TuneItVerse.exe to this folder
 
 After every release build, `TuneItVerse.exe` is copied to the repository root (this folder). Double-click that file to run the current version.
 
-**v3.49.0**: Maps page has working Table CSV export and import. Offline tools remain fully operational. Hardware paths still untested.
+**v3.50.0**: Bench scripts gain a `stats` command for range min/max/avg/entropy analysis. Offline tools remain fully operational. Hardware paths still untested.
 
 Bench helper for personal dumps:
 ```bash
@@ -34,13 +34,13 @@ python3 python/ecu_scripting.py logsummary path/to/log.csv
 python3 python/ecu_scripting.py dtc P0087
 ```
 
-Scripts page runs the same ideas against the loaded BIN (`identify`, `checksum`, `correct`, `compare`, `seedkey`, `poke`, `tables`, `maplog`, `hex`, `profile`, `report`). No eval, no shell. Scripts → Self-check runs the offline operational check. Maps → Import definition pack loads hint JSON and cannot enable write.
+Scripts page runs the same ideas against the loaded BIN (`identify`, `checksum`, `correct`, `compare`, `seedkey`, `poke`, `tables`, `maplog`, `hex`, `stats`, `profile`, `report`). No eval, no shell. Scripts → Self-check runs the offline operational check. Maps → Import definition pack loads hint JSON and cannot enable write.
 
 Live data over ELM327/OBDLink reads the ECU's Mode 01 support masks first and polls only the PIDs it lists (incl. SAE 0x23 rail pressure); replies are parsed per line with the CAN/J1850 header stripped. A read-only Nissan CAN scan (ATSH7E0, 10C0, 22xxxx support masks, 1081) lists supported IDs with unknown meanings. These paths are tested against replayed real OBDLink MX+ frames from a 2007 Patrol ZD30CRD (`reference/fixtures/`), not against a live car from this build.
 
 Data Logging can import a CSV (including Car Scanner's long `SECONDS;PID;VALUE` export; GPS columns are dropped), replay it, and build a clamped STFT/LTFT multiplier preview. Compare lists changed ranges against the working BIN. Neither path writes a calibration.
 
-## Current status (v3.49.0)
+## Current status (v3.50.0)
 
 This is the honest summary. [COMPLETION.md](COMPLETION.md) has the full log, and the in-app **Capabilities** page shows the per-family matrix with a source for every status.
 
