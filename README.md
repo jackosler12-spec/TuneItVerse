@@ -18,7 +18,7 @@ npm run build    # release desktop binary + copy TuneItVerse.exe to this folder
 
 After every release build, `TuneItVerse.exe` is copied to the repository root (this folder). Double-click that file to run the current version.
 
-**v3.49.0**: Maps page has working Table CSV export and import. Offline tools remain fully operational. Hardware paths still untested.
+**v3.50.0**: Version consistency across all manifests. Enhanced table CSV export with metadata header when available. Offline tools remain fully operational. Hardware paths still untested.
 
 Bench helper for personal dumps:
 ```bash
@@ -40,13 +40,13 @@ Live data over ELM327/OBDLink reads the ECU's Mode 01 support masks first and po
 
 Data Logging can import a CSV (including Car Scanner's long `SECONDS;PID;VALUE` export; GPS columns are dropped), replay it, and build a clamped STFT/LTFT multiplier preview. Compare lists changed ranges against the working BIN. Neither path writes a calibration.
 
-## Current status (v3.49.0)
+## Current status (v3.50.0)
 
 This is the honest summary. [COMPLETION.md](COMPLETION.md) has the full log, and the in-app **Capabilities** page shows the per-family matrix with a source for every status.
 
 **Operational offline:**
 - BIN, text TunerPro XDF and A2L load and edit. The XDF reader supports BASEOFFSET, categories, signed / LSB-first / column-major cells and linear scaling math. Float, strided and non-linear items are skipped or refused and listed.
-- Table grid with 3D orbit view, undo/redo, copy/paste, interpolate/smooth, and diff highlight against the loaded and reference BIN. **New: Export current table to CSV.**
+- Table grid with 3D orbit view, undo/redo, copy/paste, interpolate/smooth, and diff highlight against the loaded and reference BIN. **Enhanced: Export current table to CSV with optional metadata.**
 - BIN compare.
 - Recent files and an unsaved-changes guard.
 - Offline DTC explain.
