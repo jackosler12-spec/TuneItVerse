@@ -1,4 +1,11 @@
-# TuneItVerse v3.49.0 — Maps table CSV export + import completed
+# TuneItVerse v3.49.1 — VPW send path: J1850 CRC-8 + ELM text framing
+
+## v3.49.1 changes
+- **VPW TX check byte**: every `vpw.rs` request builder now appends the SAE J1850 CRC-8 (the same routine the receive path already used, verified on real fixture frames such as `486B104100BFBFF990` → `B5`) instead of an additive sum. `vpw::validate_frame` now accepts CRC-8 only.
+- **No raw binary to ELM/STN adapters**: `vpw::request_response` now picks the transport from the session. On ELM327/STN it checks `ATDPN` reports protocol 2 (J1850 VPW), sends `ATSH <3-byte header>` plus the data bytes as hex (the adapter adds the CRC), parses the reply with the J1850 header parser, and restores the ELM default functional header `68 6A F1` on every exit. It refuses requests over 7 data bytes, the ELM327 J1850 limit; those need STN `STPX`, which the P01 backup already uses. Binary frames go only to raw-VPW interfaces, and `send_frame` refuses any frame without a valid CRC-8.
+- This affects live verify (Mode 3C) and the raw-VPW Mode 01/09 path. No new write paths, and the experimental P01 write is unchanged and off by default.
+- **Not hardware-tested**: the vectors come from replayed fixture frames only. The ISO 9141-style frames (`68 6A F1`, additive checksum) in `security.rs`/`dtc.rs` and the 10400-baud probe in `commands_p1.rs` were not changed. ISO 9141 legitimately uses an additive checksum, but whether those paths are labelled and routed correctly is still unverified.
+
 
 ## v3.49.0 changes
 
@@ -98,7 +105,7 @@ Offline BIN/XDF/A2L/logging/scripts remain fully operational. Build your own.
 - The XDF parser does not handle float cells, strided layouts or embedded axis data (axis LABELs only).
 - Catalog map hints stay unverified.
 - Nissan DID meanings stay unknown.
-- The raw-VPW send path is still wrong.
+- The raw-VPW send path was wrong in v3.47.0 (fixed in v3.49.1, still not hardware-tested).
 - No Windows exe was built for this change (the work was done on Linux; CI builds and tests on Windows).
 
 ## What is / is not operational

@@ -18,7 +18,7 @@ use crate::elm_parse::{parse_reply, ElmError, ElmReply, HeaderMode};
 use crate::pid_decode::*;
 use crate::vpw::{
     ascii_from_obd_payload, build_mode09_request, build_obd_request, parse_mode01_response,
-    parse_mode09_response, request_response,
+    parse_mode09_response, request_response_raw,
 };
 
 /// Protocol of the current adapter session. Read from the transport's own
@@ -641,7 +641,7 @@ pub fn parse_elm_hex(raw: &str) -> Vec<u8> {
     crate::elm_parse::hex_from_text(raw)
 }
 
-fn is_elm_path(protocol: &str) -> bool {
+pub fn is_elm_path(protocol: &str) -> bool {
     !(is_raw_vpw(protocol) && !is_elm_ascii(protocol))
 }
 
@@ -653,7 +653,7 @@ pub fn mode01_in(
     pid: u8,
 ) -> Result<Vec<u8>, ElmError> {
     if !is_elm_path(&sess.protocol) {
-        let r = request_response(port, &build_obd_request(pid))
+        let r = request_response_raw(port, &build_obd_request(pid))
             .map_err(ElmError::Io)
             .and_then(|resp| parse_mode01_response(&resp, pid).ok_or_else(|| ElmError::Unmatched("VPW frame".into())));
         match &r {
@@ -727,7 +727,7 @@ pub fn pull_mode01(port: &mut Box<dyn SerialPort + Send>, pid: u8) -> Option<Vec
 
 pub fn mode09_in(port: &mut Box<dyn SerialPort + Send>, sess: &mut ElmSession, info: u8) -> Result<String, ElmError> {
     if !is_elm_path(&sess.protocol) {
-        return request_response(port, &build_mode09_request(info))
+        return request_response_raw(port, &build_mode09_request(info))
             .map_err(ElmError::Io)
             .and_then(|resp| parse_mode09_response(&resp, info).ok_or_else(|| ElmError::Unmatched("VPW frame".into())))
             .map(|d| ascii_from_obd_payload(&d))
