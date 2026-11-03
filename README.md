@@ -45,7 +45,7 @@ Data Logging can import a CSV (including Car Scanner's long `SECONDS;PID;VALUE` 
 This is the honest summary. [COMPLETION.md](COMPLETION.md) has the full log, and the in-app **Capabilities** page shows the per-family matrix with a source for every status.
 
 **Operational offline:**
-- BIN, text TunerPro XDF and A2L load and edit. The XDF reader supports BASEOFFSET, categories, signed / LSB-first / column-major cells and linear scaling math. Float, strided and non-linear items are skipped or refused and listed.
+- BIN, text TunerPro XDF and A2L load and edit. The XDF reader supports BASEOFFSET, categories, signed / LSB-first / column-major cells and linear scaling math. 32-bit float cells are read and edited; embedded X/Y axes are read from the BIN; strided tables are read-only (layout interpretation unverified). Non-linear math, 64-bit floats and minor strides are refused or skipped and listed.
 - Table grid with 3D orbit view, undo/redo, copy/paste, interpolate/smooth, and diff highlight against the loaded and reference BIN. **New: Export current table to CSV.**
 - BIN compare.
 - Recent files and an unsaved-changes guard.

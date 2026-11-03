@@ -47,6 +47,32 @@ pub struct TableDef {
     /// ECU family the address belongs to (catalog tables). Drives offset rules.
     #[serde(default)]
     pub family: Option<String>,
+    /// Bytes between consecutive cells in storage order. 0 = contiguous (cell width).
+    #[serde(default)]
+    pub stride_bytes: usize,
+    /// When set, the table is read-only: the reason a patch is refused.
+    #[serde(default)]
+    pub patch_blocked: Option<String>,
+    /// Axis breakpoints stored in the BIN (TunerPro XDF embedded axis). Read-only.
+    #[serde(default)]
+    pub x_axis: Option<AxisDef>,
+    #[serde(default)]
+    pub y_axis: Option<AxisDef>,
+}
+
+/// Embedded axis: `count` cells at `addr`, read with the same rules as table cells.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct AxisDef {
+    pub addr: String,
+    pub count: usize,
+    pub data_type: String,
+    pub math: String,
+    #[serde(default = "default_true")]
+    pub msb: bool,
+    #[serde(default)]
+    pub stride_bytes: usize,
+    #[serde(default)]
+    pub units: String,
 }
 
 /// Lightweight result for a single table's physical values (already math-applied).
@@ -211,7 +237,8 @@ fn sanitize_id(name: &str, i: usize) -> String {
 
 pub fn cell_width(data_type: &str) -> usize {
     let u = data_type.to_ascii_uppercase();
-    if u.contains("32") || u.contains("LONG") || u.contains("DWORD") { 4 }
+    if u.contains("64") { 8 }
+    else if u.contains("32") || u.contains("LONG") || u.contains("DWORD") { 4 }
     else if u.contains("WORD") { 2 }
     else { 1 }
 }
@@ -219,6 +246,69 @@ pub fn cell_width(data_type: &str) -> usize {
 fn is_signed_type(data_type: &str) -> bool {
     let u = data_type.to_ascii_uppercase();
     u.starts_with('S') || u.starts_with("INT")
+}
+
+/// IEEE-754 cells (XDF mmedtypeflags 0x10000).
+pub fn is_float_type(data_type: &str) -> bool {
+    data_type.to_ascii_uppercase().starts_with("FLOAT")
+}
+
+fn read_value(bin: &[u8], off: usize, data_type: &str, msb: bool) -> f64 {
+    let width = cell_width(data_type);
+    if off + width > bin.len() { return 0.0; }
+    if is_float_type(data_type) {
+        let mut b = bin[off..off + width].to_vec();
+        if !msb { b.reverse(); }
+        return match width {
+            4 => f32::from_be_bytes([b[0], b[1], b[2], b[3]]) as f64,
+            8 => f64::from_be_bytes([b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7]]),
+            _ => 0.0,
+        };
+    }
+    read_cell(bin, off, width, is_signed_type(data_type), msb)
+}
+
+/// Write one cell. Integer cells are rounded and clamped; float cells are stored as IEEE-754.
+fn write_value(bin: &mut [u8], off: usize, data_type: &str, raw: f64, msb: bool) -> Result<(), String> {
+    let width = cell_width(data_type);
+    if off + width > bin.len() { return Err("cell beyond BIN".into()); }
+    if is_float_type(data_type) {
+        if !raw.is_finite() { return Err("non-finite float value".into()); }
+        let mut b: Vec<u8> = match width {
+            4 => {
+                let f = raw as f32;
+                if !f.is_finite() { return Err("value out of f32 range".into()); }
+                f.to_be_bytes().to_vec()
+            }
+            8 => raw.to_be_bytes().to_vec(),
+            _ => return Err("unsupported float width".into()),
+        };
+        if !msb { b.reverse(); }
+        bin[off..off + width].copy_from_slice(&b);
+        return Ok(());
+    }
+    write_cell(bin, off, width, raw, msb);
+    Ok(())
+}
+
+/// Bytes between cells in storage order.
+pub fn cell_step(def: &TableDef) -> usize {
+    if def.stride_bytes == 0 { cell_width(&def.data_type) } else { def.stride_bytes }
+}
+
+/// Bytes spanned by an n-cell table/axis.
+fn span(n: usize, step: usize, width: usize) -> usize {
+    if n == 0 { 0 } else { (n - 1) * step + width }
+}
+
+/// Read embedded axis breakpoints. Errors are reported, never guessed.
+pub fn extract_axis(bin: &[u8], ax: &AxisDef) -> Result<Vec<f64>, String> {
+    let addr = parse_addr_strict(&ax.addr).ok_or_else(|| format!("bad axis address '{}'", ax.addr))?;
+    let width = cell_width(&ax.data_type);
+    let step = if ax.stride_bytes == 0 { width } else { ax.stride_bytes };
+    if addr + span(ax.count, step, width) > bin.len() { return Err(format!("axis at 0x{:X} runs past the BIN", addr)); }
+    eval_math(&ax.math, 0.0)?;
+    Ok((0..ax.count).map(|i| apply_math(read_value(bin, addr + i * step, &ax.data_type, ax.msb), &ax.math)).collect())
 }
 
 fn read_cell(bin: &[u8], off: usize, width: usize, signed: bool, msb: bool) -> f64 {
@@ -266,14 +356,14 @@ pub fn extract_table(bin: &[u8], def: &TableDef) -> ExtractedTable {
     let rows = def.rows.max(1);
     let cols = def.cols.max(1);
     let width = cell_width(&def.data_type);
-    let signed = is_signed_type(&def.data_type);
+    let step = cell_step(def);
     let mut values: Vec<Vec<f64>> = vec![vec![0.0; cols]; rows];
     let mut note = None;
     let off = match resolve_table_offset(def, bin.len()) {
         Ok(o) => o,
         Err(e) => return ExtractedTable { id: def.id.clone(), values, axes_x: vec![], axes_y: vec![], note: Some(e) },
     };
-    let need = off + rows * cols * width;
+    let need = off + span(rows * cols, step, width);
 
     if need > bin.len() {
         note = Some("Address out of range for this BIN (full vs cal image?)".into());
@@ -285,17 +375,26 @@ pub fn extract_table(bin: &[u8], def: &TableDef) -> ExtractedTable {
     }
     for r in 0..rows {
         for c in 0..cols {
-            let raw = read_cell(bin, off + cell_index(def, r, c, rows, cols) * width, width, signed, def.msb);
+            let raw = read_value(bin, off + cell_index(def, r, c, rows, cols) * step, &def.data_type, def.msb);
             values[r][c] = apply_math(raw, &def.math);
         }
     }
 
+    let mut notes: Vec<String> = note.into_iter().collect();
+    if let Some(b) = &def.patch_blocked { notes.push(format!("read-only: {}", b)); }
+    let mut axis = |a: &Option<AxisDef>, n: usize, which: &str| -> Vec<f64> {
+        let Some(a) = a else { return vec![] };
+        if a.count != n { notes.push(format!("{} axis has {} cells for {} table cells; ignored", which, a.count, n)); return vec![]; }
+        match extract_axis(bin, a) { Ok(v) => v, Err(e) => { notes.push(format!("{} axis: {}", which, e)); vec![] } }
+    };
+    let axes_x = axis(&def.x_axis, cols, "X");
+    let axes_y = axis(&def.y_axis, rows, "Y");
     ExtractedTable {
         id: def.id.clone(),
         values,
-        axes_x: vec![],
-        axes_y: vec![],
-        note,
+        axes_x,
+        axes_y,
+        note: if notes.is_empty() { None } else { Some(notes.join("; ")) },
     }
 }
 
@@ -304,18 +403,23 @@ pub fn extract_table(bin: &[u8], def: &TableDef) -> ExtractedTable {
 /// Fail-closed: returns the BIN unchanged when the offset, size or math is not writable.
 pub fn patch_table(mut bin: Vec<u8>, def: &TableDef, new_values: &[Vec<f64>]) -> Vec<u8> {
     let Ok(off) = resolve_table_offset(def, bin.len()) else { return bin };
+    if def.patch_blocked.is_some() { return bin; }
     if linear_coeffs(&def.math).is_err() { return bin; }
     let width = cell_width(&def.data_type);
+    let step = cell_step(def);
     let rows = new_values.len();
     let cols = new_values.first().map(|r| r.len()).unwrap_or(0);
     if new_values.iter().any(|r| r.len() != cols) { return bin; }
-    if off + rows * cols * width > bin.len() { return bin; }
+    if off + span(rows * cols, step, width) > bin.len() { return bin; }
+    // Compute everything first so a bad cell leaves the BIN untouched.
+    let mut out = bin.clone();
     for (r, row) in new_values.iter().enumerate() {
         for (c, phys) in row.iter().enumerate() {
             let Ok(raw) = inverse_math(*phys, &def.math) else { return bin };
-            write_cell(&mut bin, off + cell_index(def, r, c, rows, cols) * width, width, raw, def.msb);
+            if write_value(&mut out, off + cell_index(def, r, c, rows, cols) * step, &def.data_type, raw, def.msb).is_err() { return bin; }
         }
     }
+    bin = out;
     bin
 }
 
@@ -457,7 +561,14 @@ fn cell_index(def: &TableDef, r: usize, c: usize, rows: usize, cols: usize) -> u
 //   mmedtypeflags 0x01 signed, 0x02 LSB first, 0x04 column-major (RomRaider "swapxy"),
 //   0x10000 IEEE float; CATEGORYMEM category is 1-based into header CATEGORY index;
 //   BASEOFFSET offset is subtracted when subtract != 0.
-// Unsupported layouts (float, strides, missing address) are skipped and reported, never guessed.
+//   Float: flag 0x10000 with 32-bit cells, as written by bri3d/a2l2xdf (FLOAT32_IEEE).
+//   Strides: a2l2xdf writes mmedmajorstridebits = element size and minor = 0 for
+//   contiguous tables, so major = bits from one cell to the next in storage order.
+//   A major stride larger than the cell is read with that step but is NOT documented
+//   by TunerPro, so those tables are read-only ("stride layout unverified").
+//   Minor stride != 0 has no public definition and is skipped.
+//   Embedded axes (x/y EMBEDDEDDATA with an address) are read from the BIN, read-only.
+// Missing address / unknown sizes are skipped and reported, never guessed.
 
 #[derive(Default, Clone)]
 struct XdfAxis { addr: Option<String>, bits: Option<u32>, rows: Option<usize>, cols: Option<usize>, flags: Option<u32>,
@@ -485,6 +596,7 @@ pub fn parse_tunerpro_xdf(xml: &str) -> Result<XdfParse, String> {
     let mut def_bits: u32 = 8;
     let mut def_signed = false;
     let mut def_lsb = false;
+    let mut def_float = false;
     let mut categories: std::collections::HashMap<usize, String> = Default::default();
     let mut items: Vec<XdfItem> = Vec::new();
     let mut cur: Option<XdfItem> = None;
@@ -511,6 +623,7 @@ pub fn parse_tunerpro_xdf(xml: &str) -> Result<XdfParse, String> {
                         def_bits = attr(e, "datasizeinbits").and_then(|v| parse_num(&v)).unwrap_or(8) as u32;
                         def_signed = attr(e, "signed").map(|v| v.trim() != "0").unwrap_or(false);
                         def_lsb = attr(e, "lsbfirst").map(|v| v.trim() != "0").unwrap_or(false);
+                        def_float = attr(e, "float").map(|v| v.trim() != "0").unwrap_or(false);
                     }
                     "CATEGORY" if cur.is_none() => {
                         if let (Some(i), Some(n)) = (attr(e, "index").and_then(|v| parse_num(&v)), attr(e, "name")) {
@@ -589,28 +702,41 @@ pub fn parse_tunerpro_xdf(xml: &str) -> Result<XdfParse, String> {
         let z = if it.constant { it.own.clone() } else { it.axes.get("z").cloned().unwrap_or_default() };
         let skip = |why: &str| format!("{}: {}", title, why);
         let Some(addr_raw) = z.addr.as_deref().and_then(parse_num) else { skipped.push(skip("no data address")); continue };
+        let layout = match cell_layout(&z, def_bits, def_signed, def_lsb, def_float) { Ok(l) => l, Err(e) => { skipped.push(skip(&e)); continue } };
+        let (dtype, lsb, step, stride_note) = layout;
         let flags = z.flags.unwrap_or(0);
-        if flags & 0x10000 != 0 { skipped.push(skip("floating-point cells are not supported")); continue; }
-        let bits = z.bits.unwrap_or(def_bits);
-        let dtype = match (bits, flags & 0x01 != 0 || (z.flags.is_none() && def_signed)) {
-            (8, false) => "UBYTE", (8, true) => "SBYTE", (16, false) => "UWORD", (16, true) => "SWORD",
-            (32, false) => "ULONG", (32, true) => "SLONG",
-            _ => { skipped.push(skip(&format!("{}-bit cells are not supported", bits))); continue; }
-        };
         let (rows, cols) = if it.constant { (1, 1) } else { (z.rows.unwrap_or(1).max(1), z.cols.unwrap_or(1).max(1)) };
-        let major = z.major.unwrap_or(0);
-        if (major != 0 && major != bits && rows * cols > 1) || z.minor.unwrap_or(0) != 0 {
-            skipped.push(skip("non-contiguous stride layout is not supported")); continue;
-        }
         let addr = addr_raw + base;
         if addr < 0 { skipped.push(skip("address below base offset")); continue; }
         let math = z.math.clone().unwrap_or_else(|| "X".into());
         if let Err(e) = eval_math(&math, 0.0) { skipped.push(skip(&e)); continue; }
-        let lsb = if z.flags.is_some() { flags & 0x02 != 0 } else { def_lsb };
         let column_major = flags & 0x04 != 0;
         let headers = |id: &str, n: usize| -> Option<String> {
             it.axes.get(id).filter(|a| a.labels.len() == n && n > 1).map(|a| a.labels.join(","))
         };
+        // Embedded axes: only when the axis has its own address and a usable layout.
+        let mut axis_def = |id: &str, n: usize| -> Option<AxisDef> {
+            if it.constant || n < 2 { return None; }
+            let a = it.axes.get(id)?;
+            let a_addr = a.addr.as_deref().and_then(parse_num)?;
+            let count = a.index_count.or(a.cols.filter(|c| *c > 1)).or(a.rows).unwrap_or(n);
+            let a_addr = a_addr + base;
+            let res = (|| -> Result<AxisDef, String> {
+                if a_addr < 0 { return Err("address below base offset".into()); }
+                if count != n { return Err(format!("{} cells for {} table cells", count, n)); }
+                let (adt, alsb, astep, anote) = cell_layout(a, def_bits, def_signed, def_lsb, def_float)?;
+                if anote.is_some() { return Err("stride layout unverified".into()); }
+                let amath = a.math.clone().unwrap_or_else(|| "X".into());
+                eval_math(&amath, 0.0)?;
+                Ok(AxisDef { addr: format!("0x{:X}", a_addr), count, data_type: adt.into(), math: amath, msb: !alsb, stride_bytes: astep, units: a.units.clone() })
+            })();
+            match res {
+                Ok(d) => Some(d),
+                Err(e) => { skipped.push(format!("{}: {} axis not read ({}); table kept", title, id.to_ascii_uppercase(), e)); None }
+            }
+        };
+        let x_axis = axis_def("x", cols);
+        let y_axis = axis_def("y", rows);
         let category = it.cats.first().and_then(|c| categories.get(c).cloned());
         tables.push(TableDef {
             id: sanitize_id(&title, i),
@@ -629,10 +755,35 @@ pub fn parse_tunerpro_xdf(xml: &str) -> Result<XdfParse, String> {
             col_headers: headers("x", cols),
             decimals: z.decimals.unwrap_or(2),
             file_offset: true,
+            stride_bytes: step,
+            patch_blocked: stride_note,
+            x_axis,
+            y_axis,
             ..Default::default()
         });
     }
     Ok(XdfParse { tables, skipped })
+}
+
+/// Cell type, LSB-first, storage step in bytes (0 = contiguous) and a read-only reason.
+fn cell_layout(z: &XdfAxis, def_bits: u32, def_signed: bool, def_lsb: bool, def_float: bool) -> Result<(&'static str, bool, usize, Option<String>), String> {
+    let flags = z.flags.unwrap_or(0);
+    let bits = z.bits.unwrap_or(def_bits);
+    let float = if z.flags.is_some() { flags & 0x10000 != 0 } else { def_float };
+    let signed = if z.flags.is_some() { flags & 0x01 != 0 } else { def_signed };
+    let lsb = if z.flags.is_some() { flags & 0x02 != 0 } else { def_lsb };
+    let dtype = match (float, bits, signed) {
+        (true, 32, _) => "FLOAT32",
+        (true, b, _) => return Err(format!("{}-bit floating-point cells are not supported (only 32-bit IEEE)", b)),
+        (false, 8, false) => "UBYTE", (false, 8, true) => "SBYTE", (false, 16, false) => "UWORD", (false, 16, true) => "SWORD",
+        (false, 32, false) => "ULONG", (false, 32, true) => "SLONG",
+        (false, b, _) => return Err(format!("{}-bit cells are not supported", b)),
+    };
+    if z.minor.unwrap_or(0) != 0 { return Err("minor stride has no public definition; not supported".into()); }
+    let major = z.major.unwrap_or(0);
+    if major == 0 || major == bits { return Ok((dtype, lsb, 0, None)); }
+    if major % 8 != 0 || major < bits { return Err(format!("major stride {} bits is not a whole step past the {}-bit cell", major, bits)); }
+    Ok((dtype, lsb, (major / 8) as usize, Some(format!("stride layout ({} bits per step) is read with an unverified interpretation; editing disabled", major))))
 }
 
 /// Parse report for the UI: tables plus the items that were skipped and why.
@@ -680,8 +831,10 @@ pub fn extract_table_from_bin(bin_bytes: Vec<u8>, table: TableDef) -> Result<Ext
 #[tauri::command]
 pub fn patch_table_into_bin(req: PatchRequest) -> Result<PatchResult, String> {
     let off = resolve_table_offset(&req.table, req.bin_bytes.len()).map_err(|e| format!("Refuse patch: {}", e))?;
+    if let Some(b) = &req.table.patch_blocked { return Err(format!("Refuse patch: {}", b)); }
     linear_coeffs(&req.table.math).map_err(|e| format!("Refuse patch: {}", e))?;
     let esz = cell_width(&req.table.data_type);
+    let step = cell_step(&req.table);
     let rows = req.new_values.len();
     let cols = req.new_values.first().map(|r| r.len()).unwrap_or(0);
     if req.new_values.iter().any(|r| r.len() != cols) {
@@ -690,7 +843,10 @@ pub fn patch_table_into_bin(req: PatchRequest) -> Result<PatchResult, String> {
     if rows * cols != req.table.rows.max(1) * req.table.cols.max(1) {
         return Err(format!("Refuse patch: {}x{} values for a {}x{} table", rows, cols, req.table.rows, req.table.cols));
     }
-    let need = off + rows * cols * esz;
+    let need = off + span(rows * cols, step, esz);
+    if is_float_type(&req.table.data_type) && req.new_values.iter().flatten().any(|v| !v.is_finite()) {
+        return Err("Refuse patch: non-finite value for a float table".into());
+    }
     if need > req.bin_bytes.len() {
         return Err(format!(
             "Refuse patch: table '{}' needs offset 0x{:X}..0x{:X} but BIN is only {} bytes (addr {}).",
@@ -945,7 +1101,7 @@ mod tunerpro_xdf_tests {
     #[test]
     fn parses_tables_constants_and_reports_skips() {
         let r = parse_tunerpro_xdf(XDF).unwrap();
-        assert_eq!(r.tables.len(), 4, "{:?}", r.skipped);
+        assert_eq!(r.tables.len(), 6, "{:?}", r.skipped);
         let s = by_name(&r.tables, "Main Spark");
         assert_eq!((s.rows, s.cols), (2, 3));
         assert_eq!(s.addr, "0x20", "0x30 minus BASEOFFSET 0x10 (subtract=1)");
@@ -962,15 +1118,17 @@ mod tunerpro_xdf_tests {
         assert_eq!((k.rows, k.cols, k.data_type.as_str(), k.units.as_str()), (1, 1, "UBYTE", "rpm"));
         assert_eq!(k.category.as_deref(), Some("Fuel"));
         let sk = r.skipped.join(" | ");
-        assert!(sk.contains("Float Table: floating-point"), "{}", sk);
         assert!(sk.contains("No Address: no data address"), "{}", sk);
-        assert!(sk.contains("Strided: non-contiguous"), "{}", sk);
+        assert_eq!(by_name(&r.tables, "Float Table").data_type, "FLOAT32");
+        let st = by_name(&r.tables, "Strided");
+        assert_eq!(st.stride_bytes, 2);
+        assert!(st.patch_blocked.as_deref().unwrap().contains("unverified"));
         assert!(by_name(&r.tables, "Nonlinear").math == "X*X");
         let via_cmd = parse_xdf_definitions(XDF.to_string()).unwrap();
-        assert_eq!(via_cmd.len(), 4);
+        assert_eq!(via_cmd.len(), 6);
         let rep: serde_json::Value = serde_json::from_str(&parse_xdf_report(XDF.to_string()).unwrap()).unwrap();
         assert_eq!(rep["format"], "tunerpro-xdf");
-        assert_eq!(rep["skipped"].as_array().unwrap().len(), 3);
+        assert_eq!(rep["skipped"].as_array().unwrap().len(), 1);
     }
 
     #[test]
@@ -1026,5 +1184,117 @@ mod tunerpro_xdf_tests {
         let t = parse_table_definitions(xml);
         assert_eq!(t.len(), 1);
         assert_eq!(t[0].name, "B");
+    }
+}
+
+#[cfg(test)]
+mod xdf_float_stride_axis_tests {
+    use super::*;
+
+    // Synthetic XDF (no real calibration data). Layout conventions follow bri3d/a2l2xdf.
+    const XDF: &str = r#"<XDFFORMAT version="1.60">
+  <XDFHEADER>
+    <BASEOFFSET offset="0" subtract="0" />
+    <DEFAULTS datasizeinbits="8" sigdigits="2" outputtype="1" signed="0" lsbfirst="1" float="0" />
+  </XDFHEADER>
+  <XDFTABLE uniqueid="0x1"><title>Float Map</title>
+    <XDFAXIS id="x"><EMBEDDEDDATA mmedtypeflags="0x02" mmedaddress="0x00" mmedelementsizebits="16" mmedcolcount="3" mmedmajorstridebits="16" mmedminorstridebits="0" />
+      <indexcount>3</indexcount><MATH equation="X/4"><VAR id="X" /></MATH></XDFAXIS>
+    <XDFAXIS id="y"><EMBEDDEDDATA mmedtypeflags="0x10002" mmedaddress="0x08" mmedelementsizebits="32" mmedcolcount="2" mmedmajorstridebits="32" mmedminorstridebits="0" />
+      <indexcount>2</indexcount><MATH equation="X"><VAR id="X" /></MATH></XDFAXIS>
+    <XDFAXIS id="z"><EMBEDDEDDATA mmedtypeflags="0x10006" mmedaddress="0x10" mmedelementsizebits="32" mmedrowcount="2" mmedcolcount="3" mmedmajorstridebits="32" mmedminorstridebits="0" />
+      <MATH equation="X*2"><VAR id="X" /></MATH></XDFAXIS>
+  </XDFTABLE>
+  <XDFTABLE uniqueid="0x2"><title>Float BE</title>
+    <XDFAXIS id="z"><EMBEDDEDDATA mmedtypeflags="0x10000" mmedaddress="0x40" mmedelementsizebits="32" mmedrowcount="1" mmedcolcount="2" mmedmajorstridebits="32" /></XDFAXIS>
+  </XDFTABLE>
+  <XDFTABLE uniqueid="0x3"><title>Interleaved</title>
+    <XDFAXIS id="z"><EMBEDDEDDATA mmedtypeflags="0x00" mmedaddress="0x50" mmedelementsizebits="8" mmedrowcount="1" mmedcolcount="3" mmedmajorstridebits="16" /></XDFAXIS>
+  </XDFTABLE>
+  <XDFTABLE uniqueid="0x4"><title>Minor Stride</title>
+    <XDFAXIS id="z"><EMBEDDEDDATA mmedaddress="0x60" mmedelementsizebits="8" mmedrowcount="2" mmedcolcount="2" mmedminorstridebits="8" /></XDFAXIS>
+  </XDFTABLE>
+  <XDFTABLE uniqueid="0x5"><title>Float64</title>
+    <XDFAXIS id="z"><EMBEDDEDDATA mmedtypeflags="0x10000" mmedaddress="0x70" mmedelementsizebits="64" /></XDFAXIS>
+  </XDFTABLE>
+  <XDFTABLE uniqueid="0x6"><title>Bad Axis</title>
+    <XDFAXIS id="x"><EMBEDDEDDATA mmedaddress="0x80" mmedelementsizebits="8" mmedcolcount="5" /><indexcount>5</indexcount></XDFAXIS>
+    <XDFAXIS id="z"><EMBEDDEDDATA mmedaddress="0x90" mmedelementsizebits="8" mmedrowcount="1" mmedcolcount="2" /></XDFAXIS>
+  </XDFTABLE>
+</XDFFORMAT>"#;
+
+    fn get<'a>(t: &'a [TableDef], n: &str) -> &'a TableDef { t.iter().find(|d| d.name == n).unwrap() }
+
+    fn bin() -> Vec<u8> {
+        let mut b = vec![0u8; 0x100];
+        for (i, v) in [400u16, 800, 1200].iter().enumerate() { b[2 * i..2 * i + 2].copy_from_slice(&v.to_le_bytes()); }
+        for (i, v) in [20.0f32, 90.5].iter().enumerate() { b[8 + 4 * i..12 + 4 * i].copy_from_slice(&v.to_le_bytes()); }
+        // column-major LE floats: r0c0 r1c0 r0c1 r1c1 r0c2 r1c2
+        for (i, v) in [1.0f32, 4.0, 2.0, 5.0, 3.0, 6.5].iter().enumerate() { b[0x10 + 4 * i..0x14 + 4 * i].copy_from_slice(&v.to_le_bytes()); }
+        for (i, v) in [1.25f32, -2.5].iter().enumerate() { b[0x40 + 4 * i..0x44 + 4 * i].copy_from_slice(&v.to_be_bytes()); }
+        b[0x50] = 7; b[0x51] = 0xEE; b[0x52] = 8; b[0x53] = 0xEE; b[0x54] = 9;
+        b
+    }
+
+    #[test]
+    fn float_cells_and_embedded_axes_extract() {
+        let r = parse_tunerpro_xdf(XDF).unwrap();
+        let t = get(&r.tables, "Float Map");
+        assert_eq!((t.data_type.as_str(), t.msb, t.row_major), ("FLOAT32", false, false));
+        assert!(t.patch_blocked.is_none());
+        let e = extract_table(&bin(), t);
+        assert_eq!(e.values, vec![vec![2.0, 4.0, 6.0], vec![8.0, 10.0, 13.0]]);
+        assert_eq!(e.axes_x, vec![100.0, 200.0, 300.0]);
+        assert_eq!(e.axes_y, vec![20.0, 90.5]);
+        assert!(e.note.is_none(), "{:?}", e.note);
+        assert_eq!(extract_table(&bin(), get(&r.tables, "Float BE")).values, vec![vec![1.25, -2.5]]);
+    }
+
+    #[test]
+    fn float_patch_round_trips_and_refuses_bad_values() {
+        let r = parse_tunerpro_xdf(XDF).unwrap();
+        let t = get(&r.tables, "Float Map");
+        let b = bin();
+        let out = patch_table_into_bin(PatchRequest { bin_bytes: b.clone(), table: t.clone(), new_values: vec![vec![3.0, 4.0, 6.0], vec![8.0, 10.0, 13.0]] }).unwrap();
+        assert_eq!(f32::from_le_bytes(out.patched_bytes[0x10..0x14].try_into().unwrap()), 1.5);
+        assert_eq!(b.iter().zip(&out.patched_bytes).filter(|(a, c)| a != c).count() <= 4, true);
+        assert_eq!(extract_table(&out.patched_bytes, t).values[0][0], 3.0);
+        let e = patch_table_into_bin(PatchRequest { bin_bytes: b.clone(), table: t.clone(), new_values: vec![vec![f64::NAN, 4.0, 6.0], vec![8.0, 10.0, 13.0]] }).unwrap_err();
+        assert!(e.contains("non-finite"), "{}", e);
+        // f32 overflow leaves the BIN untouched
+        assert_eq!(patch_table(b.clone(), t, &[vec![1e300, 4.0, 6.0], vec![8.0, 10.0, 13.0]]), b);
+    }
+
+    #[test]
+    fn strided_tables_read_but_patch_refused() {
+        let r = parse_tunerpro_xdf(XDF).unwrap();
+        let t = get(&r.tables, "Interleaved");
+        assert_eq!(t.stride_bytes, 2);
+        let b = bin();
+        let e = extract_table(&b, t);
+        assert_eq!(e.values, vec![vec![7.0, 8.0, 9.0]]);
+        assert!(e.note.unwrap().contains("read-only"));
+        let err = patch_table_into_bin(PatchRequest { bin_bytes: b.clone(), table: t.clone(), new_values: vec![vec![1.0, 2.0, 3.0]] }).unwrap_err();
+        assert!(err.contains("editing disabled"), "{}", err);
+        assert_eq!(patch_table(b.clone(), t, &[vec![1.0, 2.0, 3.0]]), b);
+    }
+
+    #[test]
+    fn unknown_layouts_are_skipped_or_axis_dropped() {
+        let r = parse_tunerpro_xdf(XDF).unwrap();
+        let sk = r.skipped.join(" | ");
+        assert!(sk.contains("Minor Stride: minor stride"), "{}", sk);
+        assert!(sk.contains("Float64: 64-bit floating-point"), "{}", sk);
+        assert!(sk.contains("Bad Axis: X axis not read (5 cells for 2"), "{}", sk);
+        let t = get(&r.tables, "Bad Axis");
+        assert!(t.x_axis.is_none());
+        assert!(r.tables.iter().all(|d| d.name != "Minor Stride" && d.name != "Float64"));
+    }
+
+    #[test]
+    fn old_tabledefs_without_new_fields_still_deserialize() {
+        let d: TableDef = serde_json::from_str(r#"{"id":"a","name":"a","category":null,"description":"","rows":1,"cols":1,"addr":"0x0","data_type":"UBYTE","math":"X","units":"","row_major":true}"#).unwrap();
+        assert_eq!(d.stride_bytes, 0);
+        assert!(d.patch_blocked.is_none() && d.x_axis.is_none());
     }
 }

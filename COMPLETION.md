@@ -1,3 +1,12 @@
+# TuneItVerse v3.50.0 — TunerPro XDF: float cells, strided layouts, embedded axes
+
+## v3.50.0 changes
+- **Float cells**: XDF items with `mmedtypeflags` 0x10000 (or header `float="1"`) and 32-bit cells are read and written as IEEE-754 single precision, honouring LSB-first and column-major. Convention taken from bri3d/a2l2xdf (`FLOAT32_IEEE` → flag 0x10000, 32 bits). Patches still need linear math and the exact shape; NaN/inf or values outside f32 range are refused and the BIN is left untouched. 64-bit floats are skipped and listed.
+- **Embedded axes**: X/Y `XDFAXIS` blocks with their own `EMBEDDEDDATA` address are read from the BIN (int or float, own scaling) and returned as `axes_x`/`axes_y`; the editor uses them as row/column headers when the definition has no labels. Axes are read-only. An axis whose cell count does not match the table, or whose layout is unknown, is dropped and listed in the skip report; the table itself is kept.
+- **Strided layouts**: `mmedmajorstridebits` equal to the cell size (or 0) is contiguous, as a2l2xdf writes it. A larger whole-byte major stride is read as the step between consecutive cells in storage order. TunerPro does not document this, so those tables are **read-only** (`patch_blocked`), and the reason is shown in the editor. A non-zero minor stride has no public definition and is still skipped.
+- Editor side panel shows layout, axis source and whether editing is blocked; extract notes are shown in the table status.
+- **Not checked against TunerPro itself**: tests use synthetic XDF snippets only, no real definition with float/strided/axis data was available in the repo. No flash/write paths changed.
+
 # TuneItVerse v3.49.1 — VPW send path: J1850 CRC-8 + ELM text framing
 
 ## v3.49.1 changes
@@ -102,7 +111,7 @@ Offline BIN/XDF/A2L/logging/scripts remain fully operational. Build your own.
 **Unverified in v3.47.0:**
 - Nothing in this release was bench-tested and no hardware path was exercised.
 - P10/P12/P59 are identify-only.
-- The XDF parser does not handle float cells, strided layouts or embedded axis data (axis LABELs only).
+- XDF: 64-bit float cells and non-zero minor strides are skipped; strided tables and embedded axes are read-only; axis editing, non-linear math patching, XDF patches/flags/functions are not supported (v3.50.0).
 - Catalog map hints stay unverified.
 - Nissan DID meanings stay unknown.
 - The raw-VPW send path was wrong in v3.47.0 (fixed in v3.49.1, still not hardware-tested).
@@ -112,7 +121,7 @@ Offline BIN/XDF/A2L/logging/scripts remain fully operational. Build your own.
 
 | Area | Status |
 |------|--------|
-| Offline BIN / TunerPro text XDF / A2L inspection, table grid + 3D, undo/redo, interpolate, compare | Operational offline. XDF float, strided and non-linear items are skipped or refused, not guessed. |
+| Offline BIN / TunerPro text XDF / A2L inspection, table grid + 3D, undo/redo, interpolate, compare | Operational offline. XDF 32-bit float cells read/write; embedded axes and strided tables read-only; non-linear patches refused (v3.50.0). |
 | Per-family capability matrix | Operational. Every status has a cited source; `hardware_tested` is false everywhere. |
 | P01 FullImage backup protocol | Implemented (fake-PCM tested). STN link and real PCM untested. |
 | P01 checksum (CS1/CS2) | Verified on the reference image and a private dump. Corrector refuses non-P01 GM OS IDs. |

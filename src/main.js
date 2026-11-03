@@ -1630,7 +1630,7 @@ async function selectTable(idx) {
     await refreshRefValues();
     renderCurrentEditor();
     updateSidePanel();
-    if (st) st.textContent = 'Selected: ' + currentTable.name;
+    if (st) st.textContent = 'Selected: ' + currentTable.name + (extracted.note ? ' — ' + extracted.note : '');
   } catch (e) {
     currentValues = null;
     renderCurrentEditor();
@@ -1756,7 +1756,10 @@ function updateSidePanel() {
       ['Address', currentTable.addr || '?'],
       ['Type', currentTable.data_type || '?'],
       ['Math', currentTable.math || 'X'],
-      ['Units', currentTable.units || '—']
+      ['Units', currentTable.units || '—'],
+      ['Layout', currentTable.stride_bytes ? ('strided, ' + currentTable.stride_bytes + ' B/step') : 'contiguous'],
+      ['Axes', (currentTable.x_axis || currentTable.y_axis) ? 'read from BIN (read-only)' : 'labels / none'],
+      ['Editing', currentTable.patch_blocked ? ('blocked: ' + currentTable.patch_blocked) : 'allowed if math is linear']
     ];
     meta.innerHTML = rows.map((r) =>
       '<div class="detail-row"><div class="detail-k">' + escapeHtml(r[0]) + '</div><div class="detail-v">' + escapeHtml(r[1]) + '</div></div>'
@@ -2321,7 +2324,7 @@ function setupAll() {
   pollHealth();
   if (healthTimer) clearInterval(healthTimer);
   healthTimer = setInterval(pollHealth, 2500);
-  console.log('TuneItVerse UI v3.49.1');
+  console.log('TuneItVerse UI v3.50.0');
 }
 
 setupNav();
