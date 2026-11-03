@@ -2,19 +2,20 @@
 <html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8">
-  <title>TuneItVerse v3.50.0</title>
+  <title>TuneItVerse v3.51.0</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-logo">
       <div class="sidebar-logo-mark">TV</div>
-      <div class="sidebar-logo-text">TuneItVerse <span class="version">v3.50.0</span></div>
+      <div class="sidebar-logo-text">TuneItVerse <span class="version">v3.51.0</span></div>
     </div>
     <nav class="sidebar-nav" id="sidebar-nav">
       <button type="button" class="nav-item active" data-view="dashboard">Dashboard</button>
       <button type="button" class="nav-item" data-view="connect">Connect</button>
       <button type="button" class="nav-item" data-view="live">Data Logging</button>
+      <button type="button" class="nav-item" data-view="livedash">Live Dashboard</button>
       <button type="button" class="nav-item" data-view="diagnostics">Diagnostics</button>
       <button type="button" class="nav-item" data-view="tables">Maps</button>
       <button type="button" class="nav-item" data-view="flash">Flash</button>
@@ -471,6 +472,30 @@
       </div>
     </div>
 
+    <div id="view-livedash" class="content content--hidden view-page" data-view-panel="livedash" hidden>
+      <div class="page-toolbar">
+        <div class="toolbar-group">
+          <span class="toolbar-label">Scatter</span>
+          <label>X <select id="ld-x"></select></label>
+          <label>Y <select id="ld-y"></select></label>
+          <label>Colour/avg <select id="ld-z"></select></label>
+          <label><input type="checkbox" id="ld-use-table" checked> Bin to open Maps table axes</label>
+          <button id="btn-ld-refresh" class="btn btn-primary" type="button">Refresh</button>
+          <label><input type="checkbox" id="ld-auto" checked> Auto (2 Hz)</label>
+        </div>
+        <div class="toolbar-status" id="ld-status">Read-only. Uses the logger buffer: live Mode 01, imported CSV, or flagged demo samples. Not hardware-tested.</div>
+      </div>
+      <div class="view-body scroll-pane">
+        <div id="ld-gauges" class="ld-gauges"></div>
+        <div class="panel"><div class="panel-header"><span class="panel-title">Time series (last 300 samples, each channel scaled to its own min/max)</span></div>
+          <canvas id="ld-chart" width="1000" height="220"></canvas><div id="ld-legend" class="muted"></div></div>
+        <div class="ld-row">
+          <div class="panel"><div class="panel-header"><span class="panel-title">Scatter X vs Y</span></div><canvas id="ld-scatter" width="480" height="320"></canvas></div>
+          <div class="panel"><div class="panel-header"><span class="panel-title">Hits per map cell (nearest breakpoint)</span></div><div id="ld-cells" class="scroll-pane"><p class="muted">Open a table on Maps that has numeric axis headers, pick X/Y channels that match its axes.</p></div></div>
+        </div>
+      </div>
+    </div>
+
     <div id="view-capabilities" class="content content--hidden view-page" data-view-panel="capabilities" hidden>
       <div class="page-toolbar">
         <div class="toolbar-group">
@@ -488,7 +513,7 @@
     <div id="shortcut-help" class="shortcut-help" hidden role="dialog" aria-label="Keyboard shortcuts"></div>
 
     <footer class="status-bar">
-      <div class="status-left" id="status-left">TuneItVerse 3.50.0</div>
+      <div class="status-left" id="status-left">TuneItVerse 3.51.0</div>
       <div class="status-center" id="status-center">No invented live values</div>
       <div class="status-right" id="status-right">Desktop app required</div>
     </footer>
@@ -502,5 +527,6 @@
   <script src="v341.js"></script>
   <script src="adapter_status.js"></script>
   <script src="v347.js"></script>
+  <script src="live_dashboard.js"></script>
 </body>
 </html>

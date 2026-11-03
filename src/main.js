@@ -82,6 +82,7 @@ const PAGE_TITLES = {
   dashboard: ['Dashboard', 'Connect, log, edit maps, then flash — in that order.'],
   connect: ['Connect', 'Serial, ELM, or J2534. Fail-closed if nothing answers.'],
   live: ['Data Logging', 'Mode 01 samples or imported CSV only.'],
+  livedash: ['Live Dashboard', 'Gauges, charts and log-vs-map-cell scatter. Read-only, never writes.'],
   diagnostics: ['Diagnostics', 'Read, inspect, or clear DTCs from the adapter.'],
   tables: ['Maps', 'Load a BIN, pick a parameter, edit, save. No ECU required.'],
   flash: ['Flash', 'Identify → voltage → backup → write → verify.'],
@@ -2324,7 +2325,7 @@ function setupAll() {
   pollHealth();
   if (healthTimer) clearInterval(healthTimer);
   healthTimer = setInterval(pollHealth, 2500);
-  console.log('TuneItVerse UI v3.50.0');
+  console.log('TuneItVerse UI v3.51.0');
 }
 
 setupNav();

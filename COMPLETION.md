@@ -1,3 +1,16 @@
+# TuneItVerse v3.51.0 — Live Dashboard (gauges, charts, log-vs-map-cell scatter)
+
+## v3.51.0 changes
+
+- New **Live Dashboard** view (sidebar, after Data Logging). Read-only; it never writes to a BIN or an ECU.
+  - Gauges for up to 12 logged channels (last value, min/max/count), a multi-channel time series of the last 300 samples, an X/Y scatter and a hits-per-cell grid.
+  - Cell binning uses the open Maps table's numeric row/column headers (nearest breakpoint). Samples outside the axis by more than half a step are counted as `outside_axis`, not piled into the edge cell. Non-numeric headers mean scatter only.
+  - An optional third channel shows its mean per cell (e.g. STFT vs RPM/MAP) as a preview only; nothing is applied to the table.
+- Backend: `live_dashboard.rs` / `dashboard_snapshot` reads the existing logger buffer (live Mode 01, imported CSV, or demo samples, which are flagged in the status line). Channel names come straight from the log; Nissan DIDs stay raw with no invented meanings.
+- 5 new Rust unit tests (binning, out-of-range, descending axes, fail-closed axis parse, demo flag). Frontend check covers the new script.
+- **Not hardware-tested.** Only tested against synthetic samples; the live feed is the same Mode 01 poll as Data Logging (2 Hz dashboard refresh while the view is open).
+- Still missing: no alarms/thresholds, no user-saved gauge layouts, no live cursor on the Maps grid itself, no unit conversion, gauge ranges are the observed min/max (not sensor limits).
+
 # TuneItVerse v3.50.0 — TunerPro XDF: float cells, strided layouts, embedded axes
 
 ## v3.50.0 changes

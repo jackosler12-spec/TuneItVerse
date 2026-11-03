@@ -1789,3 +1789,12 @@ html, body { overflow: hidden; }
 }
 .shortcut-card h3 { margin-top: 0; }
 .editor-tools { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* Live dashboard */
+.ld-gauges{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:10px}
+.ld-gauge{background:var(--bg-elevated,#1b1f24);border:1px solid var(--border-subtle,#333);border-radius:8px;padding:6px;text-align:center;width:150px}
+.ld-gauge .n{font-size:12px;opacity:.8}.ld-gauge .mm{font-size:11px;opacity:.6}
+.ld-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
+#ld-chart,#ld-scatter{width:100%;background:#0f1215;border-radius:6px}
+.ld-cells td{min-width:34px;text-align:center;font-size:11px;padding:2px}
+.ld-cells th{font-size:11px;padding:2px}
