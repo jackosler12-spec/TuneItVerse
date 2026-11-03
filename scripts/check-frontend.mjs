@@ -48,7 +48,7 @@ const actions = main.slice(main.indexOf('const actions = {'), main.indexOf('};',
 for (const m of actions.matchAll(/'(btn-[a-z0-9-]+)'\s*:/g)) {
   if (!seen.has(m[1])) fail(`main.js binds #${m[1]} but index.html has no such element`);
 }
-for (const f of ['v336.js', 'v337.js', 'v347.js']) {
+for (const f of ['v336.js', 'v337.js', 'v347.js', 'live_dashboard.js']) {
   const text = rd(`src/${f}`);
   for (const m of text.matchAll(/'(btn-[a-z0-9-]+)'/g)) {
     if (!seen.has(m[1]) && !text.includes(`id="${m[1]}"`)) fail(`src/${f} binds #${m[1]} but index.html has no such element`);

@@ -20,6 +20,7 @@ mod j2534_list;
 mod kwp;
 mod live_verify;
 mod log_studio;
+mod live_dashboard;
 mod logging;
 mod pid_decode;
 mod scripting;

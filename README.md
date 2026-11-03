@@ -40,7 +40,10 @@ Live data over ELM327/OBDLink reads the ECU's Mode 01 support masks first and po
 
 Data Logging can import a CSV (including Car Scanner's long `SECONDS;PID;VALUE` export; GPS columns are dropped), replay it, and build a clamped STFT/LTFT multiplier preview. Compare lists changed ranges against the working BIN. Neither path writes a calibration.
 
-## Current status (v3.49.0)
+## Current status (v3.51.0)
+
+- v3.51.0: Live Dashboard view — gauges, time-series chart, X/Y scatter and hits-per-map-cell grid from the logger buffer (Mode 01 / imported CSV). Read-only, not hardware-tested.
+
 
 This is the honest summary. [COMPLETION.md](COMPLETION.md) has the full log, and the in-app **Capabilities** page shows the per-family matrix with a source for every status.
 
