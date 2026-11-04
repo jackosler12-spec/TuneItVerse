@@ -1,5 +1,12 @@
 # TuneItVerse v3.51.0 — Live Dashboard (gauges, charts, log-vs-map-cell scatter)
 
+
+## v3.54.0 — 32-bit (i686) Windows CI build for J2534 drivers
+
+- CI `rust` job is now a matrix: `x86_64-pc-windows-msvc` and `i686-pc-windows-msvc`. Both run `cargo check --locked`, `cargo test --lib` and `cargo build --release`.
+- Each target uploads an **unsigned** exe artifact (`TuneItVerse-<target>-unsigned`, kept 14 days). The i686 exe is the one to use with 32-bit-only J2534 vendor DLLs (most pass-thru drivers); the v3.53 PE arch check reports which build can load which DLL.
+- **Not verified:** neither exe has been run against a real J2534 device. These are raw `cargo build` exes, not Tauri MSI/NSIS installers, and are not code-signed. Flash write gates unchanged; no new write paths.
+
 ## v3.53.0 changes (2026-11-04)
 
 - **J2534 registry discovery:** `j2534_list.rs` now parses `HKLM\SOFTWARE\PassThruSupport.04.04` (native + WOW6432Node) into structured entries: name, vendor, FunctionLibrary, non-zero protocol flags (CAN, ISO15765, J1850VPW, …). The DLL's PE header is read to report x86/x64/arm64 and whether this build can load it (a 32-bit driver cannot load into the 64-bit app; this is reported, not hidden). New command `j2534_list_devices_detailed`; the Connect page fills the DLL path from the first loadable entry.
