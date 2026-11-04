@@ -1,17 +1,17 @@
-#[tauri::command]
+#[tauri::command(async)]
 fn compare_p01_gm_seed(seed_hex: String, algo: Option<u32>, scan: Option<bool>) -> Result<String, String> {
     let a = algo.map(|v| v as u16);
     let r = crate::p01_gm_compare::compare(&seed_hex, a, scan.unwrap_or(false))?;
     Ok(serde_json::to_string(&r).unwrap_or_else(|_| "{}".into()))
 }
-#[tauri::command] fn read_dtcs_cmd() -> Result<String, String> {
+#[tauri::command(async)] fn read_dtcs_cmd() -> Result<String, String> {
     with_port(|port| dtc::read_dtcs(port).map(|r| serde_json::to_string(&r).unwrap_or_else(|_| "{}".into())))
         .or_else(|_| Ok(json!({"stored":[],"pending":[],"permanent":[],"total":0}).to_string()))
 }
-#[tauri::command] fn read_freeze_frame_cmd() -> Result<String, String> {
+#[tauri::command(async)] fn read_freeze_frame_cmd() -> Result<String, String> {
     with_port(|port| dtc::read_freeze_frame(port).map(|r| serde_json::to_string(&r).unwrap_or_else(|_| "{}".into()))).or_else(|_| Ok("{}".into()))
 }
-#[tauri::command] fn clear_dtcs_cmd() -> Result<String, String> {
+#[tauri::command(async)] fn clear_dtcs_cmd() -> Result<String, String> {
     with_port(|port| dtc::clear_dtcs(port, 0).map(|r| serde_json::to_string(&r).unwrap_or_else(|_| "{\"success\":true}".into())))
         .or_else(|_| Ok(json!({"success":false,"message":"DTC clear refused offline. Connect an adapter."}).to_string()))
 }
@@ -44,7 +44,7 @@ fn compare_p01_gm_seed(seed_hex: String, algo: Option<u32>, scan: Option<bool>) 
         table_id, ecu_family, sample_value
     ))
 }
-#[tauri::command]
+#[tauri::command(async)]
 fn guided_flash_pipeline(app: tauri::AppHandle, request_json: String) -> Result<String, String> {
     let request: flash::GuidedFlashRequest = serde_json::from_str(&request_json).map_err(|e| format!("Invalid GuidedFlashRequest: {}", e))?;
     with_port(|port| {
@@ -56,7 +56,7 @@ fn guided_flash_pipeline(app: tauri::AppHandle, request_json: String) -> Result<
 }
 /// P01 OS 12225074 full 512KB read-back through Kernel-P01.bin (STN adapter). Saves
 /// <app data>/backups/p01_<os>_<ms>.bin + .json (SHA-256, quality).
-#[tauri::command]
+#[tauri::command(async)]
 fn p01_full_backup(app: tauri::AppHandle, dir: Option<String>) -> Result<String, String> {
     use tauri::Manager;
     let dir = match dir.filter(|d| !d.trim().is_empty()) {
@@ -118,7 +118,7 @@ fn family_for_live(file_bytes: &[u8], requested: Option<String>) -> Result<Strin
     pick_live_family(bin, requested, state)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn compare_bin_to_ecu(file_bytes: Vec<u8>, family: Option<String>) -> Result<String, String> {
     let fam = family_for_live(&file_bytes, family)?;
     with_port(|port| {
@@ -133,7 +133,7 @@ fn compare_bin_to_ecu(file_bytes: Vec<u8>, family: Option<String>) -> Result<Str
         }
     }).or_else(|e| Ok(json!({"success":false,"error":format!("Not connected: {}", e)}).to_string()))
 }
-#[tauri::command]
+#[tauri::command(async)]
 fn verify_after_write(expected_bytes: Option<Vec<u8>>, family: Option<String>) -> Result<String, String> {
     let data = expected_bytes.unwrap_or_default();
     if data.is_empty() { return Err("No expected image provided".into()); }
@@ -145,9 +145,9 @@ fn verify_after_write(expected_bytes: Option<Vec<u8>>, family: Option<String>) -
         }
     }).or_else(|_| Ok("Not connected".into()))
 }
-#[tauri::command] fn unlock_level1() -> Result<String, String> { with_port(|port| Ok(serde_json::to_string(&security::unlock_level1(port)?).unwrap_or_else(|_| "{}".into()))) }
-#[tauri::command] fn unlock_level2() -> Result<String, String> { with_port(|port| Ok(serde_json::to_string(&security::unlock_level2(port)?).unwrap_or_else(|_| "{}".into()))) }
-#[tauri::command]
+#[tauri::command(async)] fn unlock_level1() -> Result<String, String> { with_port(|port| Ok(serde_json::to_string(&security::unlock_level1(port)?).unwrap_or_else(|_| "{}".into()))) }
+#[tauri::command(async)] fn unlock_level2() -> Result<String, String> { with_port(|port| Ok(serde_json::to_string(&security::unlock_level2(port)?).unwrap_or_else(|_| "{}".into()))) }
+#[tauri::command(async)]
 fn bosch_uds_unlock(family: Option<String>, level: Option<String>) -> Result<String, String> {
     let fam = family.map(|f| f.trim().to_string()).filter(|f| !f.is_empty())
         .ok_or_else(|| "ECU family required for Bosch UDS unlock (no default).".to_string())?;
@@ -194,7 +194,7 @@ pub fn run() {
             v29_tools::identify_bin_cmd, v29_tools::compare_bins_cmd, v29_tools::map_from_log_cmd, v29_tools::export_workspace_cmd, v29_tools::import_workspace_cmd, v29_tools::patch_bin_bytes_cmd,
             file_dialog::dialog_open_file, file_dialog::dialog_save_bytes, file_dialog::dialog_save_text, file_dialog::open_recent_file, file_dialog::set_unsaved_changes,
             cs_guard::scan_checksum_candidates_cmd,
-            j2534_list::j2534_list_devices, j2534::j2534_connect, j2534::j2534_connect_vpw, j2534::j2534_disconnect,
+            j2534_list::j2534_list_devices, j2534_list::j2534_list_devices_detailed, j2534::j2534_connect, j2534::j2534_connect_vpw, j2534::j2534_disconnect,
             j2534::j2534_write, j2534::j2534_read, j2534::j2534_set_data_rate,
             j2534::j2534_set_vpw_high_speed, j2534::j2534_set_vpw_normal_speed,
             j2534::j2534_read_vbatt, j2534::j2534_set_iso15765_timing, j2534::j2534_clear_buffers,

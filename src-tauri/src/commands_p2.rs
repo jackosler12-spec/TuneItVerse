@@ -42,7 +42,7 @@ fn pull_mode01(port: &mut Box<dyn SerialPort + Send>, pid: u8) -> Option<Vec<u8>
     crate::transport::pull_mode01(port, pid)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn read_properties() -> Result<String, String> {
     let protocol = STATE.lock().map(|g| g.protocol.clone()).unwrap_or_default();
     let inner = with_port(|port| {
@@ -81,7 +81,7 @@ fn read_properties() -> Result<String, String> {
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn read_ecu_data() -> Result<String, String> {
     with_port(|port| Ok(serde_json::Value::Object(crate::transport::decode_live_map(port)).to_string()))
         .or_else(|_| Ok(json!({"source":"offline","pids_decoded":0,"honest":true,"note":"Offline — no invented live PIDs."}).to_string()))
@@ -97,7 +97,7 @@ fn read_ecu_data() -> Result<String, String> {
 }
 #[tauri::command] fn log_set_channels(enabled_ids: Vec<String>) -> Result<String, String> { Ok(serde_json::to_string(&logging::set_channels(enabled_ids)?).unwrap_or_else(|_| "{}".into())) }
 #[tauri::command] fn log_apply_template(template_id: String) -> Result<String, String> { Ok(serde_json::to_string(&logging::apply_template(&template_id)?).unwrap_or_else(|_| "{}".into())) }
-#[tauri::command]
+#[tauri::command(async)]
 fn log_capture_sample() -> Result<String, String> {
     if logging::get_status().demo {
         return Ok(serde_json::to_string(&logging::capture_demo_sample()?).unwrap_or_else(|_| "{}".into()));

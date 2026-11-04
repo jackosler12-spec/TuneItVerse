@@ -184,13 +184,16 @@ impl J2534Device {
         let dll_names = if let Some(p) = dll_path {
             vec![p.to_string()]
         } else {
-            vec![
+            // Registry-registered (PassThruSupport.04.04) DLLs first, then legacy names.
+            let mut v = crate::j2534_list::registry_dll_candidates();
+            v.extend(vec![
                 "j2534.dll".to_string(),
                 "ptw32.dll".to_string(),
                 "tactrix.dll".to_string(),
                 "op20pt32.dll".to_string(),
                 "rp1210.dll".to_string(),
-            ]
+            ]);
+            v
         };
 
         for name in dll_names {
@@ -631,7 +634,7 @@ pub fn try_set_vpw_normal_speed() -> bool {
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn j2534_connect(dll_path: Option<String>) -> Result<String, String> {
     let mut guard = SHARED.lock().map_err(|e| e.to_string())?;
     let mut dev = J2534Device::new();
@@ -661,7 +664,7 @@ pub fn j2534_connect(dll_path: Option<String>) -> Result<String, String> {
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn j2534_disconnect() -> Result<String, String> {
     let mut guard = SHARED.lock().map_err(|e| e.to_string())?;
     if let Some(ref mut dev) = *guard {
@@ -672,7 +675,7 @@ pub fn j2534_disconnect() -> Result<String, String> {
     Ok("J2534 disconnected".into())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn j2534_connect_vpw(dll_path: Option<String>) -> Result<String, String> {
     let mut guard = SHARED.lock().map_err(|e| e.to_string())?;
     let mut dev = J2534Device::new();
@@ -682,7 +685,7 @@ pub fn j2534_connect_vpw(dll_path: Option<String>) -> Result<String, String> {
     Ok("J2534 VPW connected @ 10400 (Ioctl ready for 4× DATA_RATE)".into())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn j2534_write(data: Vec<u8>, protocol: u32, flags: u32) -> Result<(), String> {
     let guard = SHARED.lock().map_err(|e| e.to_string())?;
     if let Some(ref dev) = *guard {
@@ -692,7 +695,7 @@ pub fn j2534_write(data: Vec<u8>, protocol: u32, flags: u32) -> Result<(), Strin
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn j2534_read(max: usize, timeout_ms: u32) -> Result<Vec<Vec<u8>>, String> {
     let guard = SHARED.lock().map_err(|e| e.to_string())?;
     if let Some(ref dev) = *guard {
@@ -702,7 +705,7 @@ pub fn j2534_read(max: usize, timeout_ms: u32) -> Result<Vec<Vec<u8>>, String> {
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn j2534_set_data_rate(baud: u32) -> Result<(), String> {
     let guard = SHARED.lock().map_err(|e| e.to_string())?;
     if let Some(ref dev) = *guard {
@@ -712,7 +715,7 @@ pub fn j2534_set_data_rate(baud: u32) -> Result<(), String> {
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn j2534_set_vpw_high_speed() -> Result<(), String> {
     let guard = SHARED.lock().map_err(|e| e.to_string())?;
     if let Some(ref dev) = *guard {
@@ -722,7 +725,7 @@ pub fn j2534_set_vpw_high_speed() -> Result<(), String> {
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn j2534_set_vpw_normal_speed() -> Result<(), String> {
     let guard = SHARED.lock().map_err(|e| e.to_string())?;
     if let Some(ref dev) = *guard {
@@ -732,7 +735,7 @@ pub fn j2534_set_vpw_normal_speed() -> Result<(), String> {
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn j2534_read_vbatt() -> Result<f32, String> {
     let guard = SHARED.lock().map_err(|e| e.to_string())?;
     if let Some(ref dev) = *guard {
@@ -742,7 +745,7 @@ pub fn j2534_read_vbatt() -> Result<f32, String> {
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn j2534_set_iso15765_timing(st_min_ms: u32, block_size: u32) -> Result<(), String> {
     let guard = SHARED.lock().map_err(|e| e.to_string())?;
     if let Some(ref dev) = *guard {
@@ -754,7 +757,7 @@ pub fn j2534_set_iso15765_timing(st_min_ms: u32, block_size: u32) -> Result<(), 
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn j2534_clear_buffers() -> Result<(), String> {
     let guard = SHARED.lock().map_err(|e| e.to_string())?;
     if let Some(ref dev) = *guard {
