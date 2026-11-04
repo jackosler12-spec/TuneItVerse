@@ -1,3 +1,12 @@
+# TuneItVerse v3.56.0 — definition coverage and tune change report
+
+## v3.56.0 changes
+
+- Maps status shows a coverage line: editable, read-only (`patch_blocked`), and skipped, with the skip reasons the XDF reader already produced. It does not add map addresses.
+- TunerPro `<XDFFORMAT>` files now load their table list from `parse_xdf_definitions`. The report command only returns a count, so the old path treated a successful parse as "no tables".
+- Compare has Change report and Export report. The report lists changed ranges, a short old/new hex preview, and the name of any loaded table whose bytes overlap that range. Export uses the existing text save dialog. `write_allowed` stays false.
+- **Not hardware-tested.** Tests use four-byte fixtures and synthetic table metadata.
+
 # TuneItVerse v3.55.0 — fail-closed DTC read and live verify
 
 ## v3.55.0 changes

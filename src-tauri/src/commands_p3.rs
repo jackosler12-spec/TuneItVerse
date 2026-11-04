@@ -198,7 +198,7 @@ pub fn run() {
             log_capture_sample, log_set_demo_mode, log_get_samples, log_clear, log_export_csv, log_import_csv,
             compute_seed_key, gm_key_table_info, compare_p01_gm_seed, read_dtcs_cmd, read_freeze_frame_cmd, clear_dtcs_cmd, dtc::explain_dtcs_cmd,
             validate_bin_checksums_summary_cmd, validate_checksums_cmd, correct_bin_checksums,
-            xdf::parse_xdf_definitions, xdf::parse_xdf_report, xdf::extract_table_from_bin, xdf::patch_table_into_bin, xdf::table_delta_cmd,
+            xdf::parse_xdf_definitions, xdf::parse_xdf_report, xdf::definition_coverage_cmd, xdf::extract_table_from_bin, xdf::patch_table_into_bin, xdf::table_delta_cmd,
             a2l::parse_a2l_definitions, a2l::parse_a2l_summary,
             table_tools::table_math_cmd, table_tools::apply_stft_preview_cmd,
             auto_load_tables_for_bin, get_tuning_advice, guided_flash_pipeline, p01_full_backup, audit_log_entries, compare_bin_to_ecu, verify_after_write,
@@ -215,7 +215,7 @@ pub fn run() {
             v312::session_snapshot, v312::list_supported_adapters,
             defpack::import_definition_pack, defpack::list_definition_packs, defpack::operational_self_check,
             bin_inspect::bin_hex_window, bin_inspect::bin_profile, bin_inspect::bin_tune_report,
-            log_studio::log_session_summary, log_studio::log_replay_frame, log_studio::log_trim_suggestion, log_studio::bin_diff_report, live_dashboard::dashboard_snapshot,
+            log_studio::log_session_summary, log_studio::log_replay_frame, log_studio::log_trim_suggestion, log_studio::bin_diff_report, log_studio::change_report_cmd, live_dashboard::dashboard_snapshot,
         ])
         .run(tauri::generate_context!())
         .expect("error while running TuneItVerse");

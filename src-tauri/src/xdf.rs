@@ -786,6 +786,37 @@ fn cell_layout(z: &XdfAxis, def_bits: u32, def_signed: bool, def_lsb: bool, def_
     Ok((dtype, lsb, (major / 8) as usize, Some(format!("stride layout ({} bits per step) is read with an unverified interpretation; editing disabled", major))))
 }
 
+/// One already-parsed table. Extra fields from TableDef are ignored.
+#[derive(Debug, Deserialize, Default)]
+pub struct CoverageTable {
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub patch_blocked: Option<String>,
+}
+
+/// Counts for definitions the caller already parsed. Does not invent addresses.
+pub fn definition_coverage(tables: &[CoverageTable], skipped: &[String]) -> serde_json::Value {
+    let read_only = tables.iter().filter(|t| {
+        t.patch_blocked.as_ref().map(|s| !s.trim().is_empty()).unwrap_or(false)
+    }).count();
+    let editable = tables.len().saturating_sub(read_only);
+    serde_json::json!({
+        "loaded": tables.len(),
+        "editable": editable,
+        "read_only": read_only,
+        "skipped": skipped.len(),
+        "skip_reasons": skipped,
+        "write_allowed": false,
+        "note": "Counts definitions already parsed. Does not add map addresses or enable write."
+    })
+}
+
+#[tauri::command]
+pub fn definition_coverage_cmd(tables: Vec<CoverageTable>, skipped: Option<Vec<String>>) -> Result<String, String> {
+    Ok(definition_coverage(&tables, skipped.unwrap_or_default().as_slice()).to_string())
+}
+
 /// Parse report for the UI: tables plus the items that were skipped and why.
 #[tauri::command]
 pub fn parse_xdf_report(xml: String) -> Result<String, String> {
@@ -1129,6 +1160,23 @@ mod tunerpro_xdf_tests {
         let rep: serde_json::Value = serde_json::from_str(&parse_xdf_report(XDF.to_string()).unwrap()).unwrap();
         assert_eq!(rep["format"], "tunerpro-xdf");
         assert_eq!(rep["skipped"].as_array().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn coverage_counts_editable_readonly_and_skips() {
+        let tables = vec![
+            CoverageTable { name: "VE".into(), patch_blocked: None },
+            CoverageTable { name: "Strided".into(), patch_blocked: Some("unverified layout".into()) },
+            CoverageTable { name: "Blank".into(), patch_blocked: Some("  ".into()) },
+        ];
+        let skipped = vec!["No Address: no data address".into(), "64-bit float".into()];
+        let v = definition_coverage(&tables, &skipped);
+        assert_eq!(v["loaded"], 3);
+        assert_eq!(v["editable"], 2);
+        assert_eq!(v["read_only"], 1);
+        assert_eq!(v["skipped"], 2);
+        assert_eq!(v["write_allowed"], false);
+        assert_eq!(v["skip_reasons"][0], "No Address: no data address");
     }
 
     #[test]

@@ -1417,6 +1417,8 @@ async function ingestBinBytes(bytes, label) {
     }
     rebuildCategoryChips();
     renderTableList();
+    const cov = await coverageNote(currentTables, []);
+    if (cov) setTablesStatus((document.getElementById('tables-status')?.textContent || '') + cov);
   } catch (e) {
     currentTables = [];
     renderTableList();
@@ -1440,18 +1442,31 @@ async function loadBinFile() {
   }
 }
 
+async function coverageNote(tables, skipped) {
+  try {
+    const cov = parseMaybe(await invokeCmd('definition_coverage_cmd', {
+      tables: tables || [],
+      skipped: skipped || []
+    }));
+    if (!cov || typeof cov !== 'object') return '';
+    const reasons = Array.isArray(cov.skip_reasons) ? cov.skip_reasons : [];
+    const why = reasons.length ? ' ' + reasons.slice(0, 3).join('; ') + (reasons.length > 3 ? '…' : '') : '';
+    return ' Coverage: ' + cov.editable + ' editable, ' + cov.read_only + ' read-only, ' + cov.skipped + ' skipped.' + why;
+  } catch (e) {
+    return ' Coverage unavailable: ' + e;
+  }
+}
+
 async function applyDefinitionText(text, source) {
-  let defs, list, skippedNote = '';
+  let defs, list, skipped = [];
   try {
     if (/BEGIN CHARACTERISTIC/i.test(text)) defs = await invokeCmd('parse_a2l_definitions', { text });
     else if (/<XDFFORMAT/i.test(text)) {
-      const rep = parseMaybe(await invokeCmd('parse_xdf_report', { xml: text })) || {};
-      defs = rep.tables || [];
-      const sk = rep.skipped || [];
-      if (sk.length) {
-        skippedNote = ' Skipped ' + sk.length + ' unsupported item(s): ' + sk.slice(0, 5).join('; ') + (sk.length > 5 ? '…' : '');
-        console.warn('XDF skipped items', sk);
-      }
+      defs = await invokeCmd('parse_xdf_definitions', { xml: text });
+      try {
+        const rep = parseMaybe(await invokeCmd('parse_xdf_report', { xml: text })) || {};
+        skipped = Array.isArray(rep.skipped) ? rep.skipped : [];
+      } catch (_) { skipped = []; }
     }
     else defs = await invokeCmd('parse_xdf_definitions', { xml: text });
   } catch (e) {
@@ -1460,13 +1475,16 @@ async function applyDefinitionText(text, source) {
   }
   list = Array.isArray(defs) ? defs : parseMaybe(defs);
   if (!list || !list.length) {
-    setTablesStatus((source || 'Definition') + ' parsed but no tables found.' + skippedNote);
+    setTablesStatus((source || 'Definition') + ' parsed but no tables found.');
     return;
   }
   currentTables = list;
+  window.__tivSkipped = skipped;
+  syncGlobals();
   rebuildCategoryChips();
   renderTableList();
-  setTablesStatus((source || 'Definitions') + ' loaded: ' + list.length + ' tables. Select one to extract from the BIN.' + skippedNote);
+  const cov = await coverageNote(list, skipped);
+  setTablesStatus((source || 'Definitions') + ' loaded: ' + list.length + ' tables. Select one to extract from the BIN.' + cov);
 }
 
 async function loadXdfFile() {
@@ -1493,8 +1511,11 @@ async function loadA2l() {
       return;
     }
     currentTables = list;
+    window.__tivSkipped = [];
+    syncGlobals();
     renderTableList();
-    setTablesStatus('A2L loaded: ' + list.length + ' characteristics. Confirm addresses on your dump.');
+    const cov = await coverageNote(list, []);
+    setTablesStatus('A2L loaded: ' + list.length + ' characteristics. Confirm addresses on your dump.' + cov);
     if (res.path) document.dispatchEvent(new CustomEvent('tiv:file-opened', { detail: { path: res.path, kind: 'a2l' } }));
   } catch (e) {
     setTablesStatus('A2L parse error: ' + e);
@@ -2340,7 +2361,7 @@ function setupAll() {
   pollHealth();
   if (healthTimer) clearInterval(healthTimer);
   healthTimer = setInterval(pollHealth, 2500);
-  console.log('TuneItVerse UI v3.55.0');
+  console.log('TuneItVerse UI v3.56.0');
 }
 
 setupNav();
