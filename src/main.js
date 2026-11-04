@@ -700,6 +700,24 @@ async function pollHealth() {
   try {
     const h = await invokeCmd('get_connection_health');
     const text = typeof h === 'string' ? h : String(h);
+    if (/replay/i.test(text)) {
+      isConnected = true;
+      const el = document.getElementById('connection-status');
+      if (el) el.textContent = text;
+      const hint = document.getElementById('dash-conn-hint');
+      if (hint) hint.textContent = text;
+      const dot = document.getElementById('conn-dot');
+      if (dot) dot.classList.remove('connected');
+      const btn = document.getElementById('btn-connect-top');
+      if (btn) {
+        btn.textContent = 'Disconnect';
+        btn.classList.remove('connected');
+      }
+      const right = document.getElementById('status-right');
+      if (right) right.textContent = text;
+      ['kpi-rpm', 'kpi-map', 'kpi-ect', 'kpi-batt'].forEach((id) => setKpi(id, undefined));
+      return;
+    }
     const on = /connected/i.test(text) && !/disconnected/i.test(text);
     updateConnStatus(text, on);
     if (on) {
@@ -854,6 +872,23 @@ async function doDisconnect() {
   updateConnStatus('Disconnected', false);
   const log = document.getElementById('connect-log');
   if (log) log.textContent += 'Disconnected.\n';
+}
+
+async function doReplayFixture() {
+  const raw = document.getElementById('replay-fixture')?.value || 'elm_patrol_zd30_obdlink.txt|## Section A1';
+  const bar = raw.indexOf('|');
+  const fixture = bar === -1 ? raw : raw.slice(0, bar);
+  const section = bar === -1 ? '' : raw.slice(bar + 1);
+  const log = document.getElementById('connect-log');
+  if (log) log.textContent = 'Opening replay fixture ' + fixture + ' (' + (section || 'whole file') + '). Not a vehicle.\n';
+  try {
+    const msg = await invokeCmd('connect_replay_fixture', { fixture, section });
+    if (log) log.textContent += (typeof msg === 'string' ? msg : JSON.stringify(msg)) + '\n';
+    await pollHealth();
+  } catch (e) {
+    if (log) log.textContent += 'ERROR: ' + e + '\n';
+    updateConnStatus('Disconnected', false);
+  }
 }
 
 async function doAutoDetect() {
@@ -2287,6 +2322,7 @@ function bindAppClicks() {
     'btn-do-connect': doConnect,
     'btn-do-disconnect': doDisconnect,
     'btn-auto-detect': doAutoDetect,
+    'btn-replay-fixture': doReplayFixture,
     'btn-compute-key': computeSeedKeyUi,
     'btn-j2534-list': refreshJ2534Devices,
     'btn-log-start': startLogging,
@@ -2361,7 +2397,7 @@ function setupAll() {
   pollHealth();
   if (healthTimer) clearInterval(healthTimer);
   healthTimer = setInterval(pollHealth, 2500);
-  console.log('TuneItVerse UI v3.56.0');
+  console.log('TuneItVerse UI v3.57.0');
 }
 
 setupNav();

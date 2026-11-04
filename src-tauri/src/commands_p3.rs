@@ -19,6 +19,9 @@ fn compare_p01_gm_seed(seed_hex: String, algo: Option<u32>, scan: Option<bool>) 
     })
 }
 #[tauri::command(async)] fn clear_dtcs_cmd() -> Result<String, String> {
+    if let Err(e) = refuse_replay("DTC clear") {
+        return Ok(json!({"success":false,"message":e}).to_string());
+    }
     with_port(|port| dtc::clear_dtcs(port, 0).map(|r| serde_json::to_string(&r).unwrap_or_else(|_| "{\"success\":true}".into())))
         .or_else(|_| Ok(json!({"success":false,"message":"DTC clear refused offline. Connect an adapter."}).to_string()))
 }
@@ -51,8 +54,22 @@ fn compare_p01_gm_seed(seed_hex: String, algo: Option<u32>, scan: Option<bool>) 
         table_id, ecu_family, sample_value
     ))
 }
+/// JSON body when a flash write is asked during replay. `None` when the session is live.
+fn replay_flash_refusal() -> Option<String> {
+    refuse_replay("Flash write").err().map(|e| json!({
+        "success": false,
+        "steps_completed": [],
+        "logs": [e.clone()],
+        "verified_live": false,
+        "error": e,
+    }).to_string())
+}
+
 #[tauri::command(async)]
 fn guided_flash_pipeline(app: tauri::AppHandle, request_json: String) -> Result<String, String> {
+    if let Some(body) = replay_flash_refusal() {
+        return Ok(body);
+    }
     let request: flash::GuidedFlashRequest = serde_json::from_str(&request_json).map_err(|e| format!("Invalid GuidedFlashRequest: {}", e))?;
     with_port(|port| {
         let result = flash::orchestrate_guided_flash(port, request, |p| {
@@ -158,12 +175,21 @@ fn verify_after_write(expected_bytes: Option<Vec<u8>>, family: Option<String>) -
     let (crc, matched) = with_port(|port| flash::verify_after_write(port, &fam, &data, &mut vec![]))?;
     verify_outcome(crc, matched, &fam)
 }
-#[tauri::command(async)] fn unlock_level1() -> Result<String, String> { with_port(|port| Ok(serde_json::to_string(&security::unlock_level1(port)?).unwrap_or_else(|_| "{}".into()))) }
-#[tauri::command(async)] fn unlock_level2() -> Result<String, String> { with_port(|port| Ok(serde_json::to_string(&security::unlock_level2(port)?).unwrap_or_else(|_| "{}".into()))) }
+#[tauri::command(async)] fn unlock_level1() -> Result<String, String> {
+    refuse_replay("Unlock")?;
+    with_port(|port| Ok(serde_json::to_string(&security::unlock_level1(port)?).unwrap_or_else(|_| "{}".into())))
+}
+#[tauri::command(async)] fn unlock_level2() -> Result<String, String> {
+    refuse_replay("Unlock")?;
+    with_port(|port| Ok(serde_json::to_string(&security::unlock_level2(port)?).unwrap_or_else(|_| "{}".into())))
+}
 #[tauri::command(async)]
 fn bosch_uds_unlock(family: Option<String>, level: Option<String>) -> Result<String, String> {
     let fam = family.map(|f| f.trim().to_string()).filter(|f| !f.is_empty())
         .ok_or_else(|| "ECU family required for Bosch UDS unlock (no default).".to_string())?;
+    if let Err(e) = refuse_replay("Bosch UDS unlock") {
+        return Ok(json!({"success":false,"message":e,"family":fam}).to_string());
+    }
     let lvl = security::BoschSecurityLevel::from_str(&level.unwrap_or_else(|| "programming".into()));
     with_port(|port| security::bosch_uds_unlock_full(port, &fam, lvl))
         .or_else(|e| Ok(json!({"success":false,"message":"Bosch UDS unlock refused offline. Connect an adapter.","family":fam,"error":e}).to_string()))
@@ -188,7 +214,7 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
-            list_serial_ports, get_connection_health, connect_ecu, disconnect_ecu, auto_detect_protocol,
+            list_serial_ports, get_connection_health, connect_ecu, disconnect_ecu, connect_replay_fixture, auto_detect_protocol,
             st_identify, st_read_voltage, st_set_protocol, st_open_protocol, st_set_timeout,
             st_clear_filters, st_set_pass_filter, st_set_flow_control_filter,
             st_start_monitor, st_stop_monitor, st_capture_monitor, st_enter_sleep, st_set_sleep_wake,
@@ -249,6 +275,7 @@ mod live_family_tests {
     }
     #[test]
     fn dtc_read_freeze_and_verify_fail_when_disconnected() {
+        let _hold = super::TEST_PORT_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let dtc = read_dtcs_cmd().unwrap_err();
         assert!(dtc.to_lowercase().contains("not connected"), "{dtc}");
         let ff = read_freeze_frame_cmd().unwrap_err();
@@ -257,5 +284,74 @@ mod live_family_tests {
         assert!(verify.to_lowercase().contains("not connected"), "{verify}");
         let clear = clear_dtcs_cmd().unwrap();
         assert!(clear.contains("\"success\":false"), "{clear}");
+    }
+
+    #[test]
+    fn replay_fixture_decodes_known_pids_and_refuses_writes() {
+        let _hold = super::TEST_PORT_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        struct DisconnectOnDrop;
+        impl Drop for DisconnectOnDrop {
+            fn drop(&mut self) { let _ = disconnect_ecu(); }
+        }
+        let _cleanup = DisconnectOnDrop;
+        let _ = disconnect_ecu();
+
+        let path_err = connect_replay_fixture(r"..\secret.txt".into(), None).unwrap_err();
+        assert!(path_err.contains("not a path"), "{path_err}");
+        let unknown = connect_replay_fixture("not-a-fixture.txt".into(), None).unwrap_err();
+        assert!(unknown.contains("Unknown fixture"), "{unknown}");
+        let section_err = connect_replay_fixture(
+            "elm_patrol_zd30_obdlink.txt".into(),
+            Some("Section A1".into()),
+        ).unwrap_err();
+        assert!(section_err.contains("## "), "{section_err}");
+        assert!(!replay_session());
+
+        let msg = connect_replay_fixture(
+            "elm_patrol_zd30_obdlink.txt".into(),
+            Some("## Section A1".into()),
+        ).unwrap();
+        assert!(msg.to_ascii_lowercase().contains("replay"), "{msg}");
+        assert!(msg.to_ascii_lowercase().contains("not a vehicle"), "{msg}");
+        let health = get_connection_health().unwrap();
+        assert_eq!(health, "Replay fixture (not a vehicle)");
+        with_port(|port| {
+            let mut sess = crate::transport::ElmSession::for_protocol("can");
+            let cal = crate::transport::mode09_in(port, &mut sess, 0x04).unwrap();
+            assert_eq!(cal, "0VS43B");
+            Ok(())
+        }).unwrap();
+
+        let unlock = unlock_level1().unwrap_err();
+        assert!(unlock.to_ascii_lowercase().contains("replay"), "{unlock}");
+        let unlock2 = unlock_level2().unwrap_err();
+        assert!(unlock2.to_ascii_lowercase().contains("replay"), "{unlock2}");
+        let clear = clear_dtcs_cmd().unwrap();
+        assert!(clear.contains("\"success\":false"), "{clear}");
+        assert!(clear.to_ascii_lowercase().contains("replay"), "{clear}");
+        let bosch = bosch_uds_unlock(Some("EDC16C41".into()), Some("programming".into())).unwrap();
+        assert!(bosch.contains("\"success\":false"), "{bosch}");
+        assert!(bosch.to_ascii_lowercase().contains("replay"), "{bosch}");
+        let flash = replay_flash_refusal().expect("flash stays refused in replay");
+        assert!(flash.contains("\"success\":false"), "{flash}");
+        assert!(flash.to_ascii_lowercase().contains("replay"), "{flash}");
+        assert!(flash.contains("\"verified_live\":false"), "{flash}");
+
+        let _ = disconnect_ecu();
+        let msg_c = connect_replay_fixture(
+            "elm_patrol_zd30_obdlink.txt".into(),
+            Some("## Section C".into()),
+        ).unwrap();
+        assert!(msg_c.contains("## Section C"), "{msg_c}");
+        with_port(|port| {
+            let mut sess = crate::transport::ElmSession::for_protocol("auto");
+            let supported = crate::transport::read_support_in(port, &mut sess).unwrap();
+            for pid in [0x01u8, 0x03, 0x04, 0x05, 0x06, 0x07, 0x09, 0x0C, 0x0D] {
+                assert!(supported.contains(&pid), "{pid:02X}");
+            }
+            let ect = crate::transport::mode01_in(port, &mut sess, 0x05).unwrap();
+            assert_eq!(crate::pid_decode::decode_ect(&ect), Some(83.0));
+            Ok(())
+        }).unwrap();
     }
 }

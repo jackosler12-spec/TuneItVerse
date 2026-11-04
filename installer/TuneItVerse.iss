@@ -1,6 +1,6 @@
 [Setup]
 AppName=TuneItVerse
-AppVersion=3.56.0
+AppVersion=3.57.0
 AppPublisher=JRTuners
 DefaultDirName={userappdata}\TuneItVerse
 DefaultGroupName=TuneItVerse

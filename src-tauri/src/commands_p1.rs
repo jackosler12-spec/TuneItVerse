@@ -26,6 +26,9 @@ fn list_serial_ports() -> Result<Vec<String>, String> {
 }
 #[tauri::command(async)]
 fn get_connection_health() -> Result<String, String> {
+    if replay_session() {
+        return Ok("Replay fixture (not a vehicle)".into());
+    }
     if crate::j2534::is_device_open() {
         return Ok("Connected (j2534)".into());
     }
@@ -102,6 +105,44 @@ fn disconnect_ecu() -> Result<String, String> {
     let mut guard = STATE.lock().map_err(|e| e.to_string())?;
     guard.port = None; guard.protocol = String::new(); guard.last_os_id = None; guard.last_family = None;
     Ok("Disconnected".into())
+}
+
+fn fixture_text(name: &str) -> Result<&'static str, String> {
+    match name {
+        "elm_patrol_zd30_obdlink.txt" => Ok(include_str!("../../reference/fixtures/elm_patrol_zd30_obdlink.txt")),
+        "elm_patrol_nissan_22reads.txt" => Ok(include_str!("../../reference/fixtures/elm_patrol_nissan_22reads.txt")),
+        "elm_patrol_session_identity.txt" => Ok(include_str!("../../reference/fixtures/elm_patrol_session_identity.txt")),
+        "elm_cleanup_and_pending.txt" => Ok(include_str!("../../reference/fixtures/elm_cleanup_and_pending.txt")),
+        other => Err(format!("Unknown fixture '{other}'. Replay only loads checked-in ELM traces.")),
+    }
+}
+
+/// Open a checked-in ELM trace as the serial port. No warmup: that sleeps and
+/// clears the scripted replies. Protocol is `replay`, never a live vehicle.
+#[tauri::command(async)]
+fn connect_replay_fixture(fixture: String, section: Option<String>) -> Result<String, String> {
+    let name = fixture.trim();
+    if name.is_empty() {
+        return Err("Fixture name required.".into());
+    }
+    if name.contains("..") || name.contains('/') || name.contains('\\') {
+        return Err("Replay only loads a checked-in fixture name, not a path.".into());
+    }
+    let section = section.unwrap_or_default();
+    let section = section.trim();
+    if !section.is_empty() && !section.starts_with("## ") {
+        return Err("Section must be a fixture heading that starts with '## ', or empty for the whole file.".into());
+    }
+    let text = fixture_text(name)?;
+    let (port, _) = crate::replay_port::ReplayPort::from_fixture(text, section).boxed();
+    crate::transport::begin_session("replay");
+    let mut guard = STATE.lock().map_err(|e| e.to_string())?;
+    guard.port = Some(port);
+    guard.protocol = "replay".into();
+    guard.last_os_id = None;
+    guard.last_family = None;
+    let heading = if section.is_empty() { "whole file".to_string() } else { section.to_string() };
+    Ok(format!("Replay fixture {name} ({heading}). Not a vehicle. Flash write, unlock, and DTC clear stay refused."))
 }
 
 fn read_ascii_window(port: &mut dyn SerialPort, wait_ms: u64) -> String {
