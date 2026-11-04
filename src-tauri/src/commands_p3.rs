@@ -5,11 +5,18 @@ fn compare_p01_gm_seed(seed_hex: String, algo: Option<u32>, scan: Option<bool>) 
     Ok(serde_json::to_string(&r).unwrap_or_else(|_| "{}".into()))
 }
 #[tauri::command(async)] fn read_dtcs_cmd() -> Result<String, String> {
-    with_port(|port| dtc::read_dtcs(port).map(|r| serde_json::to_string(&r).unwrap_or_else(|_| "{}".into())))
-        .or_else(|_| Ok(json!({"stored":[],"pending":[],"permanent":[],"total":0}).to_string()))
+    // A missing adapter or a failed read is an error. An empty list is only
+    // returned when the ECU actually answered with no codes.
+    with_port(|port| {
+        let r = dtc::read_dtcs(port)?;
+        serde_json::to_string(&r).map_err(|e| e.to_string())
+    })
 }
 #[tauri::command(async)] fn read_freeze_frame_cmd() -> Result<String, String> {
-    with_port(|port| dtc::read_freeze_frame(port).map(|r| serde_json::to_string(&r).unwrap_or_else(|_| "{}".into()))).or_else(|_| Ok("{}".into()))
+    with_port(|port| {
+        let r = dtc::read_freeze_frame(port)?;
+        serde_json::to_string(&r).map_err(|e| e.to_string())
+    })
 }
 #[tauri::command(async)] fn clear_dtcs_cmd() -> Result<String, String> {
     with_port(|port| dtc::clear_dtcs(port, 0).map(|r| serde_json::to_string(&r).unwrap_or_else(|_| "{\"success\":true}".into())))
@@ -133,17 +140,23 @@ fn compare_bin_to_ecu(file_bytes: Vec<u8>, family: Option<String>) -> Result<Str
         }
     }).or_else(|e| Ok(json!({"success":false,"error":format!("Not connected: {}", e)}).to_string()))
 }
+/// Success text only when the live read-back matched. A mismatch is `Err`.
+fn verify_outcome(crc: u32, matched: bool, fam: &str) -> Result<String, String> {
+    if !matched {
+        return Err(format!(
+            "Live verify mismatch. CRC 0x{crc:08X} family={fam}. The image does not match the ECU read-back."
+        ));
+    }
+    Ok(format!("Live CRC 0x{crc:08X} matched=true family={fam}"))
+}
+
 #[tauri::command(async)]
 fn verify_after_write(expected_bytes: Option<Vec<u8>>, family: Option<String>) -> Result<String, String> {
     let data = expected_bytes.unwrap_or_default();
     if data.is_empty() { return Err("No expected image provided".into()); }
     let fam = family_for_live(&data, family)?;
-    with_port(|port| {
-        match flash::verify_after_write(port, &fam, &data, &mut vec![]) {
-            Ok((crc, matched)) => Ok(format!("Live CRC 0x{:08X} matched={} family={}", crc, matched, fam)),
-            Err(e) => Ok(format!("Verify note: {}", e)),
-        }
-    }).or_else(|_| Ok("Not connected".into()))
+    let (crc, matched) = with_port(|port| flash::verify_after_write(port, &fam, &data, &mut vec![]))?;
+    verify_outcome(crc, matched, &fam)
 }
 #[tauri::command(async)] fn unlock_level1() -> Result<String, String> { with_port(|port| Ok(serde_json::to_string(&security::unlock_level1(port)?).unwrap_or_else(|_| "{}".into()))) }
 #[tauri::command(async)] fn unlock_level2() -> Result<String, String> { with_port(|port| Ok(serde_json::to_string(&security::unlock_level2(port)?).unwrap_or_else(|_| "{}".into()))) }
@@ -226,5 +239,23 @@ mod live_family_tests {
     #[test]
     fn bosch_unlock_requires_family() {
         assert!(bosch_uds_unlock(None, None).unwrap_err().contains("family required"));
+    }
+    #[test]
+    fn verify_outcome_is_ok_only_when_matched() {
+        assert!(verify_outcome(0xA1B2C3D4, true, "P01_0411").unwrap().contains("matched=true"));
+        let mismatch = verify_outcome(0xA1B2C3D4, false, "P01_0411").unwrap_err();
+        assert!(mismatch.contains("mismatch"), "{mismatch}");
+        assert!(mismatch.contains("0xA1B2C3D4"), "{mismatch}");
+    }
+    #[test]
+    fn dtc_read_freeze_and_verify_fail_when_disconnected() {
+        let dtc = read_dtcs_cmd().unwrap_err();
+        assert!(dtc.to_lowercase().contains("not connected"), "{dtc}");
+        let ff = read_freeze_frame_cmd().unwrap_err();
+        assert!(ff.to_lowercase().contains("not connected"), "{ff}");
+        let verify = verify_after_write(Some(vec![0u8; 32]), Some("P01_0411".into())).unwrap_err();
+        assert!(verify.to_lowercase().contains("not connected"), "{verify}");
+        let clear = clear_dtcs_cmd().unwrap();
+        assert!(clear.contains("\"success\":false"), "{clear}");
     }
 }

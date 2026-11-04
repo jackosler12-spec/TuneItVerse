@@ -1227,7 +1227,10 @@ async function readDtcs() {
   const st = document.getElementById('dtc-status');
   if (st) st.textContent = 'Reading DTCs…';
   try {
-    const result = parseMaybe(await invokeCmd('read_dtcs_cmd')) || { stored: [], pending: [], permanent: [], total: 0 };
+    const result = parseMaybe(await invokeCmd('read_dtcs_cmd'));
+    if (!result || typeof result !== 'object' || !Array.isArray(result.stored)) {
+      throw new Error(typeof result === 'string' ? result : 'DTC read did not return a code list');
+    }
     renderDtcRows(result);
     if (st) st.textContent = 'Read complete';
   } catch (e) {
@@ -1242,6 +1245,7 @@ async function readFreezeFrame() {
   if (st) st.textContent = 'Reading freeze frame…';
   try {
     const result = parseMaybe(await invokeCmd('read_freeze_frame_cmd'));
+    if (result == null || result === '') throw new Error('Freeze frame read returned nothing');
     if (pre) pre.textContent = JSON.stringify(result, null, 2);
     if (st) st.textContent = 'Freeze frame OK';
   } catch (e) {
@@ -2336,7 +2340,7 @@ function setupAll() {
   pollHealth();
   if (healthTimer) clearInterval(healthTimer);
   healthTimer = setInterval(pollHealth, 2500);
-  console.log('TuneItVerse UI v3.54.0');
+  console.log('TuneItVerse UI v3.55.0');
 }
 
 setupNav();

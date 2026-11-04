@@ -94,3 +94,5 @@ Build your own. No more bullshit prices.
 Updated 2026-08-09: Priority 0 fully landed. v2.0.0 declared production-ready for supported ECUs.
 
 Updated 2026-10-21 (v3.47.0): the "production-ready" claim above was premature. Nothing has been bench-tested. The in-app Capabilities page and COMPLETION.md are the current, sourced status.
+
+Updated 2026-11-04: see [AUDIT.md](AUDIT.md) for the v3.54.0 flaw list. DTC read and live verify fail closed as of v3.55.0. Hardware is still untested.

@@ -1,4 +1,4 @@
-// TuneItVerse lib.rs — Tauri entry + command surface (v3.39.0)
+// TuneItVerse lib.rs — Tauri entry + command surface (v3.55.0)
 #![allow(unused_imports, dead_code, non_snake_case)]
 
 pub const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
