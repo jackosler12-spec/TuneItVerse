@@ -98,4 +98,6 @@ jobs:
         run: |
           Remove-Item Env:WINDOWS_PFX_BASE64 -ErrorAction SilentlyContinue
           & ./scripts/sign-exe.ps1 -Path "$env:TEMP\tuneitverse-missing.exe"
-          if ($LASTEXITCODE -ne 2) { throw "expected exit 2, got $LASTEXITCODE" }
+          $code = $LASTEXITCODE
+          $global:LASTEXITCODE = 0
+          if ($code -ne 2) { throw "expected exit 2, got $code" }
