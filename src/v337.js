@@ -54,15 +54,38 @@
     show('log-replay-readout', JSON.stringify(raw, null, 2));
     if (raw && raw.write_allowed) show('log-replay-readout', 'Refusing suggestion: write_allowed must stay false.');
   }
-  async function diff() {
+  function compareImages() {
     const a = window.currentBin ? Array.from(window.currentBin) : null;
     const b = window.__compareBin ? Array.from(window.__compareBin) : null;
     if (!a || !b) {
       show('compare-report', 'Load the working BIN on Maps, then load a compare BIN here.');
+      return null;
+    }
+    return { a: a, b: b, tables: Array.isArray(window.currentTables) ? window.currentTables : [] };
+  }
+  async function diff() {
+    const images = compareImages();
+    if (!images) return;
+    const text = await cmd('bin_diff_report', { a: images.a, b: images.b });
+    show('compare-report', text);
+  }
+  async function changeReport() {
+    const images = compareImages();
+    if (!images) return;
+    const text = await cmd('change_report_cmd', { a: images.a, b: images.b, tables: images.tables });
+    const body = typeof text === 'string' ? text : JSON.stringify(text, null, 2);
+    window.__tivChangeReport = body;
+    show('compare-report', body);
+  }
+  async function exportReport() {
+    const text = window.__tivChangeReport || '';
+    if (!text) {
+      show('compare-report', 'Run Change report first. Export does not write a BIN.');
       return;
     }
-    const text = await cmd('bin_diff_report', { a: a, b: b });
-    show('compare-report', text);
+    const saved = parseMaybe(await cmd('dialog_save_text', { text: text, default_name: 'tune-change-report.txt' }));
+    if (saved && saved.cancelled) return;
+    show('compare-report', text + '\n\nExported. This file does not enable write.');
   }
   async function loadCompare() {
     const opened = parseMaybe(await cmd('dialog_open_file', { kind: 'bin' }));
@@ -81,7 +104,9 @@
         'btn-log-replay-stop': stop,
         'btn-log-suggest': suggestion,
         'btn-compare-load': loadCompare,
-        'btn-compare-run': diff
+        'btn-compare-run': diff,
+        'btn-change-report': changeReport,
+        'btn-change-export': exportReport
       }[btn.id];
       if (!run) return;
       ev.preventDefault();

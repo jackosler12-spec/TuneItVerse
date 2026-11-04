@@ -1,6 +1,7 @@
 //! Log studio and BIN diff report.
 //! Preview only. Nothing here sets write_allowed or patches a calibration.
 
+use serde::Deserialize;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 
@@ -172,6 +173,117 @@ pub fn diff_report(a: &[u8], b: &[u8]) -> String {
     out
 }
 
+#[derive(Debug, Deserialize, Default)]
+pub(crate) struct ReportTable {
+    #[serde(default)]
+    name: String,
+    #[serde(default)]
+    addr: String,
+    #[serde(default)]
+    rows: usize,
+    #[serde(default)]
+    cols: usize,
+    #[serde(default)]
+    data_type: String,
+    #[serde(default)]
+    stride_bytes: usize,
+}
+
+fn parse_addr(s: &str) -> Option<usize> {
+    let t = s.trim();
+    if t.is_empty() { return None; }
+    let hex = t.strip_prefix("0x").or_else(|| t.strip_prefix("0X"));
+    if let Some(h) = hex {
+        return usize::from_str_radix(h, 16).ok();
+    }
+    if t.chars().all(|c| c.is_ascii_hexdigit()) && t.chars().any(|c| matches!(c, 'a'..='f' | 'A'..='F')) {
+        return usize::from_str_radix(t, 16).ok();
+    }
+    t.parse::<usize>().ok()
+}
+
+fn table_span(t: &ReportTable) -> Option<(usize, usize, String)> {
+    let addr = parse_addr(&t.addr)?;
+    let width = crate::xdf::cell_width(&t.data_type);
+    if width == 0 || t.rows == 0 || t.cols == 0 { return None; }
+    let cells = t.rows.saturating_mul(t.cols);
+    if cells == 0 { return None; }
+    let len = if t.stride_bytes > width {
+        t.stride_bytes.saturating_mul(cells - 1).saturating_add(width)
+    } else {
+        width.saturating_mul(cells)
+    };
+    if len == 0 { return None; }
+    let name = if t.name.trim().is_empty() { format!("0x{addr:X}") } else { t.name.trim().to_string() };
+    Some((addr, len, name))
+}
+
+fn hex_preview(data: &[u8], start: usize, end: usize) -> String {
+    let last = end.min(data.len().saturating_sub(1));
+    if start > last || start >= data.len() { return String::new(); }
+    let n = (last - start + 1).min(8);
+    let mut s = data[start..start + n].iter().map(|b| format!("{b:02X}")).collect::<Vec<_>>().join(" ");
+    if last - start + 1 > 8 { s.push_str(" ..."); }
+    s
+}
+
+/// Shop sheet: changed ranges, overlapping table names, and a short old/new hex preview.
+/// Names come only from tables the caller already parsed. This does not write a BIN.
+pub fn change_report(a: &[u8], b: &[u8], tables: &[ReportTable]) -> String {
+    if a.len() != b.len() {
+        return format!(
+            "# Tune change report\n\nImages differ in length ({} vs {}). No byte overlay.\n\nwrite_allowed: false\nThis report does not enable write.\n",
+            a.len(), b.len()
+        );
+    }
+    let spans: Vec<(usize, usize, String)> = tables.iter().filter_map(table_span).collect();
+    let mut diffs = 0usize;
+    let mut ranges: Vec<(usize, usize)> = Vec::new();
+    let mut start: Option<usize> = None;
+    for (i, (x, y)) in a.iter().zip(b.iter()).enumerate() {
+        if x != y {
+            diffs += 1;
+            if start.is_none() { start = Some(i); }
+        } else if let Some(s) = start.take() {
+            ranges.push((s, i - 1));
+        }
+    }
+    if let Some(s) = start { ranges.push((s, a.len().saturating_sub(1))); }
+    let pct = if a.is_empty() { 0.0 } else { diffs as f64 * 100.0 / a.len() as f64 };
+    let mut out = format!(
+        "# Tune change report\n\n- Length: {}\n- Changed bytes: {} ({:.4}%)\n- Ranges: {}\n- Named from {} loaded table(s)\n- write_allowed: false\n\n",
+        a.len(), diffs, pct, ranges.len(), spans.len()
+    );
+    if ranges.is_empty() {
+        out.push_str("Images are identical.\n\nThis report does not patch either image.\n");
+        return out;
+    }
+    out.push_str("| start | end | length | old | new | tables |\n|---|---|---:|---|---|---|\n");
+    for (s, e) in ranges.iter().take(80) {
+        let names = spans.iter().filter(|(addr, len, _)| {
+            let end = addr.saturating_add(*len);
+            *addr <= *e && end > *s
+        }).map(|(_, _, n)| n.as_str()).collect::<Vec<_>>().join(", ");
+        let label = if names.is_empty() { "—".to_string() } else { names };
+        out.push_str(&format!(
+            "| 0x{s:06X} | 0x{e:06X} | {} | {} | {} | {label} |\n",
+            e - s + 1,
+            hex_preview(a, *s, *e),
+            hex_preview(b, *s, *e)
+        ));
+    }
+    if ranges.len() > 80 {
+        out.push_str(&format!("\n{} further ranges omitted.\n", ranges.len() - 80));
+    }
+    out.push_str("\nPersonal dumps only. This report does not patch either image.\n");
+    out
+}
+
+#[tauri::command]
+pub fn change_report_cmd(a: Vec<u8>, b: Vec<u8>, tables: Option<Vec<ReportTable>>) -> Result<String, String> {
+    Ok(change_report(&a, &b, tables.unwrap_or_default().as_slice()))
+}
+
 pub fn self_check_ok() -> bool {
     let summary = summarize_samples(&[]);
     let preview = trim_preview(&[]);
@@ -262,5 +374,32 @@ mod tests {
         let text = diff_report(&[0, 1, 2, 3], &[0, 9, 8, 3]);
         assert!(text.contains("0x000001"));
         assert!(text.contains("write_allowed: false"));
+    }
+
+    #[test]
+    fn change_report_names_overlapping_table_and_refuses_write() {
+        let tables = vec![ReportTable {
+            name: "Main Spark".into(),
+            addr: "0x1".into(),
+            rows: 1,
+            cols: 2,
+            data_type: "UBYTE".into(),
+            stride_bytes: 0,
+        }];
+        let text = change_report(&[0, 1, 2, 3], &[0, 9, 8, 3], &tables);
+        assert!(text.contains("Main Spark"), "{text}");
+        assert!(text.contains("01 02"), "{text}");
+        assert!(text.contains("09 08"), "{text}");
+        assert!(text.contains("write_allowed: false"), "{text}");
+        assert!(!text.to_lowercase().contains("write enabled"));
+    }
+
+    #[test]
+    fn change_report_identical_and_length_mismatch() {
+        let same = change_report(&[1, 2], &[1, 2], &[]);
+        assert!(same.contains("identical"), "{same}");
+        let bad = change_report(&[1], &[1, 2], &[]);
+        assert!(bad.contains("differ in length"), "{bad}");
+        assert!(bad.contains("write_allowed: false"), "{bad}");
     }
 }
