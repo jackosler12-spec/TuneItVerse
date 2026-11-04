@@ -2,14 +2,14 @@
 <html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8">
-  <title>TuneItVerse v3.57.0</title>
+  <title>TuneItVerse v3.58.0</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-logo">
       <div class="sidebar-logo-mark">TV</div>
-      <div class="sidebar-logo-text">TuneItVerse <span class="version">v3.57.0</span></div>
+      <div class="sidebar-logo-text">TuneItVerse <span class="version">v3.58.0</span></div>
     </div>
     <nav class="sidebar-nav" id="sidebar-nav">
       <button type="button" class="nav-item active" data-view="dashboard">Dashboard</button>
@@ -164,6 +164,7 @@
             <button id="btn-monitor" class="btn btn-sm" type="button">Bus Monitor (500 ms)</button>
             <button id="btn-elm-session" class="btn btn-sm" type="button">Supported PIDs</button>
             <button id="btn-nissan-scan" class="btn btn-sm" type="button" title="Read-only: ATSH7E0, 10C0, 22xxxx support masks, 1081. ID meanings unknown.">Nissan CAN Scan (read-only)</button>
+            <button id="btn-cancel-scan" class="btn btn-sm" type="button" title="Stop the running scan before the next step. A partial scan is not a success.">Cancel scan</button>
           </div>
           <pre id="connect-log" class="mono-block log-box"></pre>
         </div>
@@ -231,6 +232,7 @@
               <div class="panel-header"><span class="panel-title">Log studio (preview only, never writes)</span></div>
               <div class="toolbar-group">
                 <button id="btn-log-summary" class="btn btn-sm" type="button">Summary</button>
+                <button id="btn-log-explain" class="btn btn-sm" type="button" title="Cite logged rows. Does not emit a calibration value.">Explain log</button>
                 <button id="btn-log-replay" class="btn btn-sm" type="button">Replay</button>
                 <button id="btn-log-replay-stop" class="btn btn-sm" type="button">Stop replay</button>
                 <button id="btn-log-suggest" class="btn btn-sm" type="button">Trim suggestion</button>
@@ -300,6 +302,7 @@
           <span class="toolbar-label">Session</span>
           <button id="btn-export-workspace" class="btn" type="button">Export</button>
           <button id="btn-import-workspace" class="btn" type="button">Import</button>
+          <input id="project-notes" class="input" type="text" placeholder="Project notes" aria-label="Project notes" spellcheck="false">
           <button id="btn-map-from-log" class="btn" type="button">Map from log</button>
         </div>
         <div class="toolbar-sep"></div>
@@ -390,7 +393,8 @@
               <button id="btn-tbl-paste" class="btn" type="button" title="Paste (Ctrl+V)">Paste</button>
               <button id="btn-tbl-undo" class="btn" type="button" title="Undo (Ctrl+Z)">Undo</button>
               <button id="btn-tbl-redo" class="btn" type="button" title="Redo (Ctrl+Y)">Redo</button>
-              <button id="btn-tbl-stft" class="btn" type="button" title="STFT preview from the imported log (never auto-writes)">STFT preview</button>
+              <button id="btn-tbl-stft" class="btn" type="button" title="STFT preview from the imported log. Does not change the table until you accept one cell.">STFT preview</button>
+              <button id="btn-stft-accept" class="btn" type="button" title="Accept the selected cell from the STFT preview. One cell. The ECU is not written.">Accept cell</button>
             </div>
             <div class="toolbar-group">
               <span class="toolbar-label">Hex poke</span>
@@ -408,6 +412,7 @@
         <div class="toolbar-group">
           <span class="toolbar-label">P01</span>
           <button id="btn-p01-backup" class="btn btn-primary" type="button">P01 full backup</button>
+          <button id="btn-cancel-backup" class="btn" type="button" title="Stop the running backup before the next step. A partial read is not saved as success.">Cancel backup</button>
         </div>
         <div class="toolbar-sep"></div>
         <div class="toolbar-group">
@@ -435,6 +440,7 @@
           <label><input type="checkbox" id="risk-experimental-p01"> enable experimental P01 kernel write (bench-unverified)</label>
           <label>Type confirmation: <input type="text" id="p01-confirm-phrase" class="mono" placeholder="WRITE CALIBRATION TO PCM" autocomplete="off" spellcheck="false"></label>
           <button id="btn-run-flash" class="btn btn-danger" type="button" disabled>PROCEED WITH GUIDED FLASH</button>
+          <button id="btn-cancel-flash" class="btn" type="button" title="Stop the running flash before the next step. A partial write is not a success.">Cancel flash</button>
         </div>
         <pre id="flash-log" class="mono-block log-box scroll-pane"></pre>
       </div>
@@ -529,7 +535,7 @@
     <div id="shortcut-help" class="shortcut-help" hidden role="dialog" aria-label="Keyboard shortcuts"></div>
 
     <footer class="status-bar">
-      <div class="status-left" id="status-left">TuneItVerse 3.57.0</div>
+      <div class="status-left" id="status-left">TuneItVerse 3.58.0</div>
       <div class="status-center" id="status-center">No invented live values</div>
       <div class="status-right" id="status-right">Desktop app required</div>
     </footer>

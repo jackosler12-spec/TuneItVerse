@@ -158,7 +158,7 @@
         const a = n ? 0.15 + 0.75 * (n / maxHit) : 0;
         const z = c.z_mean[r][ci];
         const txt = n ? (d.z_channel ? (z == null ? '·' : fmt(z)) : n) : '';
-        return `<td style="background:rgba(0,196,180,${a.toFixed(2)})" title="${n} hits">${txt}</td>`;
+        return `<td data-r="${r}" data-c="${ci}" style="background:rgba(0,196,180,${a.toFixed(2)})" title="${n} hits. Click to select this Maps cell.">${txt}</td>`;
       }).join('') + '</tr>';
     });
     box.innerHTML = html + '</tbody></table>';
@@ -222,7 +222,19 @@
   }
 
   function tick() { if (visible() && $('ld-auto')?.checked) refresh(); }
+  function bindHitClicks() {
+    const box = $('ld-cells');
+    if (!box || box.dataset.bound) return;
+    box.dataset.bound = '1';
+    box.addEventListener('click', (e) => {
+      const td = e.target.closest('td[data-r]');
+      if (!td || !box.contains(td)) return;
+      if (typeof window.selectMapCell === 'function') window.selectMapCell(+td.dataset.r, +td.dataset.c);
+    });
+  }
+
   function init() {
+    bindHitClicks();
     $('btn-ld-refresh')?.addEventListener('click', refresh);
     ['ld-x', 'ld-y', 'ld-z', 'ld-use-table'].forEach((id) => $(id)?.addEventListener('change', refresh));
     document.addEventListener('click', (e) => { if (e.target.closest('.nav-item[data-view="livedash"]')) setTimeout(refresh, 50); });

@@ -70,19 +70,24 @@ fn guided_flash_pipeline(app: tauri::AppHandle, request_json: String) -> Result<
     if let Some(body) = replay_flash_refusal() {
         return Ok(body);
     }
+    crate::transfer_cancel::clear();
     let request: flash::GuidedFlashRequest = serde_json::from_str(&request_json).map_err(|e| format!("Invalid GuidedFlashRequest: {}", e))?;
     with_port(|port| {
         let result = flash::orchestrate_guided_flash(port, request, |p| {
             let _ = app.emit("flash-progress", &p);
         })?;
         Ok(serde_json::to_string(&result).unwrap_or_else(|_| "{}".into()))
-    }).or_else(|e| Ok(json!({"success":false,"steps_completed":[],"logs":[format!("Fail-closed: not connected ({})", e)],"verified_live":false,"error":format!("Not connected: {}", e)}).to_string()))
+    }).or_else(|e| {
+        let error = if e.contains("Cancelled during") { e } else { format!("Not connected: {}", e) };
+        Ok(json!({"success":false,"steps_completed":[],"logs":[error.clone()],"verified_live":false,"error":error}).to_string())
+    })
 }
 /// P01 OS 12225074 full 512KB read-back through Kernel-P01.bin (STN adapter). Saves
 /// <app data>/backups/p01_<os>_<ms>.bin + .json (SHA-256, quality).
 #[tauri::command(async)]
 fn p01_full_backup(app: tauri::AppHandle, dir: Option<String>) -> Result<String, String> {
     use tauri::Manager;
+    crate::transfer_cancel::clear();
     let dir = match dir.filter(|d| !d.trim().is_empty()) {
         Some(d) => std::path::PathBuf::from(d),
         None => app.path().app_data_dir().map_err(|e| e.to_string())?.join("backups"),
@@ -226,8 +231,8 @@ pub fn run() {
             validate_bin_checksums_summary_cmd, validate_checksums_cmd, correct_bin_checksums,
             xdf::parse_xdf_definitions, xdf::parse_xdf_report, xdf::definition_coverage_cmd, xdf::extract_table_from_bin, xdf::patch_table_into_bin, xdf::table_delta_cmd,
             a2l::parse_a2l_definitions, a2l::parse_a2l_summary,
-            table_tools::table_math_cmd, table_tools::apply_stft_preview_cmd,
-            auto_load_tables_for_bin, get_tuning_advice, guided_flash_pipeline, p01_full_backup, audit_log_entries, compare_bin_to_ecu, verify_after_write,
+            table_tools::table_math_cmd, table_tools::apply_stft_preview_cmd, table_tools::stft_proposals_cmd, table_tools::accept_stft_cell_cmd,
+            auto_load_tables_for_bin, get_tuning_advice, guided_flash_pipeline, p01_full_backup, transfer_cancel::cancel_transfer, audit_log_entries, compare_bin_to_ecu, verify_after_write,
             unlock_level1, unlock_level2, bosch_uds_unlock,
             scripting::list_script_helpers, scripting::run_bench_script,
             v29_tools::identify_bin_cmd, v29_tools::compare_bins_cmd, v29_tools::map_from_log_cmd, v29_tools::export_workspace_cmd, v29_tools::import_workspace_cmd, v29_tools::patch_bin_bytes_cmd,
@@ -241,7 +246,7 @@ pub fn run() {
             v312::session_snapshot, v312::list_supported_adapters,
             defpack::import_definition_pack, defpack::list_definition_packs, defpack::operational_self_check,
             bin_inspect::bin_hex_window, bin_inspect::bin_profile, bin_inspect::bin_tune_report,
-            log_studio::log_session_summary, log_studio::log_replay_frame, log_studio::log_trim_suggestion, log_studio::bin_diff_report, log_studio::change_report_cmd, live_dashboard::dashboard_snapshot,
+            log_studio::log_session_summary, log_studio::log_replay_frame, log_studio::log_trim_suggestion, log_studio::explain_log_cmd, log_studio::bin_diff_report, log_studio::change_report_cmd, live_dashboard::dashboard_snapshot,
         ])
         .run(tauri::generate_context!())
         .expect("error while running TuneItVerse");

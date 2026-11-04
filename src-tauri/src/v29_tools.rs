@@ -17,17 +17,101 @@ pub fn map_from_log_cmd(csv: Option<String>) -> Result<String, String> {
     }
     analyze_log().map(|v| v.to_string())
 }
+const WORKSPACE_BIN_CAP: usize = 4_000_000;
+const WORKSPACE_TEXT_CAP: usize = 2_000_000;
+const WORKSPACE_NOTES_CAP: usize = 16_000;
+
+fn capped_bin(label: &str, data: Option<Vec<u8>>) -> Result<Option<Vec<u8>>, String> {
+    match data {
+        Some(d) if d.len() > WORKSPACE_BIN_CAP => Err(format!(
+            "{label} is {} bytes; workspace cap is {WORKSPACE_BIN_CAP}",
+            d.len()
+        )),
+        Some(d) if d.is_empty() => Ok(None),
+        other => Ok(other),
+    }
+}
+
+fn capped_text(label: &str, text: Option<String>, cap: usize) -> Result<Option<String>, String> {
+    match text {
+        Some(t) if t.len() > cap => Err(format!("{label} is {} characters; cap is {cap}", t.len())),
+        Some(t) if t.is_empty() => Ok(None),
+        other => Ok(other),
+    }
+}
+
+fn bytes_field(v: &serde_json::Value, key: &str) -> Result<Option<Vec<u8>>, String> {
+    match v.get(key) {
+        None | Some(serde_json::Value::Null) => Ok(None),
+        Some(serde_json::Value::Array(items)) => {
+            if items.len() > WORKSPACE_BIN_CAP {
+                return Err(format!(
+                    "{key} is {} bytes; workspace cap is {WORKSPACE_BIN_CAP}",
+                    items.len()
+                ));
+            }
+            let mut out = Vec::with_capacity(items.len());
+            for (i, n) in items.iter().enumerate() {
+                let b = n
+                    .as_u64()
+                    .ok_or_else(|| format!("{key}[{i}] is not a byte"))?;
+                if b > 255 {
+                    return Err(format!("{key}[{i}] is {b}, not a byte"));
+                }
+                out.push(b as u8);
+            }
+            if out.is_empty() {
+                Ok(None)
+            } else {
+                Ok(Some(out))
+            }
+        }
+        Some(_) => Err(format!("{key} must be a JSON array of bytes or null")),
+    }
+}
+
+fn text_field(v: &serde_json::Value, key: &str, cap: usize) -> Result<Option<String>, String> {
+    match v.get(key) {
+        None | Some(serde_json::Value::Null) => Ok(None),
+        Some(serde_json::Value::String(s)) if s.len() > cap => {
+            Err(format!("{key} is {} characters; cap is {cap}", s.len()))
+        }
+        Some(serde_json::Value::String(s)) if s.is_empty() => Ok(None),
+        Some(serde_json::Value::String(s)) => Ok(Some(s.clone())),
+        Some(_) => Err(format!("{key} must be a string or null")),
+    }
+}
+
 #[tauri::command]
-pub fn export_workspace_cmd(data: Option<Vec<u8>>) -> Result<String, String> {
-    let ident = data.as_deref().map(identify_bin);
+pub fn export_workspace_cmd(
+    data: Option<Vec<u8>>,
+    stock: Option<Vec<u8>>,
+    xdf_text: Option<String>,
+    log_csv: Option<String>,
+    notes: Option<String>,
+) -> Result<String, String> {
+    let tune = capped_bin("tune", data)?;
+    let stock = capped_bin("stock", stock)?;
+    let xdf_text = capped_text("xdf", xdf_text, WORKSPACE_TEXT_CAP)?;
+    let log_csv = capped_text("log", log_csv, WORKSPACE_TEXT_CAP)?;
+    let notes = capped_text("notes", notes, WORKSPACE_NOTES_CAP)?;
+    let ident = tune.as_deref().map(identify_bin);
     let log = analyze_log().unwrap_or_else(|e| json!({"error": e}));
     Ok(json!({
         "tool":"TuneItVerse",
         "version": crate::APP_VERSION,
         "write_families": ecu_database::write_families(),
         "families": ecu_database::list_supported_ecu_families(),
-        "identify": ident,
-        "map_from_log": log
+        "identify": ident.clone(),
+        "map_from_log": log,
+        "tune": tune,
+        "stock": stock,
+        "xdf_text": xdf_text,
+        "log_csv": log_csv,
+        "notes": notes,
+        "capability": ident,
+        "capability_note": "Capability snapshot from identify. It does not enable write.",
+        "ecu_write": false
     }).to_string())
 }
 
@@ -205,6 +289,11 @@ pub fn resolved_family(data: &[u8]) -> Result<String, String> {
 pub fn import_workspace_cmd(json_text: String) -> Result<String, String> {
     let v: serde_json::Value = serde_json::from_str(&json_text)
         .map_err(|e| format!("invalid workspace JSON: {}", e))?;
+    let tune = bytes_field(&v, "tune")?;
+    let stock = bytes_field(&v, "stock")?;
+    let xdf_text = text_field(&v, "xdf_text", WORKSPACE_TEXT_CAP)?;
+    let log_csv = text_field(&v, "log_csv", WORKSPACE_TEXT_CAP)?;
+    let notes = text_field(&v, "notes", WORKSPACE_NOTES_CAP)?;
     Ok(json!({
         "accepted": true,
         "tool": v.get("tool").and_then(|x| x.as_str()).unwrap_or(""),
@@ -214,7 +303,14 @@ pub fn import_workspace_cmd(json_text: String) -> Result<String, String> {
         "identify": v.get("identify"),
         "map_from_log": v.get("map_from_log"),
         "families": v.get("families"),
-        "note": "Workspace metadata imported. BIN bytes are not restored from JSON — load the dump separately."
+        "tune": tune,
+        "stock": stock,
+        "xdf_text": xdf_text,
+        "log_csv": log_csv,
+        "notes": notes,
+        "capability": v.get("capability"),
+        "ecu_write": false,
+        "note": "Bytes are returned for the editor only. Nothing was written to an ECU."
     }).to_string())
 }
 
@@ -374,11 +470,52 @@ mod tests {
 
     #[test]
     fn workspace_export_uses_crate_version() {
-        let raw = export_workspace_cmd(None).expect("export");
+        let raw = export_workspace_cmd(None, None, None, None, None).expect("export");
         let v: serde_json::Value = serde_json::from_str(&raw).unwrap();
         assert_eq!(v["version"], crate::APP_VERSION);
         assert_eq!(v["tool"], "TuneItVerse");
         assert!(v["write_families"].as_array().unwrap().iter().any(|x| x == "P01_0411"));
+        assert!(v["tune"].is_null());
+        assert_eq!(v["ecu_write"], false);
+    }
+
+    #[test]
+    fn workspace_round_trip_keeps_bytes_and_old_json_still_imports() {
+        let tune = vec![1u8, 2, 3, 4];
+        let stock = vec![9u8, 8, 7];
+        let raw = export_workspace_cmd(
+            Some(tune.clone()),
+            Some(stock.clone()),
+            Some("<XDFFORMAT></XDFFORMAT>".into()),
+            Some("t,rpm\n0,1000\n".into()),
+            Some("bench notes".into()),
+        )
+        .unwrap();
+        let exported: serde_json::Value = serde_json::from_str(&raw).unwrap();
+        assert_eq!(exported["ecu_write"], false);
+        assert_eq!(exported["capability"]["write_allowed"], false);
+        assert!(exported["capability_note"]
+            .as_str()
+            .unwrap()
+            .contains("does not enable write"));
+        let back: serde_json::Value =
+            serde_json::from_str(&import_workspace_cmd(raw).unwrap()).unwrap();
+        assert_eq!(back["accepted"], true);
+        assert_eq!(back["ecu_write"], false);
+        assert_eq!(back["tune"], json!(tune));
+        assert_eq!(back["stock"], json!(stock));
+        assert_eq!(back["xdf_text"], "<XDFFORMAT></XDFFORMAT>");
+        assert_eq!(back["notes"], "bench notes");
+        assert!(back["note"]
+            .as_str()
+            .unwrap()
+            .contains("Nothing was written"));
+        let old = r#"{"tool":"TuneItVerse","version":"3.57.0","identify":{"family":"x"}}"#;
+        let old_back: serde_json::Value =
+            serde_json::from_str(&import_workspace_cmd(old.into()).unwrap()).unwrap();
+        assert_eq!(old_back["accepted"], true);
+        assert!(old_back["tune"].is_null());
+        assert_eq!(old_back["ecu_write"], false);
     }
 
     #[test]

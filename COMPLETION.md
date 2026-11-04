@@ -1,3 +1,15 @@
+# TuneItVerse v3.58.0 — shop workflow
+
+## v3.58.0 changes
+
+- STFT preview lists proposed cells and leaves the working table alone. Accept cell changes the one selected cell in the editor. The ECU is not written. Apply Patch is still the BIN write.
+- A Live Dashboard hit cell selects that cell on the open Maps table. If no table is open, the status says so.
+- Cancel on backup, Nissan scan, and guided flash stops before the next step. The result is not a success. A cancelled backup is not saved. Cancel before erase does not touch calibration. Cancel after erase uses the existing recovery erase and `success: false`.
+- Export / Import is the same workspace JSON, now with stock, tune, definition text, log CSV, notes, and the identify capability snapshot. `ecu_write` on the file is false. Old exports that lack those keys still import.
+- `installer/TuneItVerse.iss` installs the exe for x64 or i686. `scripts/sign-exe.ps1` signs only when `WINDOWS_PFX_BASE64` is set, and exits 2 otherwise. CI artifact names stay `unsigned` unless `SIGN_RELEASES` is true. No certificate is in the repo, so this release is unsigned.
+- Log studio Explain cites logged rows (index, time, channel min/max/mean) and states that it does not emit a calibration value.
+- **Not hardware-tested.** No adapter and no vehicle were used.
+
 # TuneItVerse v3.57.0 — replay fixture bench
 
 ## v3.57.0 changes

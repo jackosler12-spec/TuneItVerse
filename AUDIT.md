@@ -47,11 +47,11 @@ Paid suites (HP Tuners, EFI Live, WinOLS, ECM Titanium, TunerPro) win on license
 
 ### Product gaps that are still true
 
-- No cancel for long async transfers. `COMPLETION.md` v3.53.0 says so. Serial battery voltage is checked before and after a transfer, not continuously mid-write (`V2_ROADMAP.md`).
+- Cancel for backup, Nissan scan, and guided flash shipped in v3.58.0. A cancel stops before the next step and is not a success. Mid-write cancel still runs the existing recovery erase. Serial battery voltage is still checked before and after a transfer, not continuously mid-write (`V2_ROADMAP.md`).
 - XDF: 64-bit float and a non-zero minor stride are skipped. Strided tables and embedded axes are read-only. Non-linear math is refused. No axis editing, patches, flags, or functions.
 - ELM, J2534, and STN paths exist and are not bench-tested. The P01 FullImage backup is tested against a scripted fake PCM only.
 - No driver plugin SDK. BDM/JTAG is out of scope (`PRODUCT.md`). Licensed GM 5-byte keys are intentionally absent.
-- CI does not run a UI test and does not sign the exe. `TuneItVerse.exe` at the repo root is gitignored. `AGENTS.md` still requires a local release copy after each ship.
+- CI does not run a UI test. Signing runs only when the `SIGN_RELEASES` variable is true and `WINDOWS_PFX_BASE64` is set. Without that certificate the artifact name stays `unsigned`. `TuneItVerse.exe` at the repo root is gitignored. `AGENTS.md` still requires a local release copy after each ship.
 - `reference/` contains flash images, WinOLS bins, `gmkeylib.dll`, kernels, and MDB files. That is a license and repo-size risk. This audit does not add, publish, or delete those files.
 
 ## Missing features that would matter in a shop
@@ -65,14 +65,14 @@ Ship next, in order:
 3. A change report of working BIN versus reference (ranges, table name when a definition is loaded, old and new). Compare already lists ranges. A shop can hand this page to a customer. Export uses the existing save-text dialog.
 4. Replay bench. Shipped in v3.57.0. Connect loads a checked-in ELM fixture through `replay_port`. Status says replay, not a vehicle. Flash, unlock, and clear-DTC stay refused.
 
-Later, not in the passes that follow this audit:
+Shipped in v3.58.0:
 
-- Per-cell accept of the existing STFT/LTFT preview. The preview never writes until the user applies a cell.
+- Per-cell accept of the existing STFT/LTFT preview. The preview does not change the working table until the user accepts one cell. Accept does not write the ECU.
 - Click a Live Dashboard hit cell and select that Maps cell.
-- Cancel for backup, scan, and guided flash.
-- One project file on top of the existing workspace import/export (stock, tune, XDF, logs, notes, capability snapshot). Do not invent a second format.
-- Code-signed x64 and i686 installers. The i686 build is what loads 32-bit J2534 DLLs. Signing is what makes that build trustworthy.
-- A read-only log explainer, if one is added later, that cites log rows and does not emit calibration values.
+- Cancel for backup, scan, and guided flash. A cancel is not reported as success. A partial backup is not saved.
+- The existing workspace JSON now carries stock, tune, XDF text, log CSV, notes, and the identify capability snapshot. Old files still import. Bytes come back to the editor only.
+- Installer script for x64 and i686, plus signtool wiring. Artifacts stay unsigned unless `SIGN_RELEASES` and `WINDOWS_PFX_BASE64` are configured. No certificate is in the repo.
+- A read-only log explainer that cites logged rows and does not emit a calibration value.
 
 ## What this pass did not do
 

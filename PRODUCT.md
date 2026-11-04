@@ -1,6 +1,6 @@
 # TuneItVerse Product Direction
 
-**Updated:** 2026-11-04 (v3.57.0: replay fixture bench. Still not bench-tested on a vehicle.)  
+**Updated:** 2026-11-04 (v3.58.0: per-cell STFT accept, dashboard-to-map select, transfer cancel, workspace project fields, row-citing log explainer, unsigned installers unless a certificate is configured. Still not bench-tested on a vehicle.)  
 **Status:** Software-first. VerseLink Apex PCB work is parked.
 
 ## Decision
@@ -11,8 +11,10 @@ VerseLink Apex remains a future hardware option only if a third party builds it 
 
 ## What ships today
 
-TuneItVerse v3.57.0 on Windows:
+TuneItVerse v3.58.0 on Windows:
 
+- Per-cell STFT accept, dashboard hit selects the open map cell, cancel for backup / scan / flash, one workspace JSON project file, and a log explainer that cites rows
+- x64 and i686 installer script. The exe and installer are unsigned unless `SIGN_RELEASES` and a certificate are configured. No certificate ships in the repo
 - Replay fixture on Connect: a checked-in ELM trace, status says replay, write and clear stay refused
 - Identify / checksum / patch personal BIN dumps
 - Guided flash with fail-closed voltage gate, honest backup quality, live verify

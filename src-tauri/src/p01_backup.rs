@@ -160,6 +160,7 @@ pub fn read_full_image(link: &mut dyn VpwLink, mut on_progress: impl FnMut(Backu
     expect(link.transact(&build_kernel_upload_request(), true)?, &[0x6C, 0xF0, 0x10, 0x74, 0x00, 0x44], "kernel upload request")?;
     let res = (|| -> Result<Vec<u8>, String> {
         for (i, (sub, addr, off, len)) in kernel_plan().into_iter().enumerate() {
+            crate::transfer_cancel::stop("backup")?;
             present(link)?;
             let f = build_kernel_block(sub, addr, &KERNEL_P01[off..off + len]);
             expect(link.transact(&f, true)?, &[0x6D, 0xF0, 0x10, 0x76, 0x00, 0x73], &format!("kernel block {} @0x{:06X}", i, addr))?;
@@ -175,6 +176,7 @@ pub fn read_full_image(link: &mut dyn VpwLink, mut on_progress: impl FnMut(Backu
         if id != FLASH_ID_28F400B { return Err(format!("flash chip 0x{:08X} is not the logged Intel 28F400B. Refusing.", id)); }
         let mut img = Vec::with_capacity(IMAGE_SIZE);
         for addr in (0..IMAGE_SIZE).step_by(READ_BLOCK) {
+            crate::transfer_cancel::stop("backup")?;
             let mut last = String::new();
             let mut got = None;
             for _ in 0..READ_RETRIES {

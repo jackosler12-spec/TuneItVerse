@@ -38,15 +38,24 @@ jobs:
       - name: cargo test (lib unit tests)
         run: cargo test --locked --lib --target ${{ matrix.target }} -- --nocapture
 
-      # Unsigned, untested-on-hardware build artifact. The 32-bit (i686) exe
-      # exists so 32-bit-only J2534 vendor DLLs can be loaded into the process.
+      # Unsigned unless repository variable SIGN_RELEASES is true and the
+      # WINDOWS_PFX_BASE64 secret is set. A missing secret fails the job so a
+      # signed artifact name is never a lie. The i686 exe loads 32-bit J2534 DLLs.
       - name: cargo build --release (exe artifact)
         run: cargo build --locked --release --target ${{ matrix.target }}
+
+      - name: Sign release exe when a certificate is configured
+        if: vars.SIGN_RELEASES == 'true'
+        shell: pwsh
+        env:
+          WINDOWS_PFX_BASE64: ${{ secrets.WINDOWS_PFX_BASE64 }}
+          WINDOWS_PFX_PASSWORD: ${{ secrets.WINDOWS_PFX_PASSWORD }}
+        run: "& ../scripts/sign-exe.ps1 -Path \"target/${{ matrix.target }}/release/TuneItVerse.exe\""
 
       - name: Upload exe artifact
         uses: actions/upload-artifact@v4
         with:
-          name: TuneItVerse-${{ matrix.target }}-unsigned
+          name: TuneItVerse-${{ matrix.target }}-${{ vars.SIGN_RELEASES == 'true' && 'signed' || 'unsigned' }}
           path: src-tauri/target/${{ matrix.target }}/release/*.exe
           if-no-files-found: error
           retention-days: 14
@@ -70,3 +79,25 @@ jobs:
 
       - name: tauri CLI present
         run: npx tauri --version
+
+  sign-check:
+    name: Sign script stays unsigned without a certificate
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check-only reports unsigned
+        shell: pwsh
+        run: |
+          $out = & ./scripts/sign-exe.ps1 -CheckOnly
+          if ($LASTEXITCODE -ne 0) { throw "check-only exit $LASTEXITCODE" }
+          if ($out -notmatch 'unsigned') { throw "expected unsigned, got: $out" }
+
+      - name: Missing certificate is exit 2
+        shell: pwsh
+        run: |
+          Remove-Item Env:WINDOWS_PFX_BASE64 -ErrorAction SilentlyContinue
+          & ./scripts/sign-exe.ps1 -Path "$env:TEMP\tuneitverse-missing.exe"
+          $code = $LASTEXITCODE
+          $global:LASTEXITCODE = 0
+          if ($code -ne 2) { throw "expected exit 2, got $code" }

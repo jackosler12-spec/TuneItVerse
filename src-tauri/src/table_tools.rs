@@ -27,6 +27,16 @@ pub struct TableMathResult {
     pub message: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StftProposal {
+    pub row: usize,
+    pub col: usize,
+    pub old: f64,
+    pub proposed: f64,
+    pub hits: u32,
+    pub stft: f64,
+}
+
 fn dims(values: &[Vec<f64>]) -> Result<(usize, usize), String> {
     if values.is_empty() || values[0].is_empty() {
         return Err("empty table".into());
@@ -120,7 +130,46 @@ pub fn apply_stft_preview(req: &StftPreviewRequest) -> Result<TableMathResult, S
     Ok(TableMathResult {
         values: out,
         cells_changed: n,
-        message: format!("STFT preview gain={} min_hits={} — not written until you patch the BIN", gain, min_hits),
+        message: format!("STFT preview gain={} min_hits={} — not written until you accept a cell", gain, min_hits),
+    })
+}
+
+/// Cells the preview would change. Does not modify the table.
+pub fn stft_proposals(req: &StftPreviewRequest) -> Result<Vec<StftProposal>, String> {
+    let preview = apply_stft_preview(req)?;
+    let mut out = Vec::new();
+    for (r, row) in preview.values.iter().enumerate() {
+        for (c, &next) in row.iter().enumerate() {
+            if (next - req.values[r][c]).abs() > 1e-9 {
+                out.push(StftProposal {
+                    row: r,
+                    col: c,
+                    old: req.values[r][c],
+                    proposed: next,
+                    hits: req.occupancy[r][c],
+                    stft: req.stft_avg[r][c].unwrap_or(0.0),
+                });
+            }
+        }
+    }
+    Ok(out)
+}
+
+/// Copy `values` and replace one cell with that cell's proposal. Other cells stay.
+pub fn accept_proposed_cell(req: &StftPreviewRequest, row: usize, col: usize) -> Result<TableMathResult, String> {
+    let found = stft_proposals(req)?
+        .into_iter()
+        .find(|p| p.row == row && p.col == col)
+        .ok_or_else(|| "No STFT proposal for that cell. Nothing was changed.".to_string())?;
+    let mut out = req.values.clone();
+    out[row][col] = found.proposed;
+    Ok(TableMathResult {
+        values: out,
+        cells_changed: 1,
+        message: format!(
+            "Accepted r{row} c{col} ({:.3} -> {:.3}) in the working table. The ECU was not written.",
+            found.old, found.proposed
+        ),
     })
 }
 
@@ -218,6 +267,23 @@ pub fn apply_stft_preview_cmd(req: StftPreviewRequest) -> Result<TableMathResult
     apply_stft_preview(&req)
 }
 
+#[tauri::command]
+pub fn stft_proposals_cmd(req: StftPreviewRequest) -> Result<String, String> {
+    let cells = stft_proposals(&req)?;
+    let n = cells.len();
+    Ok(serde_json::json!({
+        "cells": cells,
+        "count": n,
+        "write_allowed": false,
+        "message": format!("{n} cells proposed. Accept one cell to change the working table. The ECU is not written.")
+    }).to_string())
+}
+
+#[tauri::command]
+pub fn accept_stft_cell_cmd(req: StftPreviewRequest, row: usize, col: usize) -> Result<TableMathResult, String> {
+    accept_proposed_cell(&req, row, col)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -239,6 +305,14 @@ mod tests {
         assert!((p.values[0][0] - 105.0).abs() < 1e-6);
         assert!((p.values[1][1] - 90.0).abs() < 1e-6);
         assert!((p.values[0][1] - 100.0).abs() < 1e-9);
+        let proposals = stft_proposals(&req).unwrap();
+        assert_eq!(proposals.len(), 2);
+        let one = accept_proposed_cell(&req, 0, 0).unwrap();
+        assert_eq!(one.cells_changed, 1);
+        assert!((one.values[0][0] - 105.0).abs() < 1e-6);
+        assert!((one.values[1][1] - 100.0).abs() < 1e-9, "accepting one cell leaves the other proposal untouched");
+        assert!(one.message.contains("ECU was not written"));
+        assert!(accept_proposed_cell(&req, 0, 1).unwrap_err().contains("Nothing was changed"));
         let h = interpolate_h(&vec![vec![0.0, 50.0, 100.0]]).unwrap();
         assert!((h.values[0][1] - 50.0).abs() < 1e-9);
         let c = clamp_range(&vec![vec![-5.0, 3.0, 40.0]], 0.0, 10.0).unwrap();

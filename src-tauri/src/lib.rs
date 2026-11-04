@@ -1,4 +1,4 @@
-// TuneItVerse lib.rs — Tauri entry + command surface (v3.57.0)
+// TuneItVerse lib.rs — Tauri entry + command surface (v3.58.0)
 #![allow(unused_imports, dead_code, non_snake_case)]
 
 pub const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -30,6 +30,7 @@ mod gm_keys;
 mod gm_osid;
 mod p01_gm_compare;
 mod table_tools;
+mod transfer_cancel;
 mod tableseek;
 mod uds;
 mod vpw;

@@ -1774,6 +1774,8 @@ html, body { overflow: hidden; }
 .cap-strip { display: inline-flex; gap: 8px; align-items: center; margin-left: 8px; }
 .cap-strip-item { font-size: var(--text-xs); color: var(--text-muted); }
 .map-table td.cell-refdiff { outline: 2px dashed #7fb2ff; outline-offset: -3px; }
+.map-table td.stft-proposed { outline: 2px solid #f5a623; outline-offset: -2px; }
+#ld-cells td[data-r] { cursor: pointer; }
 .legend-edited { box-shadow: inset 0 -2px 0 var(--warning, #ffb648); padding: 0 3px; }
 .legend-refdiff { outline: 1px dashed #7fb2ff; padding: 0 3px; }
 .recent-select { max-width: 220px; }

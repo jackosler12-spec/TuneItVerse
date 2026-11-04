@@ -181,6 +181,8 @@ pub fn write_calibration(
     if a.quality != BackupQuality::FullImage {
         return Err(format!("tuned image is not FullImage-quality: {}", a.reasons.join("; ")));
     }
+    // Before erase: a cancel leaves the calibration untouched.
+    crate::transfer_cancel::stop("guided flash")?;
     let file_crc = pcmhammer_crc32(image, CAL_ADDR as usize, CAL_LEN as usize);
     logs.push(format!("File CRC cal 0x{:06X}+0x{:X} = {:08X}", CAL_ADDR, CAL_LEN, file_crc));
 
@@ -198,6 +200,12 @@ pub fn write_calibration(
     let mut written = 0u32;
     let mut mid_fail: Option<String> = None;
     for off in (0..CAL_LEN as usize).step_by(WRITE_BLOCK) {
+        // After erase, stop through the existing recovery path. An early Err here
+        // would skip the recovery erase and leave a half-written calibration.
+        if crate::transfer_cancel::requested() {
+            mid_fail = Some(crate::transfer_cancel::cancel_message("guided flash"));
+            break;
+        }
         let n = (CAL_LEN as usize - off).min(WRITE_BLOCK);
         let addr = CAL_ADDR + off as u32;
         let chunk = &image[addr as usize..addr as usize + n];
@@ -397,5 +405,47 @@ mod tests {
         }
         let mut pcm = BadChip(FakeWritePcm::new(img.clone()));
         assert!(write_full(&mut pcm, &img, |_| {}, &mut vec![]).unwrap_err().contains("28F400B"));
+    }
+
+    #[test]
+    fn cancel_before_erase_does_not_touch_cal() {
+        let _hold = crate::transfer_cancel::hold_for_test();
+        crate::transfer_cancel::clear();
+        crate::transfer_cancel::request();
+        let img = synth();
+        let mut pcm = FakeWritePcm::new(img.clone());
+        let err = write_calibration(&mut pcm, &img, |_| {}, &mut vec![]).unwrap_err();
+        assert!(err.contains("not a success"), "{err}");
+        assert!(!pcm.erased, "cancel before erase must not erase calibration");
+        assert_eq!(pcm.writes, 0);
+        crate::transfer_cancel::clear();
+    }
+
+    #[test]
+    fn cancel_mid_write_uses_recovery_and_is_not_success() {
+        let _hold = crate::transfer_cancel::hold_for_test();
+        crate::transfer_cancel::clear();
+        let mut img = synth();
+        img[0x9000] ^= 0x11;
+        img = crate::checksum::correct_checksums(&img).unwrap().data;
+        struct CancelOnWrite(FakeWritePcm);
+        impl VpwLink for CancelOnWrite {
+            fn transact(&mut self, f: &[u8], e: bool) -> Result<Option<Vec<u8>>, String> {
+                let reply = self.0.transact(f, e);
+                if f.get(3) == Some(&0x36) && self.0.writes == 1 {
+                    crate::transfer_cancel::request();
+                }
+                reply
+            }
+        }
+        let mut pcm = CancelOnWrite(FakeWritePcm::new(synth()));
+        let r = write_full(&mut pcm, &img, |_| {}, &mut vec![]).unwrap();
+        assert!(!r.success, "{:?}", r);
+        assert!(r.recovery_needed);
+        assert!(r.notes.contains("not a success"), "{}", r.notes);
+        assert!(pcm.0.erased, "recovery erase must still run");
+        assert_eq!(pcm.0.writes, 1, "cancel stops before the next block");
+        assert!(pcm.0.halt);
+        crate::transfer_cancel::clear();
     }
 }

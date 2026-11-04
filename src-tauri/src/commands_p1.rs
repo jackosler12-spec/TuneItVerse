@@ -314,6 +314,7 @@ fn elm_session_info() -> Result<String, String> {
 /// optional raw reads, 1081). ID meanings are unknown; raw bytes only.
 #[tauri::command(async)]
 fn nissan_can_scan(read_values: Option<bool>) -> Result<String, String> {
+    crate::transfer_cancel::clear();
     with_port(|port| {
         let scan = crate::consult::nissan_can_scan(port, read_values.unwrap_or(false))?;
         Ok(serde_json::to_string(&scan).unwrap_or_else(|_| "{}".into()))
