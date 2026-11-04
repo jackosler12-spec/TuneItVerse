@@ -9,8 +9,12 @@ on:
 
 jobs:
   rust:
-    name: Cargo check & test
+    name: Cargo check & test (${{ matrix.target }})
     runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [x86_64-pc-windows-msvc, i686-pc-windows-msvc]
     defaults:
       run:
         working-directory: src-tauri
@@ -19,17 +23,33 @@ jobs:
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
 
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
+          key: ${{ matrix.target }}
 
       - name: cargo check
-        run: cargo check --locked
+        run: cargo check --locked --target ${{ matrix.target }}
 
       - name: cargo test (lib unit tests)
-        run: cargo test --lib -- --nocapture
+        run: cargo test --locked --lib --target ${{ matrix.target }} -- --nocapture
+
+      # Unsigned, untested-on-hardware build artifact. The 32-bit (i686) exe
+      # exists so 32-bit-only J2534 vendor DLLs can be loaded into the process.
+      - name: cargo build --release (exe artifact)
+        run: cargo build --locked --release --target ${{ matrix.target }}
+
+      - name: Upload exe artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: TuneItVerse-${{ matrix.target }}-unsigned
+          path: src-tauri/target/${{ matrix.target }}/release/*.exe
+          if-no-files-found: error
+          retention-days: 14
 
   node:
     name: npm install & scripts
