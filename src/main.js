@@ -892,8 +892,19 @@ async function refreshJ2534Devices() {
   const box = document.getElementById('j2534-list');
   const log = document.getElementById('connect-log');
   try {
-    const list = await invokeCmd('j2534_list_devices');
-    const items = Array.isArray(list) ? list : parseMaybe(list) || [];
+    let items = [];
+    try {
+      const det = parseMaybe(await invokeCmd('j2534_list_devices_detailed')) || {};
+      const devs = Array.isArray(det.devices) ? det.devices : [];
+      items = devs.map((d) => `${d.name || 'J2534 device'} | ${d.vendor || '?'} | ${d.function_library || '?'} | ${(d.protocols || []).join(',') || 'no protocol flags'} | ${d.dll_arch}${d.loadable ? '' : ' — ' + d.note}`);
+      const pick = devs.find((d) => d.loadable);
+      const inp = document.getElementById('j2534-path');
+      if (pick && inp && !inp.value) inp.value = pick.function_library;
+      if (!devs.length) items = await invokeCmd('j2534_list_devices');
+    } catch (_) {
+      const list = await invokeCmd('j2534_list_devices');
+      items = Array.isArray(list) ? list : parseMaybe(list) || [];
+    }
     if (box) box.textContent = items.length ? items.join('\n') : 'No J2534 FunctionLibrary in the registry.';
     if (log) log.textContent = (log.textContent || '') + 'J2534 devices:\n' + (items.join ? items.join('\n') : String(items)) + '\n';
   } catch (e) {
@@ -2325,7 +2336,7 @@ function setupAll() {
   pollHealth();
   if (healthTimer) clearInterval(healthTimer);
   healthTimer = setInterval(pollHealth, 2500);
-  console.log('TuneItVerse UI v3.52.0');
+  console.log('TuneItVerse UI v3.53.0');
 }
 
 setupNav();

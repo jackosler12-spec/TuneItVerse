@@ -1,5 +1,13 @@
 # TuneItVerse v3.51.0 — Live Dashboard (gauges, charts, log-vs-map-cell scatter)
 
+## v3.53.0 changes (2026-11-04)
+
+- **J2534 registry discovery:** `j2534_list.rs` now parses `HKLM\SOFTWARE\PassThruSupport.04.04` (native + WOW6432Node) into structured entries: name, vendor, FunctionLibrary, non-zero protocol flags (CAN, ISO15765, J1850VPW, …). The DLL's PE header is read to report x86/x64/arm64 and whether this build can load it (a 32-bit driver cannot load into the 64-bit app; this is reported, not hidden). New command `j2534_list_devices_detailed`; the Connect page fills the DLL path from the first loadable entry.
+- `j2534_connect` with no path now tries loadable registry DLLs first, then the old hardcoded names.
+- Uses stock `reg.exe` (no new crate), Windows-only via `cfg`; Linux/macOS return an empty list with a note.
+- **Non-blocking I/O:** 52 adapter/ECU commands (serial, STN, J2534, DTC, unlock, logging capture, P01 backup, guided pipeline, verify) are now `#[tauri::command(async)]`, so they run off the main thread and long transfers no longer freeze the window. The adapter mutexes still serialise access; no protocol logic changed.
+- **Not verified:** registry parsing is tested on a synthetic `reg query` sample only; no real Windows machine or J2534 device was used. No cancel button for long transfers yet; no progress events beyond those already emitted. No new write paths.
+
 ## v3.51.0 changes
 
 - New **Live Dashboard** view (sidebar, after Data Logging). Read-only; it never writes to a BIN or an ECU.
@@ -161,7 +169,7 @@ Never flash without a verified backup and stable power. Personal dumps only.
 1. Measured P59/P10/P12 checksum details and kernels. These stay identify-only.
 2. EDC17 / MED17 / ME7 / SID803 / Honda / Simos / T8 / Transtron seed tables from **your** dumps. Put pairs in `seed_tables.json`.
 3. PCM Hammer comparison on your 512 KB P01 OS (`12225074`).
-4. A vendor J2534 DLL on Windows so mid-write Vbatt and the registry walk are live.
+4. A vendor J2534 DLL on Windows so mid-write Vbatt and the registry walk (v3.53 structured discovery + PE arch check) are live.
 5. Bench-test the experimental P01 kernel cal write on your STN + PCM (protocol from public PcmHammer host source; still hardware-unverified). FullImage backup already exists.
 6. Licensed GM 5-byte keys. We do not ship that library.
 7. Isuzu FRR Transtron dump + protocol notes before any 4HK1 write work.

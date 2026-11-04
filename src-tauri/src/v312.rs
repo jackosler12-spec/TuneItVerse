@@ -14,7 +14,7 @@ pub fn app_info() -> Result<String, String> {
     }).to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn read_battery_voltage_cmd() -> Result<String, String> {
     if crate::j2534::is_device_open() {
         match crate::j2534::j2534_read_vbatt() {
@@ -55,7 +55,7 @@ pub fn correct_bin_checksums_report(data: Vec<u8>) -> Result<String, String> {
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn session_snapshot() -> Result<String, String> {
     let health = if crate::j2534::is_device_open() {
         "Connected (j2534)".to_string()
