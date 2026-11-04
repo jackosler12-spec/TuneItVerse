@@ -294,6 +294,68 @@ pub fn self_check_ok() -> bool {
         && report.contains("write_allowed: false")
 }
 
+/// Cite logged rows. Does not emit a calibration value or a map edit.
+pub fn explain_log(samples: &[LogSample]) -> String {
+    let mut channels: HashMap<String, (f64, f64, f64, u32)> = HashMap::new();
+    for sample in samples {
+        for (name, value) in &sample.values {
+            let entry = channels.entry(name.clone()).or_insert((f64::MAX, f64::MIN, 0.0, 0));
+            entry.0 = entry.0.min(*value);
+            entry.1 = entry.1.max(*value);
+            entry.2 += *value;
+            entry.3 += 1;
+        }
+    }
+    let mut out = String::from(
+        "# Log explainer\n\nThis report cites logged rows and does not emit a calibration value.\nwrite_allowed: false\n\n",
+    );
+    if samples.iter().any(|sample| sample.demo) {
+        out.push_str("One or more rows are demo samples, not a vehicle log.\n\n");
+    }
+    out.push_str(&format!("Rows cited: {}\n\n", samples.len()));
+    let shown = samples.len().min(8);
+    for (index, sample) in samples.iter().take(shown).enumerate() {
+        let mut parts: Vec<String> = sample
+            .values
+            .iter()
+            .map(|(name, value)| format!("{name}={value}"))
+            .collect();
+        parts.sort();
+        out.push_str(&format!(
+            "- Row {index} at {} ms: {}\n",
+            sample.timestamp_ms,
+            parts.join(", ")
+        ));
+    }
+    if samples.len() > shown {
+        out.push_str(&format!(
+            "- {} further rows omitted from the row list.\n",
+            samples.len() - shown
+        ));
+    }
+    out.push('\n');
+    let mut names: Vec<&String> = channels.keys().collect();
+    names.sort();
+    for name in names {
+        let (min, max, sum, count) = channels[name];
+        let mean = if count == 0 { 0.0 } else { sum / count as f64 };
+        out.push_str(&format!(
+            "Channel {name}: logged min {min}, max {max}, mean {mean:.3} over {count} rows.\n"
+        ));
+    }
+    out.push_str("\nNo calibration value is emitted.\n");
+    out
+}
+
+#[tauri::command]
+pub fn explain_log_cmd() -> Result<String, String> {
+    let samples = logging::get_samples(Some(50_000));
+    if samples.is_empty() {
+        return Err("No log samples. Import a CSV or capture a session first.".into());
+    }
+    Ok(explain_log(&samples))
+}
+
 #[tauri::command]
 pub fn log_session_summary() -> Result<String, String> {
     let samples = logging::get_samples(Some(50_000));
@@ -392,6 +454,23 @@ mod tests {
         assert!(text.contains("09 08"), "{text}");
         assert!(text.contains("write_allowed: false"), "{text}");
         assert!(!text.to_lowercase().contains("write enabled"));
+    }
+
+    #[test]
+    fn explain_log_cites_a_row_and_does_not_suggest_a_calibration() {
+        let mut demo = sample(250, 1800.0, 55.0, 4.0);
+        demo.demo = true;
+        let rows = vec![sample(0, 1000.0, 40.0, 5.0), demo];
+        let text = explain_log(&rows);
+        assert!(text.contains("Row 0 at 0 ms"), "{text}");
+        assert!(text.contains("rpm=1000"), "{text}");
+        assert!(text.contains("does not emit a calibration value"), "{text}");
+        assert!(text.contains("write_allowed: false"), "{text}");
+        assert!(text.contains("demo samples"), "{text}");
+        assert!(text.contains("Channel rpm: logged min 1000"), "{text}");
+        let low = text.to_lowercase();
+        assert!(!low.contains("suggested"), "{text}");
+        assert!(!low.contains("set the cell"), "{text}");
     }
 
     #[test]

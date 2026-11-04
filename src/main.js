@@ -520,6 +520,7 @@ let currentEditorTab = 'grid';
 let currentValues = null;
 let lastIdentify = null;
 let lastMapFromLog = null;
+let stftPreviewReq = null;
 let isConnected = false;
 let logPollTimer = null;
 let logRunning = false;
@@ -1493,6 +1494,7 @@ async function coverageNote(tables, skipped) {
 }
 
 async function applyDefinitionText(text, source) {
+  window.__tivDefinitionText = text || '';
   let defs, list, skipped = [];
   try {
     if (/BEGIN CHARACTERISTIC/i.test(text)) defs = await invokeCmd('parse_a2l_definitions', { text });
@@ -1977,11 +1979,20 @@ async function mapFromLog() {
 
 async function exportWorkspace() {
   try {
-    const raw = await invokeCmd('export_workspace_cmd', { data: currentBin ? binBytes(currentBin) : null });
+    let logCsv = null;
+    try { logCsv = await invokeCmd('log_export_csv'); } catch (_) { logCsv = null; }
+    const notes = document.getElementById('project-notes');
+    const raw = await invokeCmd('export_workspace_cmd', {
+      data: currentBin ? binBytes(currentBin) : null,
+      stock: referenceBin ? binBytes(referenceBin) : null,
+      xdf_text: window.__tivDefinitionText || null,
+      log_csv: logCsv,
+      notes: notes ? notes.value : null
+    });
     const text = typeof raw === 'string' ? raw : JSON.stringify(raw, null, 2);
     const res = await saveNativeText(text, 'tuneitverse-workspace.json');
     if (res && res.cancelled) { setTablesStatus('Save cancelled.'); return; }
-    setTablesStatus('Workspace saved' + (res && res.path ? ': ' + res.path : ''));
+    setTablesStatus('Workspace saved' + (res && res.path ? ': ' + res.path : '') + '. The file does not write an ECU.');
   } catch (e) { setTablesStatus('Workspace export failed: ' + e); }
 }
 
@@ -1991,12 +2002,35 @@ async function importWorkspace() {
     const file = await openNativeFile('json');
     if (file.cancelled) { setTablesStatus('Open cancelled.'); return; }
     const res = parseMaybe(await invokeCmd('import_workspace_cmd', { jsonText: file.text || '', json_text: file.text || '' }));
-    setTablesStatus('Workspace import: ' + JSON.stringify(res));
-    if (res && res.identify) applyIdentify(res.identify);
-    if (res && res.map_from_log) {
+    if (!res || !res.accepted) throw new Error('workspace was not accepted');
+    if (res.tune && res.tune.length && !confirmDiscard('Import workspace')) {
+      setTablesStatus('Import cancelled (unsaved edits kept).');
+      return;
+    }
+    if (res.tune && res.tune.length) await ingestBinBytes(res.tune, 'workspace tune');
+    if (res.stock && res.stock.length) {
+      referenceBin = new Uint8Array(res.stock);
+      if (currentTable) await refreshRefValues();
+    }
+    if (res.xdf_text) await applyDefinitionText(res.xdf_text, 'Workspace definition');
+    if (res.log_csv) {
+      try { await invokeCmd('log_import_csv', { csv: res.log_csv }); } catch (e) { setStatus('Log restore: ' + e); }
+    }
+    const notes = document.getElementById('project-notes');
+    if (notes && typeof res.notes === 'string') notes.value = res.notes;
+    if (res.identify) applyIdentify(res.identify);
+    if (res.map_from_log && !res.map_from_log.error) {
       lastMapFromLog = res.map_from_log;
       renderHeatmap(res.map_from_log);
     }
+    const parts = ['Workspace imported.'];
+    if (res.tune && res.tune.length) parts.push('Tune ' + res.tune.length + ' bytes is in the editor.');
+    if (res.stock && res.stock.length) parts.push('Stock ' + res.stock.length + ' bytes is the reference.');
+    if (res.xdf_text) parts.push('Definition restored.');
+    if (res.log_csv) parts.push('Log restored.');
+    if (res.notes) parts.push('Notes restored.');
+    parts.push('Nothing was written to an ECU.');
+    setTablesStatus(parts.join(' '));
   } catch (e) {
     setTablesStatus('Workspace import failed: ' + e);
   }
@@ -2062,20 +2096,100 @@ function runMath(op) {
   if (op === 'interp_v') { interpSelection('v'); return; }
 }
 
+function stftRequest() {
+  return {
+    values: JSON.parse(JSON.stringify(currentValues)),
+    occupancy: lastMapFromLog.occupancy_16x16,
+    stft_avg: lastMapFromLog.stft_avg_16x16,
+    gain: 0.25,
+    min_hits: 3
+  };
+}
+
+function markStftProposals(cells) {
+  document.querySelectorAll('#editor-content td.stft-proposed').forEach((td) => td.classList.remove('stft-proposed'));
+  (cells || []).forEach((p) => {
+    const td = document.querySelector('#editor-content td[data-r="' + p.row + '"][data-c="' + p.col + '"]');
+    if (!td) return;
+    td.classList.add('stft-proposed');
+    td.title = 'Proposal ' + p.old + ' -> ' + p.proposed + '. Not applied. ECU not written.';
+  });
+}
+
 async function applyStft() {
   if (!currentValues) { alert('Select a table first'); return; }
   if (!lastMapFromLog || !lastMapFromLog.occupancy_16x16) { alert('Run Map from Log first so STFT occupancy exists'); return; }
   try {
-    const res = parseMaybe(await invokeCmd('apply_stft_preview_cmd', {
-      req: { values: currentValues, occupancy: lastMapFromLog.occupancy_16x16, stft_avg: lastMapFromLog.stft_avg_16x16, gain: 0.25, min_hits: 3 }
-    }));
-    if (!res || !res.values) throw new Error('no preview');
+    const req = stftRequest();
+    const res = parseMaybe(await invokeCmd('stft_proposals_cmd', { req: req }));
+    stftPreviewReq = req;
+    markStftProposals(res && res.cells);
+    const n = res && typeof res.count === 'number' ? res.count : 0;
+    const lead = res && res.message ? res.message : (n + ' cells proposed.');
+    setTablesStatus(lead + ' Select one cell, then Accept cell. The table was not changed.');
+  } catch (e) { alert('STFT preview failed: ' + e); }
+}
+
+async function acceptStftCell() {
+  if (!stftPreviewReq) { setTablesStatus('Run STFT preview first. Nothing was changed.'); return; }
+  if (!selAnchor) { setTablesStatus('Select one cell to accept. Nothing was changed.'); return; }
+  const row = selAnchor[0], col = selAnchor[1];
+  try {
+    const res = parseMaybe(await invokeCmd('accept_stft_cell_cmd', { req: stftPreviewReq, row: row, col: col }));
+    if (!res || !res.values) throw new Error('no cell accepted');
+    pushUndo();
     currentValues = res.values;
+    stftPreviewReq = Object.assign({}, stftPreviewReq, { values: JSON.parse(JSON.stringify(res.values)) });
     syncGlobals();
     renderCurrentEditor();
-    const st = document.getElementById('tables-status');
-    if (st) st.textContent = res.message + ' (' + res.cells_changed + ' cells). Apply Patch to write BIN.';
-  } catch (e) { alert('STFT preview failed: ' + e); }
+    try {
+      const again = parseMaybe(await invokeCmd('stft_proposals_cmd', { req: stftPreviewReq }));
+      markStftProposals(again && again.cells);
+    } catch (_) {}
+    setTablesStatus((res.message || 'Cell accepted.') + ' Apply Patch to write the BIN. The ECU was not written.');
+  } catch (e) {
+    setTablesStatus(String(e && e.message ? e.message : e));
+  }
+}
+
+function selectMapCell(r, c) {
+  if (!currentTable || !currentValues) {
+    setTablesStatus('Open a Maps table first.');
+    return;
+  }
+  if (!currentValues[r] || c < 0 || c >= currentValues[r].length) {
+    setTablesStatus('Dashboard cell r' + r + ' c' + c + ' is outside the open table.');
+    return;
+  }
+  showView('tables');
+  if (currentEditorTab !== 'grid') {
+    currentEditorTab = 'grid';
+    renderCurrentEditor();
+  }
+  selAnchor = [r, c];
+  markCellRange(r, c, r, c, false);
+  paintSelection();
+  const td = document.querySelector('#editor-content td[data-r="' + r + '"][data-c="' + c + '"]');
+  if (td && td.scrollIntoView) td.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  setTablesStatus('Selected map cell r' + r + ' c' + c + '.');
+}
+window.selectMapCell = selectMapCell;
+
+async function cancelTransfer() {
+  const msg = await invokeCmd('cancel_transfer');
+  setStatus(typeof msg === 'string' ? msg : 'Cancel requested.');
+}
+
+async function explainLog() {
+  const box = document.getElementById('log-replay-readout');
+  try {
+    const text = await invokeCmd('explain_log_cmd');
+    if (box) box.textContent = typeof text === 'string' ? text : JSON.stringify(text, null, 2);
+    setStatus('Log explainer cites logged rows. It does not emit a calibration value.');
+  } catch (e) {
+    if (box) box.textContent = String(e && e.message ? e.message : e);
+    setStatus('Explain log: ' + (e && e.message ? e.message : e));
+  }
 }
 
 function bindGridSelection(el) {
@@ -2369,6 +2483,11 @@ function bindAppClicks() {
     'btn-tbl-clamp': clampSelection,
     'btn-tbl-pct': percentSelection,
     'btn-tbl-stft': applyStft,
+    'btn-stft-accept': acceptStftCell,
+    'btn-cancel-backup': cancelTransfer,
+    'btn-cancel-flash': cancelTransfer,
+    'btn-cancel-scan': cancelTransfer,
+    'btn-log-explain': explainLog,
     'btn-compare-bin': compareBinToEcuUi,
     'btn-verify-write': verifyAfterWriteUi,
     'btn-show-risk': showRiskUi,
@@ -2397,7 +2516,7 @@ function setupAll() {
   pollHealth();
   if (healthTimer) clearInterval(healthTimer);
   healthTimer = setInterval(pollHealth, 2500);
-  console.log('TuneItVerse UI v3.57.0');
+  console.log('TuneItVerse UI v3.58.0');
 }
 
 setupNav();

@@ -374,6 +374,7 @@ pub fn nissan_can_scan_in(
             scan.session_entered = true;
             let mut ids: Vec<u16> = Vec::new();
             for start in NISSAN_SUPPORT_BASES {
+                crate::transfer_cancel::stop("Nissan scan")?;
                 let mut base = start;
                 loop {
                     let req = format!("22{:04X}", base);
@@ -390,6 +391,7 @@ pub fn nissan_can_scan_in(
             }
             scan.supported_ids = ids.iter().map(|i| format!("{:04X}", i)).collect();
             if read_values {
+                crate::transfer_cancel::stop("Nissan scan")?;
                 scan.reads = read_dids_in(port, sess, &ids);
                 scan.identity = identity_probe_in(port, sess);
             }
@@ -525,6 +527,21 @@ mod tests {
         for gm in ["221141", "22125A", "221171"] {
             assert!(!sent.iter().any(|c| c == gm));
         }
+    }
+
+    #[test]
+    fn cancel_during_scan_is_not_a_success_and_still_restores_the_header() {
+        let _hold = crate::transfer_cancel::hold_for_test();
+        crate::transfer_cancel::clear();
+        crate::transfer_cancel::request();
+        let (mut port, log) = ReplayPort::from_fixture(FIXTURE, "## Section A1").boxed();
+        let mut sess = ElmSession::for_protocol("can");
+        let err = nissan_can_scan_in(&mut port, &mut sess, true).unwrap_err();
+        assert!(err.contains("Nissan scan"), "{err}");
+        assert!(err.contains("not a success"), "{err}");
+        let sent = log.get();
+        assert_eq!(sent.last().map(String::as_str), Some("ATSH7DF"), "{sent:?}");
+        crate::transfer_cancel::clear();
     }
 
     const READS: &str = include_str!("../../reference/fixtures/elm_patrol_nissan_22reads.txt");
