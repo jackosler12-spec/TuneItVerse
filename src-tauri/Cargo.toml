@@ -1,1 +1,27 @@
-PLACEHOLDER
+[package]
+name = "TuneItVerse"
+version = "3.52.0"
+description = "ECU Tuning platform for JRTuners. v3.49.0: Maps table CSV export+import completed. Offline tools fully operational. Experimental P01 write off by default. EDC16 report-only. Not bench-tested."
+authors = ["JRTuners"]
+edition = "2021"
+
+[lib]
+name = "tune_it_verse_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"
+tauri-plugin-fs = "2"
+tauri-plugin-dialog = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serialport = "4"
+sha2 = "0.10"
+chrono = { version = "0.4", features = ["serde"] }
+quick-xml = { version = "0.31", features = ["serialize"] }
+libloading = "0.8"
+rfd = "0.15"

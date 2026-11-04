@@ -1,1 +1,22 @@
-PLACEHOLDER
+{
+  "name": "tuneitverse",
+  "private": true,
+  "version": "3.52.0",
+  "description": "TuneItVerse - open ECU tuning platform. Offline BIN/XDF/A2L tools, per-family capability status with sources. Experimental P01 write off by default and not bench-tested. EDC16 checksum report-only. v3.49.0 completes Maps table CSV export + import. Offline tools fully operational.",
+  "type": "module",
+  "scripts": {
+    "tauri": "tauri",
+    "dev": "tauri dev",
+    "build": "tauri build && node scripts/copy-installer.js",
+    "copy:exe": "node scripts/copy-installer.js",
+    "build:innosetup": "tauri build --target x86_64-pc-windows-msvc && iscc installer\\TuneItVerse.iss && node scripts/copy-installer.js",
+    "build:win-exe": "tauri build --target x86_64-pc-windows-msvc && node scripts/copy-installer.js",
+    "bump-version": "node scripts/bump-version.js",
+    "check": "tauri info",
+    "test": "node scripts/check-frontend.mjs",
+    "check:frontend": "node scripts/check-frontend.mjs"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.11.4"
+  }
+}
