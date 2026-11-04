@@ -63,7 +63,7 @@ Ship next, in order:
 1. Fail-closed DTC read, freeze frame, and live verify. A read that did not happen is an error.
 2. Definition coverage on the open BIN: editable, read-only, skipped, and the skip reason already produced by the XDF reader. TunerPro and WinOLS do not show this.
 3. A change report of working BIN versus reference (ranges, table name when a definition is loaded, old and new). Compare already lists ranges. A shop can hand this page to a customer. Export uses the existing save-text dialog.
-4. Replay bench. Load a checked-in ELM fixture through `replay_port` and say "replay, not a car" on the status bar. Flash, unlock, and clear-DTC stay refused. That is the demo and the regression harness.
+4. Replay bench. Shipped in v3.57.0. Connect loads a checked-in ELM fixture through `replay_port`. Status says replay, not a vehicle. Flash, unlock, and clear-DTC stay refused.
 
 Later, not in the passes that follow this audit:
 

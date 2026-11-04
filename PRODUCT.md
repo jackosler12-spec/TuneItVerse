@@ -1,6 +1,6 @@
 # TuneItVerse Product Direction
 
-**Updated:** 2026-11-04 (v3.56.0: definition coverage and change report. Still not bench-tested.)  
+**Updated:** 2026-11-04 (v3.57.0: replay fixture bench. Still not bench-tested on a vehicle.)  
 **Status:** Software-first. VerseLink Apex PCB work is parked.
 
 ## Decision
@@ -11,8 +11,9 @@ VerseLink Apex remains a future hardware option only if a third party builds it 
 
 ## What ships today
 
-TuneItVerse v3.56.0 on Windows:
+TuneItVerse v3.57.0 on Windows:
 
+- Replay fixture on Connect: a checked-in ELM trace, status says replay, write and clear stay refused
 - Identify / checksum / patch personal BIN dumps
 - Guided flash with fail-closed voltage gate, honest backup quality, live verify
 - The only write path is an **experimental** P01_0411 kernel calibration write. It is off by default, behind a typed confirm, and not bench-tested.

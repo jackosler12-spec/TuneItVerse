@@ -1,4 +1,4 @@
-// TuneItVerse lib.rs — Tauri entry + command surface (v3.56.0)
+// TuneItVerse lib.rs — Tauri entry + command surface (v3.57.0)
 #![allow(unused_imports, dead_code, non_snake_case)]
 
 pub const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -71,6 +71,24 @@ where F: FnOnce(&mut Box<dyn SerialPort + Send>) -> Result<R, String>,
         None => Err("Not connected. Call connect_ecu first.".into()),
     }
 }
+
+/// True when the open serial session is a scripted ELM trace, not an adapter.
+pub(crate) fn replay_session() -> bool {
+    STATE.lock().map(|g| g.protocol.eq_ignore_ascii_case("replay")).unwrap_or(false)
+}
+
+/// Fail closed before any write command can use the scripted port.
+pub(crate) fn refuse_replay(action: &str) -> Result<(), String> {
+    if replay_session() {
+        Err(format!("{action} refused: replay fixture is not a vehicle."))
+    } else {
+        Ok(())
+    }
+}
+
+/// Serializes tests that connect or expect a disconnected port.
+#[cfg(test)]
+pub(crate) static TEST_PORT_LOCK: Mutex<()> = Mutex::new(());
 
 include!("commands_p1.rs");
 include!("commands_p2.rs");

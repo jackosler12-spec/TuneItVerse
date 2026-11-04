@@ -1,3 +1,12 @@
+# TuneItVerse v3.57.0 — replay fixture bench
+
+## v3.57.0 changes
+
+- Connect has Replay fixture. It loads a checked-in ELM trace through `replay_port` and sets the session protocol to `replay`. The status line is `Replay fixture (not a vehicle)`.
+- Flash write, unlock, and DTC clear are refused while that session is open. They do not send those commands to the script.
+- The decode test uses the same fixture frames the parser tests already expect: Section A1 CALID `0VS43B`, Section C support PIDs, and ECT 83.0.
+- **Not hardware-tested.** No adapter and no vehicle were used.
+
 # TuneItVerse v3.56.0 — definition coverage and tune change report
 
 ## v3.56.0 changes
