@@ -1,5 +1,12 @@
-# TuneItVerse v3.51.0 — Live Dashboard (gauges, charts, log-vs-map-cell scatter)
+# TuneItVerse v3.55.0 — fail-closed DTC read and live verify
 
+## v3.55.0 changes
+
+- `read_dtcs_cmd` and `read_freeze_frame_cmd` return an error when no adapter is connected or the read fails. They no longer answer with an empty code list or `{}`.
+- `verify_after_write` returns an error when disconnected, when the probe fails, or when the live read-back does not match. The success string is only `matched=true`.
+- `clear_dtcs_cmd` is unchanged: offline clear stays `success: false`.
+- Diagnostics UI treats a missing code list as an error instead of "No DTCs reported."
+- **Not hardware-tested.** The new tests call the commands with no port, and check the match/mismatch formatter. No ECU was read.
 
 ## v3.54.0 — 32-bit (i686) Windows CI build for J2534 drivers
 
