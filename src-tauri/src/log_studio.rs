@@ -76,8 +76,8 @@ fn round1(v: f64) -> f64 {
     (v * 10.0).round() / 10.0
 }
 
-/// STFT/LTFT occupancy into a 16x16 RPM x load preview.
-/// Suggested multiplier is clamped. Caller must not write it back silently.
+/// STFT/LTFT occupancy into a 16x16 RPM x load report.
+/// Cells carry the logged trim percent. This does not emit a calibration factor.
 pub fn trim_preview(samples: &[LogSample]) -> Value {
     let mut hits = vec![vec![0u32; 16]; 16];
     let mut trim_sum = vec![vec![0.0f64; 16]; 16];
@@ -95,7 +95,7 @@ pub fn trim_preview(samples: &[LogSample]) -> Value {
             trim_n[row][col] = trim_n[row][col].saturating_add(1);
         }
     }
-    let mut multiplier = vec![vec![1.0f64; 16]; 16];
+    let mut trim_avg = vec![vec![None; 16]; 16];
     let mut touched = 0u32;
     for row in 0..16 {
         for col in 0..16 {
@@ -103,8 +103,7 @@ pub fn trim_preview(samples: &[LogSample]) -> Value {
                 continue;
             }
             let avg = trim_sum[row][col] / trim_n[row][col] as f64;
-            let factor = (1.0 + avg / 100.0).clamp(0.85, 1.15);
-            multiplier[row][col] = (factor * 1000.0).round() / 1000.0;
+            trim_avg[row][col] = Some((avg * 10.0).round() / 10.0);
             touched += 1;
         }
     }
@@ -114,14 +113,14 @@ pub fn trim_preview(samples: &[LogSample]) -> Value {
         "rpm_step": 500,
         "load_step": 16,
         "hits": hits,
-        "multiplier": multiplier,
+        "trim_avg_percent": trim_avg,
         "cells_with_trim": touched,
         "trim_column_found": used_trim,
         "write_allowed": false,
         "advice": if used_trim {
-            "Preview only. Multiplier is 1 + trim%/100, clamped 0.85–1.15. Apply it yourself in the map editor. This does not patch the BIN."
+            "This report cites logged trim percent. It does not emit a calibration value."
         } else {
-            "No STFT/LTFT column found. Occupancy is still filled from RPM and load/MAP. No multiplier change."
+            "No STFT/LTFT column found. Occupancy is filled from RPM and load. This report does not emit a calibration value."
         }
     })
 }
@@ -284,6 +283,119 @@ pub fn change_report_cmd(a: Vec<u8>, b: Vec<u8>, tables: Option<Vec<ReportTable>
     Ok(change_report(&a, &b, tables.unwrap_or_default().as_slice()))
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ThreeWayClass {
+    TuneOnly,
+    OtherOnly,
+    Both,
+}
+
+fn three_way_label(class: ThreeWayClass) -> &'static str {
+    match class {
+        ThreeWayClass::TuneOnly => "tune only",
+        ThreeWayClass::OtherOnly => "other only",
+        ThreeWayClass::Both => "both differ",
+    }
+}
+
+/// Stock vs working tune vs a third image. Names come only from tables the caller parsed.
+/// This does not invent an address and does not patch any image.
+pub fn three_way_report(stock: &[u8], tune: &[u8], other: &[u8], tables: &[ReportTable]) -> String {
+    if stock.len() != tune.len() || stock.len() != other.len() {
+        return format!(
+            "# Three-way compare\n\nImages differ in length (stock {}, tune {}, other {}). No byte overlay.\n\nwrite_allowed: false\nThis report does not patch any image.\n",
+            stock.len(),
+            tune.len(),
+            other.len()
+        );
+    }
+    let spans: Vec<(usize, usize, String)> = tables.iter().filter_map(table_span).collect();
+    let mut tune_only = 0usize;
+    let mut other_only = 0usize;
+    let mut both = 0usize;
+    let mut ranges: Vec<(usize, usize, ThreeWayClass)> = Vec::new();
+    let mut start: Option<(usize, ThreeWayClass)> = None;
+    for i in 0..stock.len() {
+        let class = match (tune[i] != stock[i], other[i] != stock[i]) {
+            (false, false) => {
+                if let Some((s, c)) = start.take() {
+                    ranges.push((s, i - 1, c));
+                }
+                continue;
+            }
+            (true, false) => {
+                tune_only += 1;
+                ThreeWayClass::TuneOnly
+            }
+            (false, true) => {
+                other_only += 1;
+                ThreeWayClass::OtherOnly
+            }
+            (true, true) => {
+                both += 1;
+                ThreeWayClass::Both
+            }
+        };
+        match start {
+            Some((_, c)) if c == class => {}
+            Some((s, c)) => {
+                ranges.push((s, i - 1, c));
+                start = Some((i, class));
+            }
+            None => start = Some((i, class)),
+        }
+    }
+    if let Some((s, c)) = start {
+        ranges.push((s, stock.len().saturating_sub(1), c));
+    }
+    let mut out = format!(
+        "# Three-way compare\n\n- Length: {}\n- Tune only: {} bytes\n- Other only: {} bytes\n- Both differ from stock: {} bytes\n- Ranges: {}\n- Named from {} loaded table(s)\n- write_allowed: false\n\n",
+        stock.len(),
+        tune_only,
+        other_only,
+        both,
+        ranges.len(),
+        spans.len()
+    );
+    if ranges.is_empty() {
+        out.push_str("All three images match.\n\nThis report does not patch any image.\n");
+        return out;
+    }
+    out.push_str("| start | end | length | class | tables |\n|---|---|---:|---|---|\n");
+    for (s, e, class) in ranges.iter().take(80) {
+        let names = spans
+            .iter()
+            .filter(|(addr, len, _)| {
+                let end = addr.saturating_add(*len);
+                *addr <= *e && end > *s
+            })
+            .map(|(_, _, n)| n.as_str())
+            .collect::<Vec<_>>()
+            .join(", ");
+        let label = if names.is_empty() { "—".to_string() } else { names };
+        out.push_str(&format!(
+            "| 0x{s:06X} | 0x{e:06X} | {} | {} | {label} |\n",
+            e - s + 1,
+            three_way_label(*class)
+        ));
+    }
+    if ranges.len() > 80 {
+        out.push_str(&format!("\n{} further ranges omitted.\n", ranges.len() - 80));
+    }
+    out.push_str("\nThis report does not patch any image.\n");
+    out
+}
+
+#[tauri::command]
+pub fn three_way_report_cmd(
+    stock: Vec<u8>,
+    tune: Vec<u8>,
+    other: Vec<u8>,
+    tables: Option<Vec<ReportTable>>,
+) -> Result<String, String> {
+    Ok(three_way_report(&stock, &tune, &other, tables.unwrap_or_default().as_slice()))
+}
+
 pub fn self_check_ok() -> bool {
     let summary = summarize_samples(&[]);
     let preview = trim_preview(&[]);
@@ -422,13 +534,18 @@ mod tests {
     }
 
     #[test]
-    fn trim_preview_clamps_and_does_not_write() {
+    fn trim_preview_cites_logged_trim_and_does_not_emit_a_factor() {
         let rows = vec![sample(0, 1500.0, 40.0, 50.0)];
         let v = trim_preview(&rows);
         assert_eq!(v["write_allowed"], false);
         assert_eq!(v["cells_with_trim"], 1);
-        let factor = v["multiplier"][3][2].as_f64().unwrap();
-        assert!((factor - 1.15).abs() < 0.001);
+        assert!(v.get("multiplier").is_none(), "{v}");
+        assert_eq!(v["trim_avg_percent"][3][2], 50.0);
+        let advice = v["advice"].as_str().unwrap();
+        assert!(advice.contains("does not emit a calibration value"), "{advice}");
+        let low = advice.to_lowercase();
+        assert!(!low.contains("apply"), "{advice}");
+        assert!(!low.contains("suggested"), "{advice}");
     }
 
     #[test]
@@ -480,5 +597,36 @@ mod tests {
         let bad = change_report(&[1], &[1, 2], &[]);
         assert!(bad.contains("differ in length"), "{bad}");
         assert!(bad.contains("write_allowed: false"), "{bad}");
+    }
+
+    #[test]
+    fn three_way_report_classifies_bytes_and_names_a_table() {
+        let tables = vec![ReportTable {
+            name: "Main Spark".into(),
+            addr: "0x1".into(),
+            rows: 1,
+            cols: 1,
+            data_type: "UBYTE".into(),
+            stride_bytes: 0,
+        }];
+        let text = three_way_report(&[0, 1, 2, 3], &[0, 9, 2, 7], &[0, 1, 8, 4], &tables);
+        assert!(text.contains("tune only"), "{text}");
+        assert!(text.contains("other only"), "{text}");
+        assert!(text.contains("both differ"), "{text}");
+        assert!(text.contains("Main Spark"), "{text}");
+        assert!(text.contains("write_allowed: false"), "{text}");
+        assert!(!text.to_lowercase().contains("suggested"), "{text}");
+        assert!(text.contains("does not patch any image"), "{text}");
+    }
+
+    #[test]
+    fn three_way_report_length_mismatch_does_not_overlay() {
+        let text = three_way_report(&[1], &[1, 2], &[1], &[]);
+        assert!(text.contains("differ in length"), "{text}");
+        assert!(text.contains("stock 1"), "{text}");
+        assert!(text.contains("tune 2"), "{text}");
+        assert!(text.contains("No byte overlay"), "{text}");
+        assert!(text.contains("write_allowed: false"), "{text}");
+        assert!(!text.to_lowercase().contains("suggested"), "{text}");
     }
 }

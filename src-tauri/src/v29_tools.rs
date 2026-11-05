@@ -404,11 +404,11 @@ pub(crate) fn analyze_log() -> Result<serde_json::Value, String> {
         "sample_count": samples.len(),
         "rpm_avg": (rpm_avg*10.0).round()/10.0,
         "map_avg_kpa": (map_avg*10.0).round()/10.0,
-        "suggested_ve_cell": {"row_rpm": ((rpm_avg/500.0).floor() as i32).clamp(0,15), "col_map": ((map_avg/16.0).floor() as i32).clamp(0,15)},
+        "mean_cell": {"row_rpm": ((rpm_avg/500.0).floor() as i32).clamp(0,15), "col_map": ((map_avg/16.0).floor() as i32).clamp(0,15)},
         "hottest_cell": {"row_rpm":hottest.0,"col_map":hottest.1,"hits":hottest.2},
         "occupancy_16x16": grid,
         "stft_avg_16x16": stft_avg,
-        "advice": format!("Hottest cell r{} c{} ({} hits). Mean {:.0} RPM / {:.0} kPa. Hint only — not auto-write.", hottest.0, hottest.1, hottest.2, rpm_avg, map_avg)
+        "advice": format!("Hottest cell r{} c{} ({} hits). Mean {:.0} RPM / {:.0} kPa. This cites the log and does not emit a calibration value.", hottest.0, hottest.1, hottest.2, rpm_avg, map_avg)
     }))
 }
 
