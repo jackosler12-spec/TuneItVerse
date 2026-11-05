@@ -113,6 +113,31 @@
     window.__tivChangeReport = body;
     show('compare-report', body);
   }
+  async function valueSheet() {
+    const stock = window.referenceBin;
+    const tune = window.currentBin;
+    const tables = window.currentTables;
+    if (!stock || !stock.length) {
+      show('compare-report', 'Load a stock BIN first.');
+      return;
+    }
+    if (!tune || !tune.length) {
+      show('compare-report', 'Load a working BIN on Maps first.');
+      return;
+    }
+    if (!Array.isArray(tables) || !tables.length) {
+      show('compare-report', 'Load a definition first.');
+      return;
+    }
+    const text = await cmd('value_sheet_cmd', {
+      stock: Array.from(stock),
+      tuned: Array.from(tune),
+      tables: tables
+    });
+    const body = typeof text === 'string' ? text : JSON.stringify(text, null, 2);
+    window.__tivChangeReport = body;
+    show('compare-report', body);
+  }
   async function loadCompare() {
     const opened = parseMaybe(await cmd('dialog_open_file', { kind: 'bin' }));
     if (!opened || opened.cancelled) return;
@@ -133,12 +158,13 @@
         'btn-compare-run': diff,
         'btn-change-report': changeReport,
         'btn-three-way': threeWay,
+        'btn-value-sheet': valueSheet,
         'btn-change-export': exportReport
       }[btn.id];
       if (!run) return;
       ev.preventDefault();
       Promise.resolve(run()).catch(function (e) {
-        show(btn.id === 'btn-three-way' || btn.id.indexOf('compare') === 0 ? 'compare-report' : 'log-replay-readout', String(e));
+        show(btn.id === 'btn-three-way' || btn.id === 'btn-value-sheet' || btn.id.indexOf('compare') === 0 ? 'compare-report' : 'log-replay-readout', String(e));
       });
     });
     const slider = document.getElementById('log-replay-index');

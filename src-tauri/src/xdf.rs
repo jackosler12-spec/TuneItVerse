@@ -910,10 +910,39 @@ pub struct TableDeltaReport {
     pub note: String,
 }
 
+/// Address must resolve and the cell span must sit inside the image.
+/// A failure here means the zero placeholder from `extract_table` is not data.
+fn table_readable(table: &TableDef, len: usize) -> Result<(), String> {
+    let off = resolve_table_offset(table, len)?;
+    let width = cell_width(&table.data_type);
+    if width == 0 {
+        return Err("unknown cell width".into());
+    }
+    let cells = table.rows.max(1).saturating_mul(table.cols.max(1));
+    let need = off.saturating_add(span(cells, cell_step(table), width));
+    if need > len {
+        return Err("address out of range for this BIN".into());
+    }
+    Ok(())
+}
+
+fn fmt_num(v: f64) -> String {
+    if v.is_finite() && (v - v.round()).abs() < 1e-9 {
+        format!("{}", v.round() as i64)
+    } else if v.is_finite() {
+        format!("{v:.4}")
+    } else {
+        "not-a-number".into()
+    }
+}
+
 /// Compare one map between a stock image and the working image. Does not write.
 pub fn table_delta(stock: &[u8], tuned: &[u8], table: &TableDef) -> Result<TableDeltaReport, String> {
     if stock.len() != tuned.len() {
         return Err(format!("size mismatch: stock {} tuned {}", stock.len(), tuned.len()));
+    }
+    if let Err(e) = table_readable(table, stock.len()) {
+        return Err(format!("not compared: {e}"));
     }
     let a = extract_table(stock, table);
     let b = extract_table(tuned, table);
@@ -954,6 +983,106 @@ pub fn table_delta_cmd(stock: Vec<u8>, tuned: Vec<u8>, table: TableDef) -> Resul
     serde_json::to_string(&report).map_err(|e| e.to_string())
 }
 
+/// Shop sheet of extracted cell changes across the tables the caller already parsed.
+/// An address that does not resolve is named and skipped. No value is invented.
+pub fn value_sheet(stock: &[u8], tuned: &[u8], tables: &[TableDef]) -> String {
+    if stock.len() != tuned.len() {
+        return format!(
+            "# Value sheet\n\nImages differ in length (stock {}, tuned {}). No cell overlay.\n\nwrite_allowed: false\nThis sheet does not patch any image.\n",
+            stock.len(),
+            tuned.len()
+        );
+    }
+    let mut identical: Vec<String> = Vec::new();
+    let mut skipped: Vec<String> = Vec::new();
+    let mut blocks: Vec<String> = Vec::new();
+    let mut changed_total = 0usize;
+    for table in tables {
+        match table_delta(stock, tuned, table) {
+            Err(e) => {
+                let reason = e.strip_prefix("not compared: ").unwrap_or(e.as_str());
+                skipped.push(format!("{}: not compared. {reason}", table.name));
+            }
+            Ok(r) if r.changed == 0 => {
+                identical.push(format!("{}: 0/{} cells differ.", r.name, r.cells));
+            }
+            Ok(r) => {
+                changed_total += 1;
+                if blocks.len() >= 40 {
+                    continue;
+                }
+                let mut block = format!(
+                    "## {}\n\n- Changed: {}/{}\n- max |delta|: {}\n",
+                    r.name,
+                    r.changed,
+                    r.cells,
+                    fmt_num(r.max_abs)
+                );
+                if let Some(note) = table.patch_blocked.as_deref().filter(|s| !s.trim().is_empty()) {
+                    block.push_str(&format!("- read-only: {note}\n"));
+                }
+                block.push_str("\n| row | col | stock | tuned | delta |\n|---|---|---:|---:|---:|\n");
+                let shown = r.samples.len().min(24);
+                for cell in r.samples.iter().take(24) {
+                    block.push_str(&format!(
+                        "| {} | {} | {} | {} | {} |\n",
+                        cell.row,
+                        cell.col,
+                        fmt_num(cell.stock),
+                        fmt_num(cell.tuned),
+                        fmt_num(cell.delta)
+                    ));
+                }
+                if r.changed > shown {
+                    block.push_str(&format!("\n{} further cells omitted.\n", r.changed - shown));
+                }
+                blocks.push(block);
+            }
+        }
+    }
+    let mut out = format!(
+        "# Value sheet\n\n- Length: {}\n- Tables loaded: {}\n- Tables with a change: {}\n- Identical tables: {}\n- Tables not compared: {}\n- write_allowed: false\n\nThis sheet cites extracted cells. It does not emit a recommended value.\n\n",
+        stock.len(),
+        tables.len(),
+        changed_total,
+        identical.len(),
+        skipped.len()
+    );
+    if identical.is_empty() {
+        out.push_str("No identical tables.\n\n");
+    } else {
+        for line in identical.iter().take(80) {
+            out.push_str(line);
+            out.push('\n');
+        }
+        if identical.len() > 80 {
+            out.push_str(&format!("{} further identical tables omitted.\n", identical.len() - 80));
+        }
+        out.push('\n');
+    }
+    if !skipped.is_empty() {
+        for line in &skipped {
+            out.push_str(line);
+            out.push('\n');
+        }
+        out.push('\n');
+    }
+    for block in &blocks {
+        out.push_str(block);
+        out.push('\n');
+    }
+    if changed_total > blocks.len() {
+        out.push_str(&format!("{} further changed tables omitted.\n\n", changed_total - blocks.len()));
+    }
+    out.push_str("This sheet does not patch any image.\n");
+    out
+}
+
+#[tauri::command]
+pub fn value_sheet_cmd(stock: Vec<u8>, tuned: Vec<u8>, tables: Option<Vec<TableDef>>) -> Result<String, String> {
+    Ok(value_sheet(&stock, &tuned, tables.unwrap_or_default().as_slice()))
+}
+
 #[cfg(test)]
 mod delta_tests {
     use super::*;
@@ -979,6 +1108,59 @@ mod delta_tests {
         let r = table_delta(&stock, &tuned, &table).unwrap();
         assert_eq!(r.changed, 1);
         assert!((r.samples[0].delta - 5.0).abs() < 1e-6);
+    }
+
+    fn ubyte(name: &str, addr: &str) -> TableDef {
+        TableDef {
+            id: name.into(),
+            name: name.into(),
+            rows: 1,
+            cols: 1,
+            addr: addr.into(),
+            data_type: "UBYTE".into(),
+            math: "X".into(),
+            msb: true,
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn delta_past_the_image_is_not_compared() {
+        let err = table_delta(&[0; 4], &[0; 4], &ubyte("Missing", "10")).unwrap_err();
+        assert!(err.contains("not compared"), "{err}");
+        assert!(err.contains("beyond"), "{err}");
+    }
+
+    #[test]
+    fn value_sheet_cites_a_change_and_skips_an_unread_table() {
+        let mut spark = ubyte("Spark", "1");
+        spark.patch_blocked = Some("stride layout unverified".into());
+        let text = value_sheet(
+            &[1, 2, 0, 0],
+            &[1, 9, 0, 0],
+            &[ubyte("Keep", "0"), spark, ubyte("Missing", "10")],
+        );
+        assert!(text.contains("Spark"), "{text}");
+        assert!(text.contains("| 0 | 0 | 2 | 9 | 7 |"), "{text}");
+        assert!(text.contains("read-only: stride layout unverified"), "{text}");
+        assert!(text.contains("Keep: 0/1 cells differ."), "{text}");
+        assert!(text.contains("Missing: not compared."), "{text}");
+        assert!(text.contains("write_allowed: false"), "{text}");
+        assert!(text.contains("does not patch any image"), "{text}");
+        assert!(!text.to_lowercase().contains("suggested"), "{text}");
+        assert!(!text.contains("| 0 | 0 | 0 | 0 |"), "{text}");
+    }
+
+    #[test]
+    fn value_sheet_length_mismatch_does_not_overlay() {
+        let text = value_sheet(&[1], &[1, 2], &[ubyte("Spark", "0")]);
+        assert!(text.contains("differ in length"), "{text}");
+        assert!(text.contains("stock 1"), "{text}");
+        assert!(text.contains("tuned 2"), "{text}");
+        assert!(text.contains("No cell overlay"), "{text}");
+        assert!(text.contains("write_allowed: false"), "{text}");
+        assert!(!text.to_lowercase().contains("suggested"), "{text}");
+        assert!(!text.contains("Spark"), "{text}");
     }
 }
 

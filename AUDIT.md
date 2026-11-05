@@ -1,7 +1,7 @@
 # TuneItVerse audit
 
 **Date:** 2026-11-05
-**Tree:** v3.59.0, branched from `main` at `e8f0a30` (v3.58.0)
+**Tree:** v3.60.0, branched from `main` at `c115a92` (v3.59.0)
 **Scope:** source, docs, and CI. No ECU was written. Not hardware-tested.
 
 TuneItVerse is a Windows Tauri app (Rust backend, vanilla HTML/JS) for offline BIN/XDF/A2L work, Mode 01 logging, and a fail-closed flash pipeline. Every ECU family has `hardware_tested: false`. The only write path is an experimental P01_0411 kernel calibration write, off by default, and it is not bench-tested.
@@ -25,6 +25,7 @@ Paid suites (HP Tuners, EFI Live, WinOLS, ECM Titanium, TunerPro) win on license
 - v3.57.0: Replay fixture. Status says replay, not a vehicle. Flash, unlock, and DTC clear stay refused.
 - v3.58.0: Per-cell STFT accept, dashboard cell select, transfer cancel, workspace project file, row-citing log explainer, and installer signing only when a certificate is configured.
 - v3.59.0: Trim report cites logged trim percent and does not emit a multiplier. Map-from-log names the mean RPM/MAP bin `mean_cell` instead of `suggested_ve_cell`. Flash and live-compare link errors are not prefixed with `Not connected:`. Compare can print a three-way stock / tune / other report. `write_allowed` stays false.
+- v3.60.0: Value sheet lists extracted cell changes for loaded tables. Cell delta and the sheet both refuse an address that does not resolve, instead of comparing a zero placeholder. `write_allowed` stays false.
 
 ## What is still true
 
