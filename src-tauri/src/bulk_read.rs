@@ -8,6 +8,21 @@ use serialport::SerialPort;
 use crate::uds::{Alfi, read_memory_by_address};
 use crate::live_verify::{LiveWindow, WindowBackup};
 
+fn crc32_ieee(data: &[u8]) -> u32 {
+    let mut crc: u32 = 0xFFFF_FFFF;
+    for &byte in data {
+        crc ^= byte as u32;
+        for _ in 0..8 {
+            if crc & 1 != 0 {
+                crc = (crc >> 1) ^ 0xEDB8_8320;
+            } else {
+                crc >>= 1;
+            }
+        }
+    }
+    !crc
+}
+
 pub fn collect_uds_windows(
     port: &mut Box<dyn SerialPort + Send>,
     start_addr: u32,
@@ -57,7 +72,7 @@ pub fn attempt_bulk_probe(
                 failed: false,
                 path: format!("bulk-probe:{}", windows.len()),
                 bytes: crc_src.len() as u32,
-                crc32: Some(crate::live_verify::crc32_ieee(&crc_src)), // note: may need public or duplicate
+                crc32: Some(crc32_ieee(&crc_src)),
                 notes: format!("Multi-window probe: {} bytes. Still PartialDidOnly. Not a full dump.", crc_src.len()),
             }
         }
