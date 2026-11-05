@@ -12,14 +12,14 @@ This roadmap is derived from a full code review of the repository (Rust modules,
 - Extensibility so the community (and JRTuners hardware) can grow coverage without forking the core.
 - Keep it DIY / open / free of commercial lock-in.
 
-## Priority 0 — Safety & Correctness Blockers (Must ship before any write claims) — COMPLETE ✅
+## Priority 0 — Safety & Correctness Blockers (Must ship before any write claims) — open on the EDC bulk dump
 These fix the issues that make guided flash dangerous or misleading.
 
 1. **Proper Flash Read / Backup (replace Mode 22 loop)** — DONE ✅
    - [x] Honest quality labelling: `BackupQuality::{FullImage, PartialDidOnly, Failed}`
    - [x] Mode 22 / DID sampling never reported as full image
    - [x] UDS Mode 23 (ReadMemoryByAddress) scaffolding for Bosch families
-   - [x] Full multi-frame ISO-TP bulk dump for EDC16/EDC17/MED17 (windowed, adaptive)
+   - [ ] Full multi-frame ISO-TP bulk dump for EDC16/EDC17/MED17. Not done. Non-P01 live backup is a windowed `PartialDidOnly` probe (`attempt_live_backup` in `live_verify.rs`). `FullImage` is not claimed for those families.
    - [x] Kernel-assisted Mode 3C full cal dump for P01 (+ HS VPW)
    - [x] Backup file header metadata (OS ID, size, CRC, timestamp, tool version) via quality + notes
 

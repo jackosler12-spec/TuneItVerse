@@ -1,3 +1,14 @@
+# TuneItVerse v3.59.0 — honest logs and three-way compare
+
+## v3.59.0 changes
+
+- Trim report keeps hits and the logged trim percent. It no longer emits a multiplier or tells the user to apply one.
+- Map-from-log names the mean RPM/MAP occupancy bin `mean_cell`. The old `suggested_ve_cell` key is gone. No VE number is added.
+- Guided flash and live compare return the original link error. A disconnect stays `Not connected. Call connect_ecu first.` A gate failure is not prefixed with `Not connected:`.
+- Compare has Three-way. It classifies bytes as tune only, other only, or both differ from stock, and names a table only when the loaded definition already covers that range. Export still saves the last report as text. Nothing is patched.
+- `V2_ROADMAP.md` no longer marks a full EDC16/EDC17/MED17 ISO-TP dump as done. That path is still a windowed `PartialDidOnly` probe. This release does not add the dump.
+- **Not hardware-tested.** No adapter and no vehicle were used. Installers stay unsigned unless a certificate is configured.
+
 # TuneItVerse v3.58.0 — shop workflow
 
 ## v3.58.0 changes

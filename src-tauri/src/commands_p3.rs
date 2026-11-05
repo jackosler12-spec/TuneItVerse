@@ -54,6 +54,12 @@ fn compare_p01_gm_seed(seed_hex: String, algo: Option<u32>, scan: Option<bool>) 
         table_id, ecu_family, sample_value
     ))
 }
+/// Keep a link error as the caller produced it.
+/// A disconnect already says "Not connected". A gate or protocol failure must not gain that prefix.
+fn link_error_text(error: String) -> String {
+    if error.contains("Not connected") { error } else { error }
+}
+
 /// JSON body when a flash write is asked during replay. `None` when the session is live.
 fn replay_flash_refusal() -> Option<String> {
     refuse_replay("Flash write").err().map(|e| json!({
@@ -78,7 +84,7 @@ fn guided_flash_pipeline(app: tauri::AppHandle, request_json: String) -> Result<
         })?;
         Ok(serde_json::to_string(&result).unwrap_or_else(|_| "{}".into()))
     }).or_else(|e| {
-        let error = if e.contains("Cancelled during") { e } else { format!("Not connected: {}", e) };
+        let error = link_error_text(e);
         Ok(json!({"success":false,"steps_completed":[],"logs":[error.clone()],"verified_live":false,"error":error}).to_string())
     })
 }
@@ -160,7 +166,7 @@ fn compare_bin_to_ecu(file_bytes: Vec<u8>, family: Option<String>) -> Result<Str
             Ok((crc, matched)) => Ok(json!({"family":fam,"windows":windows.len(),"matched":matched,"crc":format!("0x{:08X}", crc),"logs":logs}).to_string()),
             Err(e) => Ok(json!({"family":fam,"windows":windows.len(),"matched":false,"error":e,"logs":logs}).to_string()),
         }
-    }).or_else(|e| Ok(json!({"success":false,"error":format!("Not connected: {}", e)}).to_string()))
+    }).or_else(|e| Ok(json!({"success":false,"error":link_error_text(e)}).to_string()))
 }
 /// Success text only when the live read-back matched. A mismatch is `Err`.
 fn verify_outcome(crc: u32, matched: bool, fam: &str) -> Result<String, String> {
@@ -246,7 +252,7 @@ pub fn run() {
             v312::session_snapshot, v312::list_supported_adapters,
             defpack::import_definition_pack, defpack::list_definition_packs, defpack::operational_self_check,
             bin_inspect::bin_hex_window, bin_inspect::bin_profile, bin_inspect::bin_tune_report,
-            log_studio::log_session_summary, log_studio::log_replay_frame, log_studio::log_trim_suggestion, log_studio::explain_log_cmd, log_studio::bin_diff_report, log_studio::change_report_cmd, live_dashboard::dashboard_snapshot,
+            log_studio::log_session_summary, log_studio::log_replay_frame, log_studio::log_trim_suggestion, log_studio::explain_log_cmd, log_studio::bin_diff_report, log_studio::change_report_cmd, log_studio::three_way_report_cmd, live_dashboard::dashboard_snapshot,
         ])
         .run(tauri::generate_context!())
         .expect("error while running TuneItVerse");
@@ -270,6 +276,15 @@ mod live_family_tests {
     #[test]
     fn bosch_unlock_requires_family() {
         assert!(bosch_uds_unlock(None, None).unwrap_err().contains("family required"));
+    }
+    #[test]
+    fn link_error_text_is_not_relabeled() {
+        let disc = link_error_text("Not connected. Call connect_ecu first.".into());
+        let gate = link_error_text("Backup is PartialDidOnly (windowed probe, not a full flash dump). Refusing write until a FullImage backup exists.".into());
+        assert!(!disc.starts_with("Not connected:"), "{disc}");
+        assert!(!gate.starts_with("Not connected:"), "{gate}");
+        assert!(disc.contains("Call connect_ecu first."), "{disc}");
+        assert!(gate.contains("PartialDidOnly"), "{gate}");
     }
     #[test]
     fn verify_outcome_is_ok_only_when_matched() {

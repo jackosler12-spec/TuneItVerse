@@ -1,6 +1,6 @@
 # TuneItVerse Product Direction
 
-**Updated:** 2026-11-04 (v3.58.0: per-cell STFT accept, dashboard-to-map select, transfer cancel, workspace project fields, row-citing log explainer, unsigned installers unless a certificate is configured. Still not bench-tested on a vehicle.)  
+**Updated:** 2026-11-05 (v3.59.0: trim report cites logged percent, three-way offline compare, link errors are not relabeled. Still not bench-tested on a vehicle. Installers unsigned unless a certificate is configured.)  
 **Status:** Software-first. VerseLink Apex PCB work is parked.
 
 ## Decision
@@ -11,8 +11,9 @@ VerseLink Apex remains a future hardware option only if a third party builds it 
 
 ## What ships today
 
-TuneItVerse v3.58.0 on Windows:
+TuneItVerse v3.59.0 on Windows:
 
+- Trim report cites logged trim percent and does not emit a calibration value. Three-way compare classifies stock, the working tune, and a third dump. `write_allowed` stays false
 - Per-cell STFT accept, dashboard hit selects the open map cell, cancel for backup / scan / flash, one workspace JSON project file, and a log explainer that cites rows
 - x64 and i686 installer script. The exe and installer are unsigned unless `SIGN_RELEASES` and a certificate are configured. No certificate ships in the repo
 - Replay fixture on Connect: a checked-in ELM trace, status says replay, write and clear stay refused
@@ -22,7 +23,7 @@ TuneItVerse v3.58.0 on Windows:
 - Live data + DTCs via ELM ASCII (CAN/UDS) and raw VPW when selected
 - J2534 when a vendor DLL is present
 - Offline seed/key for GM 2-byte tables and dump-derived `seed_tables.json` pairs
-- Map-from-log occupancy + STFT/LTFT VE cell *preview* (never silent write)
+- Map-from-log occupancy. The mean RPM/MAP bin is `mean_cell`. It does not emit a VE value or a calibration factor
 - Official adapter list in the Connect page
 
 ## Official adapters (now)

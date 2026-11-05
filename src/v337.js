@@ -87,6 +87,32 @@
     if (saved && saved.cancelled) return;
     show('compare-report', text + '\n\nExported. This file does not enable write.');
   }
+  async function threeWay() {
+    const stock = window.referenceBin;
+    const tune = window.currentBin;
+    const other = window.__compareBin;
+    if (!stock || !stock.length) {
+      show('compare-report', 'Load a stock BIN first.');
+      return;
+    }
+    if (!tune || !tune.length) {
+      show('compare-report', 'Load a working BIN on Maps first.');
+      return;
+    }
+    if (!other || !other.length) {
+      show('compare-report', 'Load a compare BIN first.');
+      return;
+    }
+    const text = await cmd('three_way_report_cmd', {
+      stock: Array.from(stock),
+      tune: Array.from(tune),
+      other: Array.from(other),
+      tables: Array.isArray(window.currentTables) ? window.currentTables : []
+    });
+    const body = typeof text === 'string' ? text : JSON.stringify(text, null, 2);
+    window.__tivChangeReport = body;
+    show('compare-report', body);
+  }
   async function loadCompare() {
     const opened = parseMaybe(await cmd('dialog_open_file', { kind: 'bin' }));
     if (!opened || opened.cancelled) return;
@@ -106,12 +132,13 @@
         'btn-compare-load': loadCompare,
         'btn-compare-run': diff,
         'btn-change-report': changeReport,
+        'btn-three-way': threeWay,
         'btn-change-export': exportReport
       }[btn.id];
       if (!run) return;
       ev.preventDefault();
       Promise.resolve(run()).catch(function (e) {
-        show(btn.id.indexOf('compare') === 0 ? 'compare-report' : 'log-replay-readout', String(e));
+        show(btn.id === 'btn-three-way' || btn.id.indexOf('compare') === 0 ? 'compare-report' : 'log-replay-readout', String(e));
       });
     });
     const slider = document.getElementById('log-replay-index');

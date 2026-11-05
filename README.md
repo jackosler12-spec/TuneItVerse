@@ -38,10 +38,11 @@ Scripts page runs the same ideas against the loaded BIN (`identify`, `checksum`,
 
 Live data over ELM327/OBDLink reads the ECU's Mode 01 support masks first and polls only the PIDs it lists (incl. SAE 0x23 rail pressure); replies are parsed per line with the CAN/J1850 header stripped. A read-only Nissan CAN scan (ATSH7E0, 10C0, 22xxxx support masks, 1081) lists supported IDs with unknown meanings. These paths are tested against replayed real OBDLink MX+ frames from a 2007 Patrol ZD30CRD (`reference/fixtures/`), not against a live car from this build.
 
-Data Logging can import a CSV (including Car Scanner's long `SECONDS;PID;VALUE` export; GPS columns are dropped), replay it, and build a clamped STFT/LTFT multiplier preview. Compare lists changed ranges against the working BIN. Neither path writes a calibration.
+Data Logging can import a CSV (including Car Scanner's long `SECONDS;PID;VALUE` export; GPS columns are dropped), replay it, and cite logged STFT/LTFT percent. That report does not emit a calibration value. Compare lists changed ranges, and a three-way report classifies stock, the working tune, and a third dump. None of these paths writes a calibration.
 
-## Current status (v3.58.0)
+## Current status (v3.59.0)
 
+- v3.59.0: Trim report cites logged trim percent and does not emit a multiplier. Map-from-log names the mean RPM/MAP bin `mean_cell`. Flash and live-compare errors stay in their own words instead of a `Not connected:` prefix. Compare prints a three-way stock / tune / other report and does not patch a BIN. Not hardware-tested. Installers stay unsigned unless a certificate is configured.
 - v3.58.0: STFT accept is one cell at a time. Dashboard hit cells select the open map cell. Backup, Nissan scan, and guided flash can be cancelled, and a cancel is not a success. Workspace export/import keeps stock, tune, definition, log, notes, and the capability snapshot in the same JSON file. The log explainer cites rows and does not emit a calibration value. Installers can be signed only when a certificate is configured; this release is unsigned. Not hardware-tested.
 - v3.57.0: Connect can open a checked-in ELM trace as a replay fixture. Status says replay, not a vehicle. Flash write, unlock, and DTC clear stay refused. Not hardware-tested.
 - v3.56.0: Maps shows definition coverage (editable, read-only, skipped). Compare writes a change report with table names and exports it as text. Neither path writes a BIN. Not hardware-tested.

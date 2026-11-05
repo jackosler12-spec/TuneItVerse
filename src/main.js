@@ -528,6 +528,7 @@ let healthTimer = null;
 let sparkHistory = [];
 
 window.currentBin = null;
+window.referenceBin = null;
 window.currentTables = [];
 window.currentTable = null;
 window.currentValues = null;
@@ -535,6 +536,7 @@ window.lastMapFromLog = null;
 
 function syncGlobals() {
   window.currentBin = currentBin;
+  window.referenceBin = referenceBin;
   window.currentTables = currentTables;
   window.currentTable = currentTable;
   window.currentValues = currentValues;
@@ -1337,6 +1339,7 @@ async function loadReferenceBin() {
     const res = await openNativeFile('bin');
     if (res.cancelled) { setTablesStatus('Reference open cancelled.'); return; }
     referenceBin = res.bytes instanceof Uint8Array ? res.bytes : new Uint8Array(res.bytes);
+    syncGlobals();
     const same = currentBin && currentBin.length === referenceBin.length;
     setTablesStatus('Reference loaded (' + referenceBin.length + ' bytes). ' +
       (same ? 'Cells that differ from it are outlined.' : 'Size differs from the working BIN; no cell outline.'));
@@ -2010,6 +2013,7 @@ async function importWorkspace() {
     if (res.tune && res.tune.length) await ingestBinBytes(res.tune, 'workspace tune');
     if (res.stock && res.stock.length) {
       referenceBin = new Uint8Array(res.stock);
+      syncGlobals();
       if (currentTable) await refreshRefValues();
     }
     if (res.xdf_text) await applyDefinitionText(res.xdf_text, 'Workspace definition');
@@ -2516,7 +2520,7 @@ function setupAll() {
   pollHealth();
   if (healthTimer) clearInterval(healthTimer);
   healthTimer = setInterval(pollHealth, 2500);
-  console.log('TuneItVerse UI v3.58.0');
+  console.log('TuneItVerse UI v3.59.0');
 }
 
 setupNav();

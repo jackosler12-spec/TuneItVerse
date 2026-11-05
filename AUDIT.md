@@ -1,12 +1,12 @@
 # TuneItVerse audit
 
-**Date:** 2026-11-04
-**Tree:** `main` at `65ff65b` (v3.54.0)
-**Scope:** source, docs, CI, and every remote branch. No protocol or UI behavior was changed in this pass.
+**Date:** 2026-11-05
+**Tree:** v3.59.0, branched from `main` at `e8f0a30` (v3.58.0)
+**Scope:** source, docs, and CI. No ECU was written. Not hardware-tested.
 
-TuneItVerse is a Windows Tauri app (Rust backend, vanilla HTML/JS) for offline BIN/XDF/A2L work, Mode 01 logging, and a fail-closed flash pipeline. It does not bench-test hardware in this tree. Every ECU family has `hardware_tested: false`. The only write path is an experimental P01_0411 kernel calibration write, off by default.
+TuneItVerse is a Windows Tauri app (Rust backend, vanilla HTML/JS) for offline BIN/XDF/A2L work, Mode 01 logging, and a fail-closed flash pipeline. Every ECU family has `hardware_tested: false`. The only write path is an experimental P01_0411 kernel calibration write, off by default, and it is not bench-tested.
 
-Paid suites (HP Tuners, EFI Live, WinOLS, ECM Titanium, TunerPro) win on licensed coverage and bench-proven flash. This audit does not propose flipping write flags to compete with them. The gap they leave is a single shop workflow plus a public capability matrix.
+Paid suites (HP Tuners, EFI Live, WinOLS, ECM Titanium, TunerPro) win on licensed coverage and bench-proven flash. This tree does not flip write flags to compete with them.
 
 ## What already works
 
@@ -18,66 +18,32 @@ Paid suites (HP Tuners, EFI Live, WinOLS, ECM Titanium, TunerPro) win on license
 - CI (`.github/workflows/ci.yml`) runs `cargo check`, `cargo test --lib`, and an unsigned release build for `x86_64-pc-windows-msvc` and `i686-pc-windows-msvc`, plus `npm test`.
 - `scripts/check-frontend.mjs` checks script syntax, that every invoked command is registered, that button ids exist, and that version strings agree.
 
-## Flaws
+## Fixed since the 2026-11-04 audit
 
-### Docs disagree with the binary
+- v3.55.0: DTC read, freeze frame, and live verify fail closed. A disconnected adapter is an error, not an empty code list or a soft verify string.
+- v3.56.0: Definition coverage, and a two-image change report with table names.
+- v3.57.0: Replay fixture. Status says replay, not a vehicle. Flash, unlock, and DTC clear stay refused.
+- v3.58.0: Per-cell STFT accept, dashboard cell select, transfer cancel, workspace project file, row-citing log explainer, and installer signing only when a certificate is configured.
+- v3.59.0: Trim report cites logged trim percent and does not emit a multiplier. Map-from-log names the mean RPM/MAP bin `mean_cell` instead of `suggested_ve_cell`. Flash and live-compare link errors are not prefixed with `Not connected:`. Compare can print a three-way stock / tune / other report. `write_allowed` stays false.
 
-- `README.md` "Current status" still says v3.51.0 (around line 43). `package.json`, `Cargo.toml`, `tauri.conf.json`, the installer, and `index.html` say 3.54.0.
-- `PRODUCT.md` is dated 2026-10-21 and describes v3.35+.
-- `COMPLETION.md` title is v3.51.0. The v3.54.0 section is below that title.
-- `src-tauri/src/lib.rs` line 1 still says v3.39.0.
-- `V2_ROADMAP.md` says v2.0 success criteria were achieved, then the 2026-10-21 note on the same page says that claim was premature.
-- `reference/ecu_database/index.json` is still index 1.26, "updated 2026-10-21". Most of the 16 families are identify or report-only. Map hints without a citation are unverified. That is correct. The index date is stale.
+## What is still true
 
-### Fail-open results that look like a clean ECU
-
-`src-tauri/src/commands_p3.rs`:
-
-- `read_dtcs_cmd` (about line 7) turns any port error into `stored`, `pending`, and `permanent` empty arrays and `total: 0`. A disconnected adapter looks like no codes.
-- `read_freeze_frame_cmd` (about line 11) turns a port error into `{}`.
-- `verify_after_write` (about lines 136-146) returns `Ok("Not connected")` when there is no adapter, and `Ok("Verify note: ...")` when the live compare fails. A caller that only checks `Result` treats a failed verify as success.
-- `clear_dtcs_cmd` already returns `success: false` when offline. DTC read should fail the same way.
-- `read_ecu_data` in `commands_p2.rs` (about line 84) labels the offline case `honest: true`. That one is explicit. DTC read is not.
-
-### Structure that hides unfinished work
-
-- `lib.rs` line 2 allows `unused_imports`, `dead_code`, and `non_snake_case`. Dead commands and unused protocol helpers do not fail the build.
-- The UI is a stack of versioned scripts. `index.html` loads `main.js` (~95 KB), `v312.js`, `v335.js` through `v347.js`, and `live_dashboard.js`. `v312.js` injects `v333.js` and `v334.js` at runtime. Load order is the feature system.
-- `get_tuning_advice` (`commands_p3.rs`, about line 41) returns a sentence that says it does not invent a tune. It is not a tuning feature.
-
-### Product gaps that are still true
-
-- Cancel for backup, Nissan scan, and guided flash shipped in v3.58.0. A cancel stops before the next step and is not a success. Mid-write cancel still runs the existing recovery erase. Serial battery voltage is still checked before and after a transfer, not continuously mid-write (`V2_ROADMAP.md`).
+- Serial battery voltage is checked before and after a transfer, not continuously mid-write.
 - XDF: 64-bit float and a non-zero minor stride are skipped. Strided tables and embedded axes are read-only. Non-linear math is refused. No axis editing, patches, flags, or functions.
-- ELM, J2534, and STN paths exist and are not bench-tested. The P01 FullImage backup is tested against a scripted fake PCM only.
+- ELM, J2534, and STN paths are not bench-tested. The P01 FullImage backup is tested against a scripted fake PCM only.
 - No driver plugin SDK. BDM/JTAG is out of scope (`PRODUCT.md`). Licensed GM 5-byte keys are intentionally absent.
-- CI does not run a UI test. Signing runs only when the `SIGN_RELEASES` variable is true and `WINDOWS_PFX_BASE64` is set. Without that certificate the artifact name stays `unsigned`. `TuneItVerse.exe` at the repo root is gitignored. `AGENTS.md` still requires a local release copy after each ship.
-- `reference/` contains flash images, WinOLS bins, `gmkeylib.dll`, kernels, and MDB files. That is a license and repo-size risk. This audit does not add, publish, or delete those files.
-
-## Missing features that would matter in a shop
-
-These stay inside the honesty rules: no new write path, no invented map address, no `hardware_tested: true`.
-
-Ship next, in order:
-
-1. Fail-closed DTC read, freeze frame, and live verify. A read that did not happen is an error.
-2. Definition coverage on the open BIN: editable, read-only, skipped, and the skip reason already produced by the XDF reader. TunerPro and WinOLS do not show this.
-3. A change report of working BIN versus reference (ranges, table name when a definition is loaded, old and new). Compare already lists ranges. A shop can hand this page to a customer. Export uses the existing save-text dialog.
-4. Replay bench. Shipped in v3.57.0. Connect loads a checked-in ELM fixture through `replay_port`. Status says replay, not a vehicle. Flash, unlock, and clear-DTC stay refused.
-
-Shipped in v3.58.0:
-
-- Per-cell accept of the existing STFT/LTFT preview. The preview does not change the working table until the user accepts one cell. Accept does not write the ECU.
-- Click a Live Dashboard hit cell and select that Maps cell.
-- Cancel for backup, scan, and guided flash. A cancel is not reported as success. A partial backup is not saved.
-- The existing workspace JSON now carries stock, tune, XDF text, log CSV, notes, and the identify capability snapshot. Old files still import. Bytes come back to the editor only.
-- Installer script for x64 and i686, plus signtool wiring. Artifacts stay unsigned unless `SIGN_RELEASES` and `WINDOWS_PFX_BASE64` are configured. No certificate is in the repo.
-- A read-only log explainer that cites logged rows and does not emit a calibration value.
+- Non-P01 live backup is a windowed `PartialDidOnly` probe. It is not a full EDC16/EDC17/MED17 dump.
+- CI does not run a UI test. Signing runs only when `SIGN_RELEASES` is true and `WINDOWS_PFX_BASE64` is set. Without that certificate the artifact name stays `unsigned`. No certificate is in the repo. `TuneItVerse.exe` at the repo root is gitignored.
+- `lib.rs` allows `unused_imports`, `dead_code`, and `non_snake_case`. The UI is still a stack of versioned scripts (`main.js`, `v312.js`, `v335.js` through `v347.js`, `live_dashboard.js`). This pass does not rewrite that stack.
+- `reference/` contains flash images, WinOLS bins, `gmkeylib.dll`, kernels, and MDB files. This pass does not add, publish, or delete those files.
+- `get_tuning_advice` returns a sentence that says it does not invent a tune.
+- `reference/ecu_database/index.json` is still index 1.26. Most of the 16 families are identify or report-only. Map hints without a citation are unverified.
 
 ## What this pass did not do
 
 - No cherry-pick. No merge of a historical branch. No remote branch was deleted.
 - No checksum corrector, seed/key, or write path was added or enabled.
+- No EDC/MED17 bulk dump was implemented.
 
 ## Branch triage
 
