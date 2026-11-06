@@ -74,24 +74,32 @@ pub fn probe_live_windows(port: &mut Box<dyn SerialPort + Send>, ecu_family: &st
     }
 
     if proto == LiveProto::BoschUdsKwp {
-        for (addr, label) in &starts {
-            match crate::uds::read_memory_by_address(port, crate::uds::Alfi::ADDR4_SIZE2, *addr, 64, use_elm) {
+        // Enhanced multi-chunk collection for better coverage toward full dump
+        let chunk_size: u32 = 256;
+        let max_chunks = 32; // up to ~8KB for probing
+        for i in 0..max_chunks {
+            let addr = cal_addr.saturating_add(i * chunk_size);
+            let label = format!("bulk_{:04X}", addr);
+            match crate::uds::read_memory_by_address(port, crate::uds::Alfi::ADDR4_SIZE2, addr, chunk_size, use_elm) {
                 Ok(data) if !data.is_empty() => {
-                    logs.push(format!("UDS 0x23 ISO-TP answered at 0x{:06X} ({} bytes)", addr, data.len()));
-                    match window_offset(*addr, written_len) { Some(offset) => out.push(LiveWindow { label: label.to_string(), offset, data, method: "UDS 0x23 ISO-TP".into() }), None => logs.push(format!("Window 0x{:06X} outside {}-byte image; skipped", addr, written_len)) }
+                    logs.push(format!("UDS 0x23 bulk at 0x{:06X} ({} bytes)", addr, data.len()));
+                    match window_offset(addr, written_len) { Some(offset) => out.push(LiveWindow { label, offset, data, method: "UDS 0x23 ISO-TP bulk".into() }), None => logs.push(format!("Bulk window 0x{:06X} outside image; skipped", addr)) }
                 }
                 Ok(_) => logs.push(format!("UDS 0x23 empty at 0x{:06X}", addr)),
-                Err(e) => logs.push(format!("UDS 0x23 at 0x{:06X}: {}", addr, e)),
+                Err(e) => { logs.push(format!("UDS 0x23 bulk at 0x{:06X}: {}", addr, e)); break; } // stop on first failure
             }
         }
-        for (addr, label) in &starts {
-            match crate::kwp::kwp_read_memory(port, *addr, 64) {
-                Ok(data) if data.len() > 4 => {
-                    logs.push(format!("KWP 0x23 answered at 0x{:06X} ({} bytes)", addr, data.len()));
-                    match window_offset(*addr, written_len) { Some(offset) => out.push(LiveWindow { label: format!("{}_kwp", label), offset, data, method: "KWP 0x23".into() }), None => logs.push(format!("Window 0x{:06X} outside {}-byte image; skipped", addr, written_len)) }
+        // Fallback smaller probes if bulk failed early
+        if out.is_empty() {
+            for (addr, label) in &starts {
+                match crate::uds::read_memory_by_address(port, crate::uds::Alfi::ADDR4_SIZE2, *addr, 64, use_elm) {
+                    Ok(data) if !data.is_empty() => {
+                        logs.push(format!("UDS 0x23 ISO-TP answered at 0x{:06X} ({} bytes)", addr, data.len()));
+                        match window_offset(*addr, written_len) { Some(offset) => out.push(LiveWindow { label: label.to_string(), offset, data, method: "UDS 0x23 ISO-TP".into() }), None => logs.push(format!("Window 0x{:06X} outside {}-byte image; skipped", addr, written_len)) }
+                    }
+                    Ok(_) => logs.push(format!("UDS 0x23 empty at 0x{:06X}", addr)),
+                    Err(e) => logs.push(format!("UDS 0x23 at 0x{:06X}: {}", addr, e)),
                 }
-                Ok(_) => logs.push(format!("KWP 0x23 short at 0x{:06X}", addr)),
-                Err(e) => logs.push(format!("KWP 0x23 at 0x{:06X}: {}", addr, e)),
             }
         }
     }
@@ -127,12 +135,14 @@ pub fn attempt_live_backup(port: &mut Box<dyn SerialPort + Send>, ecu_family: &s
     }
     let mut crc_src = Vec::new();
     for w in &windows { crc_src.extend_from_slice(&w.data); }
+    let coverage = (crc_src.len() as f32 / expected_len as f32) * 100.0;
+    let quality_note = if coverage > 50.0 { "Partial coverage improved toward FullImage via bulk Mode 23. Still PartialDidOnly until full dump verified." } else { "Collected windows. PartialDidOnly — not a full flash dump." };
     WindowBackup {
         failed: false,
         path: format!("live-windows:{}", windows.len()),
         bytes: crc_src.len() as u32,
         crc32: Some(crc32_ieee(&crc_src)),
-        notes: format!("Collected {} bytes across {} live windows. PartialDidOnly — not a full flash dump.", crc_src.len(), windows.len()),
+        notes: format!("Collected {} bytes across {} live windows ({:.1}% of expected). {}", crc_src.len(), windows.len(), coverage, quality_note),
     }
 }
 
