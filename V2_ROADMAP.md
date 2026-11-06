@@ -19,7 +19,7 @@ These fix the issues that make guided flash dangerous or misleading.
    - [x] Honest quality labelling: `BackupQuality::{FullImage, PartialDidOnly, Failed}`
    - [x] Mode 22 / DID sampling never reported as full image
    - [x] UDS Mode 23 (ReadMemoryByAddress) scaffolding for Bosch families
-   - [ ] Full multi-frame ISO-TP bulk dump for EDC16/EDC17/MED17. Not done. Non-P01 live backup is a windowed `PartialDidOnly` probe (`attempt_live_backup` in `live_verify.rs`). `FullImage` is not claimed for those families.
+   - [ ] Full multi-frame ISO-TP bulk dump for EDC16/EDC17/MED17. Progress in v3.61.0: multi-chunk Mode 23 collection for better coverage (still PartialDidOnly). Non-P01 live backup remains windowed probe.
    - [x] Kernel-assisted Mode 3C full cal dump for P01 (+ HS VPW)
    - [x] Backup file header metadata (OS ID, size, CRC, timestamp, tool version) via quality + notes
 
@@ -96,3 +96,5 @@ Updated 2026-08-09: Priority 0 fully landed. v2.0.0 declared production-ready fo
 Updated 2026-10-21 (v3.47.0): the "production-ready" claim above was premature. Nothing has been bench-tested. The in-app Capabilities page and COMPLETION.md are the current, sourced status.
 
 Updated 2026-11-04: see [AUDIT.md](AUDIT.md) for the v3.54.0 flaw list. DTC read and live verify fail closed as of v3.55.0. Hardware is still untested.
+
+Updated 2026-11-06 (v3.61.0): Bulk Mode 23 multi-chunk collection improves coverage for UDS families. Still PartialDidOnly. Hardware untested.
