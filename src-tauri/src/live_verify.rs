@@ -74,14 +74,23 @@ pub fn probe_live_windows(port: &mut Box<dyn SerialPort + Send>, ecu_family: &st
     }
 
     if proto == LiveProto::BoschUdsKwp {
+        // Multi-size probes: 64, 128, 256 bytes via multi-frame UDS 0x23.
+        // Still PartialDidOnly. Larger windows improve coverage when the ECU answers.
+        let sizes = [64u32, 128, 256];
         for (addr, label) in &starts {
-            match crate::uds::read_memory_by_address(port, crate::uds::Alfi::ADDR4_SIZE2, *addr, 64, use_elm) {
-                Ok(data) if !data.is_empty() => {
-                    logs.push(format!("UDS 0x23 ISO-TP answered at 0x{:06X} ({} bytes)", addr, data.len()));
-                    match window_offset(*addr, written_len) { Some(offset) => out.push(LiveWindow { label: label.to_string(), offset, data, method: "UDS 0x23 ISO-TP".into() }), None => logs.push(format!("Window 0x{:06X} outside {}-byte image; skipped", addr, written_len)) }
+            for &sz in &sizes {
+                match crate::uds::read_memory_by_address(port, crate::uds::Alfi::ADDR4_SIZE2, *addr, sz, use_elm) {
+                    Ok(data) if !data.is_empty() => {
+                        logs.push(format!("UDS 0x23 ISO-TP answered at 0x{:06X} ({} bytes, requested {})", addr, data.len(), sz));
+                        match window_offset(*addr, written_len) {
+                            Some(offset) => out.push(LiveWindow { label: format!("{}_{}", label, sz), offset, data, method: format!("UDS 0x23 ISO-TP {}", sz) }),
+                            None => logs.push(format!("Window 0x{:06X} outside {}-byte image; skipped", addr, written_len))
+                        }
+                        break; // take the largest that answered for this start
+                    }
+                    Ok(_) => logs.push(format!("UDS 0x23 empty at 0x{:06X} size {}", addr, sz)),
+                    Err(e) => logs.push(format!("UDS 0x23 at 0x{:06X} size {}: {}", addr, sz, e)),
                 }
-                Ok(_) => logs.push(format!("UDS 0x23 empty at 0x{:06X}", addr)),
-                Err(e) => logs.push(format!("UDS 0x23 at 0x{:06X}: {}", addr, e)),
             }
         }
         for (addr, label) in &starts {
@@ -132,7 +141,7 @@ pub fn attempt_live_backup(port: &mut Box<dyn SerialPort + Send>, ecu_family: &s
         path: format!("live-windows:{}", windows.len()),
         bytes: crc_src.len() as u32,
         crc32: Some(crc32_ieee(&crc_src)),
-        notes: format!("Collected {} bytes across {} live windows. PartialDidOnly — not a full flash dump.", crc_src.len(), windows.len()),
+        notes: format!("Collected {} bytes across {} live windows (multi-size UDS probe). PartialDidOnly — not a full flash dump.", crc_src.len(), windows.len()),
     }
 }
 
