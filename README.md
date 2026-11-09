@@ -18,7 +18,7 @@ npm run build    # release desktop binary + copy TuneItVerse.exe to this folder
 
 After every release build, `TuneItVerse.exe` is copied to the repository root (this folder). Double-click that file to run the current version.
 
-**v3.49.0**: Maps page has working Table CSV export and import. Offline tools remain fully operational. Hardware paths still untested.
+**v3.61.0**: ECU DB index 1.27, version polish. Offline tools remain fully operational. Hardware paths still untested.
 
 Bench helper for personal dumps:
 ```bash
@@ -40,8 +40,9 @@ Live data over ELM327/OBDLink reads the ECU's Mode 01 support masks first and po
 
 Data Logging can import a CSV (including Car Scanner's long `SECONDS;PID;VALUE` export; GPS columns are dropped), replay it, and cite logged STFT/LTFT percent. That report does not emit a calibration value. Compare lists changed ranges, and a three-way report classifies stock, the working tune, and a third dump. None of these paths writes a calibration.
 
-## Current status (v3.60.0)
+## Current status (v3.61.0)
 
+- v3.61.0: ECU database index advanced to 1.27 with refined catalog notes. Version strings synced. Offline tools fully operational. Not hardware-tested. Installers stay unsigned unless a certificate is configured.
 - v3.60.0: Value sheet lists extracted cell changes for every loaded table. An address that does not resolve is not compared, and no placeholder number is shown. Cell delta uses the same refusal. Not hardware-tested. Installers stay unsigned unless a certificate is configured.
 - v3.59.0: Trim report cites logged trim percent and does not emit a multiplier. Map-from-log names the mean RPM/MAP bin `mean_cell`. Flash and live-compare errors stay in their own words instead of a `Not connected:` prefix. Compare prints a three-way stock / tune / other report and does not patch a BIN. Not hardware-tested. Installers stay unsigned unless a certificate is configured.
 - v3.58.0: STFT accept is one cell at a time. Dashboard hit cells select the open map cell. Backup, Nissan scan, and guided flash can be cancelled, and a cancel is not a success. Workspace export/import keeps stock, tune, definition, log, notes, and the capability snapshot in the same JSON file. The log explainer cites rows and does not emit a calibration value. Installers can be signed only when a certificate is configured; this release is unsigned. Not hardware-tested.
@@ -49,7 +50,6 @@ Data Logging can import a CSV (including Car Scanner's long `SECONDS;PID;VALUE` 
 - v3.56.0: Maps shows definition coverage (editable, read-only, skipped). Compare writes a change report with table names and exports it as text. Neither path writes a BIN. Not hardware-tested.
 - v3.55.0: DTC read, freeze frame, and live verify fail closed. A disconnected adapter is an error, not an empty code list or a soft "verify note". Not hardware-tested.
 - v3.51.0: Live Dashboard view — gauges, time-series chart, X/Y scatter and hits-per-map-cell grid from the logger buffer (Mode 01 / imported CSV). Read-only, not hardware-tested.
-
 
 This is the honest summary. [COMPLETION.md](COMPLETION.md) has the full log, and the in-app **Capabilities** page shows the per-family matrix with a source for every status.
 
