@@ -1,6 +1,19 @@
-# TuneItVerse v3.60.0 — value sheet
+# TuneItVerse v3.61.0 — bulk Mode 23 dump path
 
-## v3.60.0 changes
+## v3.61.0 changes
+
+- Added `bulk_mode23_dump` in live_verify.rs: repeated UDS ReadMemoryByAddress (0x23) in 128-byte chunks for Bosch/UDS families. Succeeds only on full expected length.
+- `attempt_live_backup` tries the bulk path first. Matching full image is labeled FullImage candidate (still hardware-unverified).
+- Flash pipeline quality logic accepts FullImage from successful bulk dump.
+- New Tauri command `bulk_dump_mode23` for manual invocation.
+- Honest notes: many ECUs require extended/programming session + security unlock before large memory reads. Not bench-tested.
+- Offline tools, P01 paths, and all prior fail-closed gates unchanged.
+
+**Not hardware-tested.** No adapter and no vehicle were used. Installers stay unsigned unless a certificate is configured.
+
+# TuneItVerse v3.61.0 — value sheet
+
+## v3.61.0 changes
 
 - Compare has Value sheet. It lists extracted cell changes for every loaded table: row, column, stock, tuned, and delta. Identical tables are one summary line. An address that does not resolve is `not compared` and no number is invented for it.
 - Cell delta now returns an error for that same unread address instead of comparing a zero placeholder grid.

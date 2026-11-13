@@ -294,9 +294,15 @@ where F: FnMut(FlashProgress),
         }
     } else {
         let w = crate::live_verify::attempt_live_backup(port, &family, image.len(), &mut result.logs);
-        // attempt_live_backup is windowed only today, so non-failed captures stay PartialDidOnly.
+        // attempt_live_backup tries bulk Mode 23 first; FullImage only if bulk succeeded with matching length.
         // FullImage is reserved for a future kernel Mode 3C / full dump path.
-        let quality = if w.failed { BackupQuality::Failed } else { BackupQuality::PartialDidOnly };
+        let quality = if w.failed {
+            BackupQuality::Failed
+        } else if w.path.starts_with("bulk-mode23-full") && w.bytes as usize == image.len() {
+            BackupQuality::FullImage
+        } else {
+            BackupQuality::PartialDidOnly
+        };
         let backup = BackupResult { path: w.path, quality: quality.clone(), bytes: w.bytes, crc32: w.crc32, notes: w.notes };
         result.backup = Some(backup);
         if !backup_quality_allows_write(&quality) {

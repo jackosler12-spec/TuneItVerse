@@ -1,6 +1,6 @@
 # TuneItVerse Product Direction
 
-**Updated:** 2026-11-05 (v3.60.0: value sheet of extracted cell changes. Unread addresses are not compared. Still not bench-tested on a vehicle. Installers unsigned unless a certificate is configured.)  
+**Updated:** 2026-11-05 (v3.61.0: value sheet of extracted cell changes. Unread addresses are not compared. Still not bench-tested on a vehicle. Installers unsigned unless a certificate is configured.)  
 **Status:** Software-first. VerseLink Apex PCB work is parked.
 
 ## Decision
@@ -11,7 +11,7 @@ VerseLink Apex remains a future hardware option only if a third party builds it 
 
 ## What ships today
 
-TuneItVerse v3.60.0 on Windows:
+TuneItVerse v3.61.0 on Windows:
 
 - Value sheet cites extracted stock and tuned cells for loaded tables. An address that does not resolve is skipped. `write_allowed` stays false
 - Trim report cites logged trim percent and does not emit a calibration value. Three-way compare classifies stock, the working tune, and a third dump. `write_allowed` stays false

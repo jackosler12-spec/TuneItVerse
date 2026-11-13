@@ -375,3 +375,18 @@ mod live_family_tests {
         }).unwrap();
     }
 }
+
+#[tauri::command(async)]
+pub fn bulk_dump_mode23(ecu_family: String, expected_len: u32) -> Result<String, String> {
+    crate::refuse_replay("bulk dump")?;
+    let mut logs = Vec::new();
+    with_port(|port| {
+        match crate::live_verify::bulk_mode23_dump(port, &ecu_family, expected_len as usize, &mut logs) {
+            Ok(data) => {
+                let hex_preview = data.iter().take(16).map(|b| format!("{:02X}", b)).collect::<Vec<_>>().join(" ");
+                Ok(format!("Bulk dump OK: {} bytes. First 16: {}. Logs: {}", data.len(), hex_preview, logs.join(" | ")))
+            }
+            Err(e) => Err(format!("{} | logs: {}", e, logs.join(" | "))),
+        }
+    })
+}

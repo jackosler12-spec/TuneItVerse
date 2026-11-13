@@ -40,9 +40,9 @@ Live data over ELM327/OBDLink reads the ECU's Mode 01 support masks first and po
 
 Data Logging can import a CSV (including Car Scanner's long `SECONDS;PID;VALUE` export; GPS columns are dropped), replay it, and cite logged STFT/LTFT percent. That report does not emit a calibration value. Compare lists changed ranges, and a three-way report classifies stock, the working tune, and a third dump. None of these paths writes a calibration.
 
-## Current status (v3.60.0)
+## Current status (v3.61.0)
 
-- v3.60.0: Value sheet lists extracted cell changes for every loaded table. An address that does not resolve is not compared, and no placeholder number is shown. Cell delta uses the same refusal. Not hardware-tested. Installers stay unsigned unless a certificate is configured.
+- v3.61.0: Value sheet lists extracted cell changes for every loaded table. An address that does not resolve is not compared, and no placeholder number is shown. Cell delta uses the same refusal. Not hardware-tested. Installers stay unsigned unless a certificate is configured.
 - v3.59.0: Trim report cites logged trim percent and does not emit a multiplier. Map-from-log names the mean RPM/MAP bin `mean_cell`. Flash and live-compare errors stay in their own words instead of a `Not connected:` prefix. Compare prints a three-way stock / tune / other report and does not patch a BIN. Not hardware-tested. Installers stay unsigned unless a certificate is configured.
 - v3.58.0: STFT accept is one cell at a time. Dashboard hit cells select the open map cell. Backup, Nissan scan, and guided flash can be cancelled, and a cancel is not a success. Workspace export/import keeps stock, tune, definition, log, notes, and the capability snapshot in the same JSON file. The log explainer cites rows and does not emit a calibration value. Installers can be signed only when a certificate is configured; this release is unsigned. Not hardware-tested.
 - v3.57.0: Connect can open a checked-in ELM trace as a replay fixture. Status says replay, not a vehicle. Flash write, unlock, and DTC clear stay refused. Not hardware-tested.
