@@ -390,3 +390,17 @@ pub fn bulk_dump_mode23(ecu_family: String, expected_len: u32) -> Result<String,
         }
     })
 }
+
+#[tauri::command(async)]
+pub fn validate_me7_checksums_cmd(bin_bytes: Vec<u8>) -> Result<String, String> {
+    match crate::checksum::validate_me7_checksums(&bin_bytes) {
+        Ok(r) => Ok(format!("ME7 validate: {} regions, {} valid. Method: {}", r.regions.len(), r.valid_count, r.method_used)),
+        Err(e) => Err(e),
+    }
+}
+
+#[tauri::command(async)]
+pub fn correct_me7_checksums_cmd(bin_bytes: Vec<u8>) -> Result<Vec<u8>, String> {
+    let corrected = crate::checksum::correct_me7_checksums(&bin_bytes)?;
+    Ok(corrected.data)
+}

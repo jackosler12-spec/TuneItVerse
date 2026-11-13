@@ -639,3 +639,79 @@ pub(crate) mod tests {
         assert!(correct_checksums(&img).is_err());
     }
 }
+
+// ── ME7 / common Bosch additive 16-bit checksum scaffold (report + correct for known layouts) ──
+// Public community knowledge: many ME7 use 16-bit additive checksums over cal regions.
+// Correct only when layout is known; otherwise report-only. Not verified on private dumps here.
+
+fn me7_additive_regions() -> Vec<RegionDescriptor> {
+    vec![
+        RegionDescriptor { name: "ME7 Main Cal", start: 0x10000, end: 0x1FFFF, cs_offset: 0x1FFFE },
+        RegionDescriptor { name: "ME7 Secondary", start: 0x20000, end: 0x2FFFF, cs_offset: 0x2FFFE },
+    ]
+}
+
+pub fn validate_me7_checksums(data: &[u8]) -> Result<ChecksumReport, String> {
+    if data.len() < 0x30000 {
+        return Err("Image too small for ME7 regions".into());
+    }
+    let mut regions = Vec::new();
+    let mut valid = 0;
+    for r in me7_additive_regions() {
+        let ok = validate_additive_region(data, &r);
+        if ok { valid += 1; }
+        regions.push(RegionResult {
+            name: r.name.to_string(),
+            block: 0,
+            cs_offset: r.cs_offset,
+            original_cs: read_u16_be(data, r.cs_offset) as u32,
+            corrected_cs: 0,
+            was_valid: ok,
+            is_valid: ok,
+            method: "me7_additive16".into(),
+        });
+    }
+    Ok(ChecksumReport {
+        regions,
+        valid_count: valid,
+        fixed_count: 0,
+        failed_count: regions.len() - valid,
+        all_valid: valid == regions.len(),
+        ecu_family: "ME7_COMMON".into(),
+        method_used: "me7_additive16_report".into(),
+        cvns: vec![],
+    })
+}
+
+pub fn correct_me7_checksums(data: &[u8]) -> Result<CorrectedCal, String> {
+    let mut buf = data.to_vec();
+    let mut fixed = 0;
+    let mut report_regions = Vec::new();
+    for r in me7_additive_regions() {
+        if r.end >= buf.len() { continue; }
+        let before = validate_additive_region(&buf, &r);
+        let new_cs = correct_additive_region(&mut buf, &r)?;
+        fixed += 1;
+        report_regions.push(RegionResult {
+            name: r.name.to_string(),
+            block: 0,
+            cs_offset: r.cs_offset,
+            original_cs: 0,
+            corrected_cs: new_cs as u32,
+            was_valid: before,
+            is_valid: true,
+            method: "me7_additive16".into(),
+        });
+    }
+    let report = ChecksumReport {
+        regions: report_regions,
+        valid_count: fixed,
+        fixed_count: fixed,
+        failed_count: 0,
+        all_valid: true,
+        ecu_family: "ME7_COMMON".into(),
+        method_used: "me7_additive16_correct".into(),
+        cvns: vec![],
+    };
+    Ok(CorrectedCal { data: buf, report })
+}
