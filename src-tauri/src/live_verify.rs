@@ -118,6 +118,20 @@ pub fn compare_windows(written: &[u8], windows: &[LiveWindow], logs: &mut Vec<St
 }
 
 pub fn attempt_live_backup(port: &mut Box<dyn SerialPort + Send>, ecu_family: &str, expected_len: usize, logs: &mut Vec<String>) -> WindowBackup {
+    // Try full bulk Mode 23 first for UDS families
+    if let Ok(full) = bulk_mode23_dump(port, ecu_family, expected_len, logs) {
+        if full.len() == expected_len {
+            let crc = crc32_ieee(&full);
+            logs.push("Bulk dump succeeded — treating as FullImage candidate (hardware unverified).".into());
+            return WindowBackup {
+                failed: false,
+                path: "bulk-mode23-full".into(),
+                bytes: full.len() as u32,
+                crc32: Some(crc),
+                notes: format!("Full {} byte image via repeated Mode 23. Not hardware-tested on this tree.", full.len()),
+            };
+        }
+    }
     let windows = match probe_live_windows(port, ecu_family, expected_len.max(1), logs) {
         Ok(w) => w,
         Err(e) => return WindowBackup { failed: true, path: String::new(), bytes: 0, crc32: None, notes: e },
@@ -157,5 +171,57 @@ mod family_plan_tests {
     fn window_offset_never_falls_back_to_zero() {
         assert_eq!(window_offset(0x80000, 0x1000), None);
         assert_eq!(window_offset(0x100, 0x1000), Some(0x100));
+    }
+}
+
+/// Attempt a full-image bulk dump via repeated UDS Mode 23 (ReadMemoryByAddress).
+/// Chunks of 128 bytes. Returns Ok(full_image) only if every chunk succeeds and total == expected_len.
+/// Otherwise Err with reason. Honest: many ECUs refuse large ranges or require programming session + unlock.
+pub fn bulk_mode23_dump(
+    port: &mut Box<dyn SerialPort + Send>,
+    ecu_family: &str,
+    expected_len: usize,
+    logs: &mut Vec<String>,
+) -> Result<Vec<u8>, String> {
+    if expected_len == 0 || expected_len > 4 * 1024 * 1024 {
+        return Err("Refusing bulk dump: invalid expected length".into());
+    }
+    let (base_addr, proto) = live_address_plan(ecu_family)?;
+    if proto != LiveProto::BoschUdsKwp {
+        return Err("Bulk Mode 23 dump only for Bosch/UDS families in this pass".into());
+    }
+    let chunk = 128u32;
+    let mut image = vec![0u8; expected_len];
+    let mut collected = 0usize;
+    logs.push(format!("Starting bulk Mode 23 dump for {} ({} bytes, base 0x{:X})", ecu_family, expected_len, base_addr));
+    for off in (0..expected_len).step_by(chunk as usize) {
+        let addr = base_addr.saturating_add(off as u32);
+        let this_len = ((expected_len - off) as u32).min(chunk);
+        match crate::uds::read_memory_by_address(port, crate::uds::Alfi::ADDR4_SIZE2, addr, this_len, true) {
+            Ok(data) if data.len() as u32 == this_len => {
+                let end = off + data.len();
+                if end <= expected_len {
+                    image[off..end].copy_from_slice(&data);
+                    collected += data.len();
+                }
+            }
+            Ok(data) => {
+                logs.push(format!("Short response at 0x{:X}: got {} expected {}", addr, data.len(), this_len));
+                return Err(format!("Incomplete bulk dump: short chunk at offset 0x{:X}", off));
+            }
+            Err(e) => {
+                logs.push(format!("Mode 23 failed at 0x{:X}: {}", addr, e));
+                return Err(format!("Bulk dump aborted at offset 0x{:X}: {}", off, e));
+            }
+        }
+        if off % (16 * 1024) == 0 {
+            logs.push(format!("Progress: {} / {} bytes", collected, expected_len));
+        }
+    }
+    if collected == expected_len {
+        logs.push(format!("Bulk Mode 23 dump complete: {} bytes collected", collected));
+        Ok(image)
+    } else {
+        Err(format!("Bulk dump incomplete: collected {} of {} bytes", collected, expected_len))
     }
 }

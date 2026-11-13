@@ -19,7 +19,7 @@ These fix the issues that make guided flash dangerous or misleading.
    - [x] Honest quality labelling: `BackupQuality::{FullImage, PartialDidOnly, Failed}`
    - [x] Mode 22 / DID sampling never reported as full image
    - [x] UDS Mode 23 (ReadMemoryByAddress) scaffolding for Bosch families
-   - [ ] Full multi-frame ISO-TP bulk dump for EDC16/EDC17/MED17. Not done. Non-P01 live backup is a windowed `PartialDidOnly` probe (`attempt_live_backup` in `live_verify.rs`). `FullImage` is not claimed for those families.
+   - [ ] Full multi-frame ISO-TP bulk dump for EDC16/EDC17/MED17. Scaffolded in v3.61.0 via repeated Mode 23 windows (bulk_mode23_dump). Full success still requires ECU support + session; not hardware-tested. Non-P01 live backup is a windowed `PartialDidOnly` probe (`attempt_live_backup` in `live_verify.rs`). `FullImage` is not claimed for those families.
    - [x] Kernel-assisted Mode 3C full cal dump for P01 (+ HS VPW)
    - [x] Backup file header metadata (OS ID, size, CRC, timestamp, tool version) via quality + notes
 
