@@ -1,6 +1,17 @@
-# TuneItVerse v3.61.0 — bulk Mode 23 dump path
+# TuneItVerse v3.62.0 — ME7 checksum scaffold
 
-## v3.61.0 changes
+## v3.62.0 changes
+
+- Added ME7-style 16-bit additive checksum validate/correct scaffold in checksum.rs (known community regions).
+- New Tauri commands `validate_me7_checksums_cmd` and `correct_me7_checksums_cmd`.
+- Layout is public-knowledge scaffold; correct only on matching images. Not verified against private dumps in this tree.
+- Prior bulk dump path and all fail-closed gates unchanged.
+
+**Not hardware-tested.**
+
+# TuneItVerse v3.62.0 — bulk Mode 23 dump path
+
+## v3.62.0 changes
 
 - Added `bulk_mode23_dump` in live_verify.rs: repeated UDS ReadMemoryByAddress (0x23) in 128-byte chunks for Bosch/UDS families. Succeeds only on full expected length.
 - `attempt_live_backup` tries the bulk path first. Matching full image is labeled FullImage candidate (still hardware-unverified).
@@ -11,9 +22,9 @@
 
 **Not hardware-tested.** No adapter and no vehicle were used. Installers stay unsigned unless a certificate is configured.
 
-# TuneItVerse v3.61.0 — value sheet
+# TuneItVerse v3.62.0 — value sheet
 
-## v3.61.0 changes
+## v3.62.0 changes
 
 - Compare has Value sheet. It lists extracted cell changes for every loaded table: row, column, stock, tuned, and delta. Identical tables are one summary line. An address that does not resolve is `not compared` and no number is invented for it.
 - Cell delta now returns an error for that same unread address instead of comparing a zero placeholder grid.
