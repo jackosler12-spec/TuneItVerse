@@ -671,12 +671,13 @@ pub fn validate_me7_checksums(data: &[u8]) -> Result<ChecksumReport, String> {
             method: "me7_additive16".into(),
         });
     }
+    let total = regions.len();
     Ok(ChecksumReport {
         regions,
         valid_count: valid,
         fixed_count: 0,
-        failed_count: regions.len() - valid,
-        all_valid: valid == regions.len(),
+        failed_count: total - valid,
+        all_valid: valid == total,
         ecu_family: "ME7_COMMON".into(),
         method_used: "me7_additive16_report".into(),
         cvns: vec![],

@@ -199,6 +199,13 @@ pub fn backup_quality_allows_write(quality: &BackupQuality) -> bool {
     matches!(quality, BackupQuality::FullImage)
 }
 
+/// Quality of a non-kernel live backup (bulk Mode 23, DID reads, windowed probes).
+/// Never FullImage: length alone proves nothing (no OS ID check, no checksum verification,
+/// no proof every byte is real flash). FullImage comes only from the verified Mode 3C path.
+pub fn live_backup_quality(w: &crate::live_verify::WindowBackup) -> BackupQuality {
+    if w.failed { BackupQuality::Failed } else { BackupQuality::PartialDidOnly }
+}
+
 /// Every guided flash attempt is written to the audit log, whatever the outcome.
 pub fn orchestrate_guided_flash<F>(port: &mut Box<dyn SerialPort + Send>, request: GuidedFlashRequest, on_progress: F) -> Result<GuidedFlashResult, String>
 where F: FnMut(FlashProgress),
@@ -294,15 +301,10 @@ where F: FnMut(FlashProgress),
         }
     } else {
         let w = crate::live_verify::attempt_live_backup(port, &family, image.len(), &mut result.logs);
-        // attempt_live_backup tries bulk Mode 23 first; FullImage only if bulk succeeded with matching length.
-        // FullImage is reserved for a future kernel Mode 3C / full dump path.
-        let quality = if w.failed {
-            BackupQuality::Failed
-        } else if w.path.starts_with("bulk-mode23-full") && w.bytes as usize == image.len() {
-            BackupQuality::FullImage
-        } else {
-            BackupQuality::PartialDidOnly
-        };
+        // Fail-closed: a live capture on this path (bulk Mode 23 / DID / windowed probe) is never
+        // FullImage, whatever its length. FullImage is only granted by the P01 Mode 3C read-back
+        // path above (every byte read back, OS ID match, all 8 checksums pass).
+        let quality = live_backup_quality(&w);
         let backup = BackupResult { path: w.path, quality: quality.clone(), bytes: w.bytes, crc32: w.crc32, notes: w.notes };
         result.backup = Some(backup);
         if !backup_quality_allows_write(&quality) {
@@ -418,6 +420,28 @@ mod tests {
         assert!(!backup_quality_allows_write(&BackupQuality::PartialDidOnly));
         assert!(!backup_quality_allows_write(&BackupQuality::Failed));
         assert!(backup_quality_allows_write(&BackupQuality::FullImage));
+    }
+    #[test]
+    fn full_length_bulk_mode23_dump_is_partial_and_refused() {
+        let image_len = 0x200000usize;
+        let w = crate::live_verify::WindowBackup {
+            failed: false,
+            path: "bulk-mode23-full".into(),
+            bytes: image_len as u32,
+            crc32: Some(0xDEADBEEF),
+            notes: "full length via repeated Mode 23".into(),
+        };
+        let q = live_backup_quality(&w);
+        assert!(matches!(q, BackupQuality::PartialDidOnly), "bulk Mode 23 must never be FullImage");
+        assert!(!backup_quality_allows_write(&q), "write gate must refuse a bulk Mode 23 dump");
+    }
+    #[test]
+    fn live_windows_and_failed_backups_never_full_image() {
+        let mut w = crate::live_verify::WindowBackup { failed: false, path: "live-windows:3".into(), bytes: 384, crc32: None, notes: String::new() };
+        assert!(matches!(live_backup_quality(&w), BackupQuality::PartialDidOnly));
+        w.failed = true;
+        assert!(matches!(live_backup_quality(&w), BackupQuality::Failed));
+        assert!(!backup_quality_allows_write(&live_backup_quality(&w)));
     }
     #[test]
     fn experimental_p01_write_defaults_off_and_needs_phrase() {

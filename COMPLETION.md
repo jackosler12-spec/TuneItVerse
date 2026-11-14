@@ -1,3 +1,18 @@
+# TuneItVerse v3.62.1 — build fix + backup gate restored to fail-closed
+
+## v3.62.1 changes
+
+- **Build fixed.** main (v3.62.0) did not compile and failed CI:
+  - `bulk_dump_mode23`, `validate_me7_checksums_cmd` and `correct_me7_checksums_cmd` were declared `pub fn` inside the `include!`d `commands_p3.rs`. The `#[tauri::command]` macro then defined its helper macros twice (E0255, "defined multiple times"). They are now private like every other root command.
+  - Borrow-after-move in `validate_me7_checksums` (`regions.len()` after `regions` was moved into the report). Fixed.
+- **Commands registered.** The three commands above are now in `generate_handler!`. A script check found no other unregistered `#[tauri::command]` and no registered name without a definition.
+- **Version sync.** Everything is at 3.62.1 via `scripts/bump-version.js`: package.json, Cargo.toml, Cargo.lock, tauri.conf.json, installer, index.html, main.js. CI's `cargo --locked` and the frontend version check had both been failing on the mismatch.
+- **Safety regression reverted (v3.61.0 / PR #144).** The guided-flash gate had labelled a bulk Mode 23 dump `FullImage` on length alone. That is reverted. A bulk Mode 23, DID or windowed live capture is now always `PartialDidOnly` (or `Failed`), and the write gate refuses it (`flash::live_backup_quality`). `FullImage` comes only from the P01 Mode 3C read-back path: every byte read back, OS ID match, all 8 checksums pass. The v3.62.0 notes below about bulk Mode 23 being a "FullImage candidate" are superseded.
+- New tests: `full_length_bulk_mode23_dump_is_partial_and_refused` and `live_windows_and_failed_backups_never_full_image` (flash.rs).
+- Honest caveat: the ME7 additive regions (0x10000–0x1FFFF and 0x20000–0x2FFFF, sum stored at the region end) are an unverified community-knowledge scaffold. They have not been checked against a real ME7 dump in this tree, so treat `correct_me7_checksums_cmd` output as experimental. No write path uses it.
+
+**Not hardware-tested.** No adapter and no vehicle were used.
+
 # TuneItVerse v3.62.0 — ME7 checksum scaffold
 
 ## v3.62.0 changes

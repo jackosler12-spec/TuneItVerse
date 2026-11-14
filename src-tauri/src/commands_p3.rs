@@ -253,6 +253,7 @@ pub fn run() {
             defpack::import_definition_pack, defpack::list_definition_packs, defpack::operational_self_check,
             bin_inspect::bin_hex_window, bin_inspect::bin_profile, bin_inspect::bin_tune_report,
             log_studio::log_session_summary, log_studio::log_replay_frame, log_studio::log_trim_suggestion, log_studio::explain_log_cmd, log_studio::bin_diff_report, log_studio::change_report_cmd, log_studio::three_way_report_cmd, live_dashboard::dashboard_snapshot,
+            bulk_dump_mode23, validate_me7_checksums_cmd, correct_me7_checksums_cmd,
         ])
         .run(tauri::generate_context!())
         .expect("error while running TuneItVerse");
@@ -377,7 +378,7 @@ mod live_family_tests {
 }
 
 #[tauri::command(async)]
-pub fn bulk_dump_mode23(ecu_family: String, expected_len: u32) -> Result<String, String> {
+fn bulk_dump_mode23(ecu_family: String, expected_len: u32) -> Result<String, String> {
     crate::refuse_replay("bulk dump")?;
     let mut logs = Vec::new();
     with_port(|port| {
@@ -392,7 +393,7 @@ pub fn bulk_dump_mode23(ecu_family: String, expected_len: u32) -> Result<String,
 }
 
 #[tauri::command(async)]
-pub fn validate_me7_checksums_cmd(bin_bytes: Vec<u8>) -> Result<String, String> {
+fn validate_me7_checksums_cmd(bin_bytes: Vec<u8>) -> Result<String, String> {
     match crate::checksum::validate_me7_checksums(&bin_bytes) {
         Ok(r) => Ok(format!("ME7 validate: {} regions, {} valid. Method: {}", r.regions.len(), r.valid_count, r.method_used)),
         Err(e) => Err(e),
@@ -400,7 +401,7 @@ pub fn validate_me7_checksums_cmd(bin_bytes: Vec<u8>) -> Result<String, String> 
 }
 
 #[tauri::command(async)]
-pub fn correct_me7_checksums_cmd(bin_bytes: Vec<u8>) -> Result<Vec<u8>, String> {
+fn correct_me7_checksums_cmd(bin_bytes: Vec<u8>) -> Result<Vec<u8>, String> {
     let corrected = crate::checksum::correct_me7_checksums(&bin_bytes)?;
     Ok(corrected.data)
 }
