@@ -715,3 +715,53 @@ pub fn correct_me7_checksums(data: &[u8]) -> Result<CorrectedCal, String> {
     };
     Ok(CorrectedCal { data: buf, report })
 }
+
+// ── EDC16 multi-region additive checksum scaffold (report-only; public community knowledge) ──
+// Bosch EDC16 typically has multiple independent checksum regions. Exact layout varies by SW.
+// This is a starting scaffold for common 2MB images; correct only after measured confirmation.
+// Not verified on private dumps in this tree. Report-only by default.
+
+fn edc16_additive_regions() -> Vec<RegionDescriptor> {
+    vec![
+        RegionDescriptor { name: "EDC16 Cal1", start: 0x10000, end: 0x1FFFF, cs_offset: 0x1FFFE },
+        RegionDescriptor { name: "EDC16 Cal2", start: 0x20000, end: 0x2FFFF, cs_offset: 0x2FFFE },
+        RegionDescriptor { name: "EDC16 Cal3", start: 0x30000, end: 0x3FFFF, cs_offset: 0x3FFFE },
+        RegionDescriptor { name: "EDC16 End", start: 0x1E0000, end: 0x1EFFFF, cs_offset: 0x1EFFFE },
+    ]
+}
+
+pub fn validate_edc16_checksums(data: &[u8]) -> Result<ChecksumReport, String> {
+    if data.len() < 0x1F0000 {
+        return Err("Image too small for EDC16 regions".into());
+    }
+    let mut regions = Vec::new();
+    let mut valid = 0;
+    for r in edc16_additive_regions() {
+        if r.end >= data.len() { continue; }
+        let ok = validate_additive_region(data, &r);
+        if ok { valid += 1; }
+        regions.push(RegionResult {
+            name: r.name.to_string(),
+            block: 0,
+            cs_offset: r.cs_offset,
+            original_cs: read_u16_be(data, r.cs_offset) as u32,
+            corrected_cs: 0,
+            was_valid: ok,
+            is_valid: ok,
+            method: "edc16_additive16_report".into(),
+        });
+    }
+    Ok(ChecksumReport {
+        regions,
+        valid_count: valid,
+        fixed_count: 0,
+        failed_count: regions.len().saturating_sub(valid),
+        all_valid: valid == regions.len() && !regions.is_empty(),
+        ecu_family: "EDC16C41".into(),
+        method_used: "edc16_multi_additive_report".into(),
+        cvns: vec![],
+    })
+}
+
+// Note: correction intentionally omitted for EDC16 until a verified personal dump confirms the layout.
+// Use report only. Correct would require exact region knowledge from the specific OS.

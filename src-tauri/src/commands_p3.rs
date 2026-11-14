@@ -253,6 +253,7 @@ pub fn run() {
             defpack::import_definition_pack, defpack::list_definition_packs, defpack::operational_self_check,
             bin_inspect::bin_hex_window, bin_inspect::bin_profile, bin_inspect::bin_tune_report,
             log_studio::log_session_summary, log_studio::log_replay_frame, log_studio::log_trim_suggestion, log_studio::explain_log_cmd, log_studio::bin_diff_report, log_studio::change_report_cmd, log_studio::three_way_report_cmd, live_dashboard::dashboard_snapshot,
+            validate_me7_checksums_cmd, correct_me7_checksums_cmd, validate_edc16_checksums_cmd,
         ])
         .run(tauri::generate_context!())
         .expect("error while running TuneItVerse");
@@ -403,4 +404,12 @@ pub fn validate_me7_checksums_cmd(bin_bytes: Vec<u8>) -> Result<String, String> 
 pub fn correct_me7_checksums_cmd(bin_bytes: Vec<u8>) -> Result<Vec<u8>, String> {
     let corrected = crate::checksum::correct_me7_checksums(&bin_bytes)?;
     Ok(corrected.data)
+}
+
+#[tauri::command(async)]
+pub fn validate_edc16_checksums_cmd(bin_bytes: Vec<u8>) -> Result<String, String> {
+    match crate::checksum::validate_edc16_checksums(&bin_bytes) {
+        Ok(r) => Ok(format!("EDC16 validate (report-only scaffold): {} regions, {} valid. Method: {}. Correction not enabled until verified dump.", r.regions.len(), r.valid_count, r.method_used)),
+        Err(e) => Err(e),
+    }
 }

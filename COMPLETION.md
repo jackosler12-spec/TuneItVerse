@@ -264,3 +264,15 @@ Never flash without a verified backup and stable power. Personal dumps only.
 7. Isuzu FRR Transtron dump + protocol notes before any 4HK1 write work.
 
 Build your own. No bullshit prices.
+# TuneItVerse v3.63.0 — EDC16 multi-region checksum scaffold
+
+## v3.63.0 changes
+
+- Added EDC16 multi-region 16-bit additive checksum scaffold in checksum.rs (public community knowledge of multiple independent cal regions on 2MB images).
+- New Tauri command `validate_edc16_checksums_cmd` (report-only). Correction intentionally omitted until a verified personal dump confirms exact layout for the OS.
+- EDC16C41 family JSON and index updated to cite the scaffold. RSA signature block detection unchanged.
+- Version bumped to 3.63.0 across package.json, Cargo.toml, tauri.conf.json.
+- All prior fail-closed gates, P01 paths, ME7 scaffold, and offline tools remain fully operational.
+- **Not hardware-tested.** No adapter and no vehicle were used. Installers stay unsigned unless a certificate is configured.
+
+Offline BIN/XDF/A2L/logging/scripts remain fully operational. Build your own.
