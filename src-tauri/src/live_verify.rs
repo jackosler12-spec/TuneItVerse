@@ -118,17 +118,17 @@ pub fn compare_windows(written: &[u8], windows: &[LiveWindow], logs: &mut Vec<St
 }
 
 pub fn attempt_live_backup(port: &mut Box<dyn SerialPort + Send>, ecu_family: &str, expected_len: usize, logs: &mut Vec<String>) -> WindowBackup {
-    // Try full bulk Mode 23 first for UDS families
+    // Try bulk Mode 23 first for UDS families. Result is PartialDidOnly in flash.rs regardless of length.
     if let Ok(full) = bulk_mode23_dump(port, ecu_family, expected_len, logs) {
         if full.len() == expected_len {
             let crc = crc32_ieee(&full);
-            logs.push("Bulk dump succeeded — treating as FullImage candidate (hardware unverified).".into());
+            logs.push("Bulk Mode 23 dump returned full length — PartialDidOnly (no OS ID / checksum verification; never FullImage). Hardware unverified.".into());
             return WindowBackup {
                 failed: false,
                 path: "bulk-mode23-full".into(),
                 bytes: full.len() as u32,
                 crc32: Some(crc),
-                notes: format!("Full {} byte image via repeated Mode 23. Not hardware-tested on this tree.", full.len()),
+                notes: format!("{} bytes via repeated Mode 23. PartialDidOnly: not a verified full-image backup; write gate refuses it. Not hardware-tested.", full.len()),
             };
         }
     }
