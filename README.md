@@ -18,7 +18,7 @@ npm run build    # release desktop binary + copy TuneItVerse.exe to this folder
 
 After every release build, `TuneItVerse.exe` is copied to the repository root (this folder). Double-click that file to run the current version.
 
-**v3.49.0**: Maps page has working Table CSV export and import. Offline tools remain fully operational. Hardware paths still untested.
+**v3.63.0 analysis**: Aggressive review completed. Current offline features (BIN/XDF edit, checksum for P01, seedkey, logging, scripts, dashboard) are fully functional. Missing for industry-leading: full hardware bench testing on real ECUs, verified checksum correctors and FullImage read/write beyond P01, expanded seed/key from personal dumps, more community map defs with citations, BDM/JTAG support, plugin SDK. All safety gates remain fail-closed. Hardware paths untested.
 
 Bench helper for personal dumps:
 ```bash
