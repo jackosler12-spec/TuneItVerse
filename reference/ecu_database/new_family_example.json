@@ -1,0 +1,33 @@
+{
+  "ecu_family": "EXAMPLE_NEW",
+  "display_name": "Example New ECU Family for Expansion",
+  "part_numbers_or_os_ids": ["EXAMPLE"],
+  "vehicles": ["Various"],
+  "hardware": "Example hardware",
+  "protocol": "CAN/UDS",
+  "bin_size_bytes": 1048576,
+  "checksum": {
+    "type": "report_only",
+    "description": "Placeholder for community expansion"
+  },
+  "security_access": {
+    "type": "UDS 0x27",
+    "reference": "public",
+    "levels": ["diagnostic"]
+  },
+  "maps_and_xdf": {
+    "has_xdf": false,
+    "description": "Unverified"
+  },
+  "notes": "Added for DB expansion demonstration. Personal use only.",
+  "sources": ["Community public knowledge, unverified"],
+  "hardware_tested": false,
+  "capabilities": {
+    "identify": {"status": "unverified", "source": "size catalog"},
+    "read": {"status": "not_supported", "source": "no session"},
+    "checksum": {"status": "report_only", "source": "no corrector"},
+    "seed_key": {"status": "not_supported", "source": "unknown"},
+    "write": {"status": "not_supported", "source": "safety"},
+    "map_hints": {"status": "unverified", "source": "none"}
+  }
+}
