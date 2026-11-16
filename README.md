@@ -32,6 +32,7 @@ python3 python/ecu_scripting.py hex path/to/dump.bin 0 64
 python3 python/ecu_scripting.py report path/to/dump.bin
 python3 python/ecu_scripting.py logsummary path/to/log.csv
 python3 python/ecu_scripting.py dtc P0087
+python3 python/ecu_scripting.py me7cs path/to/me7.bin
 ```
 
 Scripts page runs the same ideas against the loaded BIN (`identify`, `checksum`, `correct`, `compare`, `seedkey`, `poke`, `tables`, `maplog`, `hex`, `profile`, `report`). No eval, no shell. Scripts → Self-check runs the offline operational check. Maps → Import definition pack loads hint JSON and cannot enable write.
@@ -40,8 +41,9 @@ Live data over ELM327/OBDLink reads the ECU's Mode 01 support masks first and po
 
 Data Logging can import a CSV (including Car Scanner's long `SECONDS;PID;VALUE` export; GPS columns are dropped), replay it, and cite logged STFT/LTFT percent. That report does not emit a calibration value. Compare lists changed ranges, and a three-way report classifies stock, the working tune, and a third dump. None of these paths writes a calibration.
 
-## Current status (v3.62.1)
+## Current status (v3.63.0)
 
+- v3.63.0: ME7 additive checksum scaffold documented in ecu_database (index 1.28) as experimental. Regions 0x10000-0x1FFFF and 0x20000-0x2FFFF. Unverified against real dumps; no write path. Python bench helper added for the same regions. Bulk Mode 23 remains PartialDidOnly. Hardware untested.
 - v3.62.1: Build fixed (duplicate command macros, ME7 borrow error, unregistered commands, version sync). A bulk Mode 23 dump is `PartialDidOnly` again and the write gate refuses it. Only the P01 Mode 3C verified read-back gives `FullImage`. Not hardware-tested.
 - v3.62.0: Value sheet lists extracted cell changes for every loaded table. An address that does not resolve is not compared, and no placeholder number is shown. Cell delta uses the same refusal. Not hardware-tested. Installers stay unsigned unless a certificate is configured.
 - v3.59.0: Trim report cites logged trim percent and does not emit a multiplier. Map-from-log names the mean RPM/MAP bin `mean_cell`. Flash and live-compare errors stay in their own words instead of a `Not connected:` prefix. Compare prints a three-way stock / tune / other report and does not patch a BIN. Not hardware-tested. Installers stay unsigned unless a certificate is configured.
@@ -74,6 +76,8 @@ This is the honest summary. [COMPLETION.md](COMPLETION.md) has the full log, and
 **GM P59 / P10 / P12:** identify only, from PcmHammer `PcmInfo.cs`: size, key-algorithm index, and a 2618-entry OS ID → PCM type map. The P01 checksum corrector refuses these images.
 
 **EDC16C41:** Identify + measured 4-byte seed/key. Checksum is **report-only**: an RSA-like 136-byte signature block at 0x1FDF78 is detected on 392203 images. No flash segment, no write.
+
+**ME7_COMMON:** Additive checksum scaffold (experimental, unverified).
 
 **Everything else in the catalog:** identify / report-only / unverified map hints. No write. Hardware paths (ELM/J2534/STN) are not bench-tested on this tree.
 
