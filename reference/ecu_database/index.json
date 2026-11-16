@@ -1,7 +1,7 @@
 {
-  "version": "1.27",
-  "updated": "2026-11-13",
-  "description": "Master index of TuneItVerse ECU database entries. v3.61.0: bulk Mode 23 dump scaffolded for UDS families;  + source on every family (schema validated by ecu_database.rs tests), GM P10/P12 added from PcmHammer PcmInfo.cs, P59 corrected to 1 MiB.",
+  "version": "1.28",
+  "updated": "2026-11-16",
+  "description": "Master index of TuneItVerse ECU database entries. v3.63.0: ME7 additive checksum scaffold documented as experimental (unverified). Bulk Mode 23 remains PartialDidOnly.",
   "families": [
     {
       "id": "P01_0411",
@@ -49,7 +49,7 @@
       "display_name": "Bosch ME7 (VW/Audi 1.8T / early 2.0T community)",
       "bin_size_bytes": 1048576,
       "primary_protocol": "KWP",
-      "status": "identify: unverified, read: not_supported, checksum: report_only, seed_key: not_supported, write: not_supported, map_hints: unverified"
+      "status": "identify: unverified, read: not_supported, checksum: experimental, seed_key: not_supported, write: not_supported, map_hints: unverified"
     },
     {
       "id": "DELPHI_DCM",
@@ -132,7 +132,7 @@
       "status": "identify: unverified, read: not_supported, checksum: not_supported, seed_key: public_source, write: not_supported, map_hints: not_supported"
     }
   ],
-  "notes": "Statuses describe what is measured in-repo. Only P01_0411 has FullImage backup + experimental kernel write (typed confirm). Offline map editor, BIN tools, logging replay, scripts fully operational. Hardware paths exist but untested. Personal dumps only; cite sources; mark unverified. Index 1.25 adds structured map hints (addr/size/scale/unit) for EDC16C41, P59, and Transtron.",
+  "notes": "Statuses describe what is measured in-repo. Only P01_0411 has FullImage backup + experimental kernel write (typed confirm). Offline map editor, BIN tools, logging replay, scripts fully operational. Hardware paths exist but untested. Personal dumps only; cite sources; mark unverified. ME7 checksum is experimental scaffold only.",
   "status_enum": [
     "verified_dump",
     "verified_log",

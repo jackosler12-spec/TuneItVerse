@@ -21,10 +21,10 @@
     "cal_region": "Confirm against your personal dump — community axis maps vary by SW"
   },
   "checksum": {
-    "type": "bosch_me7_block_additive_or_crc16",
-    "description": "ME7 families use block checksums (often 16-bit additive or CRC16 over cal blocks). 1MB dumps are catalogued; a family-specific corrector lands after a verified personal dump.",
+    "type": "me7_additive_16bit_scaffold",
+    "description": "v3.62.0 scaffold: 16-bit additive wordsum over common regions 0x10000-0x1FFFF and 0x20000-0x2FFFF (sum stored at region end). Public-knowledge only; not verified against a real ME7 dump in this tree. correct_me7_checksums_cmd is experimental and no write path uses it.",
     "reference_files": [],
-    "routine": "Size-dispatched in checksum.rs; 1MB images currently report unsupported until a verified dump lands a routine."
+    "routine": "checksum.rs validate_me7_checksums / correct_me7_checksums (Tauri commands)"
   },
   "security_access": {
     "type": "KWP 0x27 seed/key",
@@ -44,14 +44,14 @@
       "driver_wish": "0x18000"
     }
   },
-  "notes": "Starter family for 1MB ME7 dumps. Confirm OS on your own bench read. Personal dumps only. Unverified catalog entry. Refusing live write and checksum correction.",
+  "notes": "Starter family for 1MB ME7 dumps. ME7 additive checksum scaffold present but unverified. Confirm OS on your own bench read. Personal dumps only. Unverified catalog entry. Refusing live write.",
   "sources": [
-    "Community ME7.x dump size conventions (512KB/1MB); exact CS layout varies by SW — report-only until a measured table exists.",
+    "Community ME7.x dump size conventions (512KB/1MB); additive regions from public tuning knowledge (scaffold only).",
     "No XDF or logged flash session in this repo for ME7."
   ],
   "verified": {
     "identify_by_size": false,
-    "checksum": false,
+    "checksum": "experimental_scaffold",
     "seed_key": false,
     "write": false,
     "hardware_bench": false
@@ -67,8 +67,8 @@
       "source": "No read/backup path exposed in the UI for this family. No dump, logged session or cited document for this in reference/."
     },
     "checksum": {
-      "status": "report_only",
-      "source": "Report-only. correct_checksums refuses 1 MB images (no verified ME7 routine)."
+      "status": "experimental",
+      "source": "16-bit additive scaffold in checksum.rs (regions 0x10000-0x1FFFF, 0x20000-0x2FFFF). Unverified against real dump. correct_me7_checksums_cmd available offline; no write path."
     },
     "seed_key": {
       "status": "not_supported",
