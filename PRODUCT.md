@@ -1,6 +1,6 @@
 # TuneItVerse Product Direction
 
-**Updated:** 2026-11-15 (v3.62.1: build fixed; bulk Mode 23 dumps are PartialDidOnly and cannot unlock a write. Earlier, v3.61.0: value sheet of extracted cell changes. Unread addresses are not compared. Still not bench-tested on a vehicle. Installers unsigned unless a certificate is configured.)  
+**Updated:** 2026-11-16 (v3.63.0: ME7 additive checksum scaffold documented as experimental in DB; unverified, no write. Earlier: build fixed; bulk Mode 23 dumps are PartialDidOnly and cannot unlock a write. Still not bench-tested on a vehicle. Installers unsigned unless a certificate is configured.)  
 **Status:** Software-first. VerseLink Apex PCB work is parked.
 
 ## Decision
@@ -11,8 +11,9 @@ VerseLink Apex remains a future hardware option only if a third party builds it 
 
 ## What ships today
 
-TuneItVerse v3.62.1 on Windows:
+TuneItVerse v3.63.0 on Windows:
 
+- ME7 additive checksum scaffold (experimental, public-knowledge regions, unverified against dumps)
 - Value sheet cites extracted stock and tuned cells for loaded tables. An address that does not resolve is skipped. `write_allowed` stays false
 - Trim report cites logged trim percent and does not emit a calibration value. Three-way compare classifies stock, the working tune, and a third dump. `write_allowed` stays false
 - Per-cell STFT accept, dashboard hit selects the open map cell, cancel for backup / scan / flash, one workspace JSON project file, and a log explainer that cites rows
@@ -47,6 +48,7 @@ See `reference/adapters/supported_adapters.json`.
 | EDC16C41 | Nissan Patrol GU ZD30CRD | Off (checksum report-only; signature block) |
 | GM_P59 / GM_P10 / GM_P12 | GM PCMs | Identify only (PcmHammer PcmInfo.cs) |
 | TRANSTRON_4HK1 | Isuzu FRR 4HK1 | Catalog only until a personal dump + protocol notes land |
+| ME7_COMMON | VW/Audi 1.8T | Off (checksum experimental scaffold only) |
 
 Everything else in the catalog is identify / map-hint only. No fake write flags. The in-app Capabilities page lists every family's per-capability status and source.
 
