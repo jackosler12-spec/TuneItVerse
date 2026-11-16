@@ -15,6 +15,7 @@ Usage:
   python3 python/ecu_scripting.py profile path/to/dump.bin
   python3 python/ecu_scripting.py hex path/to/dump.bin 0 256
   python3 python/ecu_scripting.py report path/to/dump.bin
+  python3 python/ecu_scripting.py me7cs path/to/me7.bin
 """
 
 from __future__ import annotations
@@ -77,7 +78,42 @@ def checksum_report(data: bytes) -> str:
         lines.append("P01 CS1 uses the image segment table; do not use the old 64KB invented blocks.")
     elif len(data) == EDC16:
         lines.append("EDC16C41 flash checksum is report-only in-app (no public multipoint layout).")
+    elif len(data) == 1048576:
+        lines.append("ME7: use me7cs command for experimental additive scaffold report.")
     return "\n".join(lines)
+
+
+def me7_checksum_report(data: bytes) -> dict:
+    """Experimental ME7 16-bit additive scaffold matching checksum.rs regions.
+    Unverified against real dumps. Does not patch the image.
+    """
+    if len(data) != 1048576:
+        return {"error": "ME7 scaffold expects 1MB image", "write_allowed": False}
+    regions = [
+        ("region_10000", 0x10000, 0x1FFFF),
+        ("region_20000", 0x20000, 0x2FFFF),
+    ]
+    results = []
+    for name, start, end in regions:
+        if end >= len(data):
+            results.append({"name": name, "valid": False, "note": "region out of range"})
+            continue
+        # sum excluding the last word, check if total == 0
+        sum_excl = sum16_be(data, start, end - 2)
+        stored = int.from_bytes(data[end-1:end+1], "big") if end+1 <= len(data) else 0
+        # Actually for additive, the stored is the correction so sum including it is 0
+        total = sum16_be(data, start, end)
+        valid = total == 0
+        results.append({
+            "name": name,
+            "start": hex(start),
+            "end": hex(end),
+            "stored_cs": f"{stored:04X}",
+            "region_sum": f"{total:04X}",
+            "valid": valid,
+            "note": "experimental scaffold — unverified"
+        })
+    return {"regions": results, "experimental": True, "write_allowed": False, "source": "checksum.rs ME7 scaffold"}
 
 
 def p01_key(seed: int, level: int) -> int:
@@ -280,7 +316,7 @@ def explain_dtc(code: str) -> dict:
 
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description="TuneItVerse bench helper")
-    parser.add_argument("command", choices=["checksum", "identify", "seedkey", "p01cmp", "diff", "adapters", "profile", "hex", "report", "logsummary", "dtc"])
+    parser.add_argument("command", choices=["checksum", "identify", "seedkey", "p01cmp", "diff", "adapters", "profile", "hex", "report", "logsummary", "dtc", "me7cs"])
     parser.add_argument("bin_path", nargs="?")
     parser.add_argument("seed_hex", nargs="?")
     parser.add_argument("level", nargs="?", default="1")
@@ -321,6 +357,12 @@ def main(argv: list[str]) -> int:
         if not code:
             raise SystemExit("dtc P0087")
         print(explain_dtc(code))
+        return 0
+    if args.command == "me7cs":
+        if not args.bin_path:
+            raise SystemExit("me7cs path/to/me7.bin")
+        data = pathlib.Path(args.bin_path).read_bytes()
+        print(me7_checksum_report(data))
         return 0
     if not args.bin_path:
         raise SystemExit("bin_path required")
