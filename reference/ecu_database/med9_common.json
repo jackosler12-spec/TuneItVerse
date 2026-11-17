@@ -1,0 +1,80 @@
+{
+  "ecu_family": "MED9_COMMON",
+  "display_name": "Bosch MED9 (common gasoline, VW/Audi/Porsche community)",
+  "part_numbers_or_os_ids": [
+    "MED9.1",
+    "MED9.5",
+    "06F 906 032",
+    "03H 906 032"
+  ],
+  "vehicles": [
+    "VW Golf/GTI 2.0T FSI",
+    "Audi A4/A6 2.0T",
+    "Porsche Cayenne early",
+    "community MED9 swaps"
+  ],
+  "hardware": "Bosch MED9.x (29F800 or similar flash)",
+  "protocol": "CAN/UDS or KWP2000",
+  "bin_size_bytes": 2097152,
+  "flash_memory_map": {
+    "full_flash": "2MB typical for MED9",
+    "cal_region": "Confirm against personal dump; community maps vary by SW version"
+  },
+  "checksum": {
+    "type": "bosch_med9_block_additive_or_crc",
+    "description": "MED9 families commonly use multi-region additive or CRC checksums over cal and code blocks. Exact layout is SW-specific. Report-only until a verified personal dump lands a routine.",
+    "reference_files": [],
+    "routine": "Size-dispatched; 2MB images report unsupported for correction.",
+    "notes": "Community knowledge only. No corrector implemented."
+  },
+  "security_access": {
+    "type": "UDS 0x27 or KWP seed/key",
+    "reference": "security.rs Bosch dispatch + extensible tables",
+    "levels": [
+      "Level 1 diagnostic",
+      "Level 2 programming"
+    ]
+  },
+  "maps_and_xdf": {
+    "has_xdf": false,
+    "description": "Community MED9 maps: requested torque, ignition, lambda, boost. Addresses are starting hints only.",
+    "refined_map_addrs": {
+      "ignition_timing": "0x1C000",
+      "fuel_target": "0x1A000",
+      "boost": "0x22000",
+      "driver_wish": "0x18000"
+    }
+  },
+  "notes": "Starter catalog entry for 2MB MED9 dumps. Confirm OS and layout on your own bench read. Personal dumps only. Unverified. Refusing live write and checksum correction.",
+  "sources": [
+    "Community MED9 dump size conventions (2MB common); exact CS and map layout vary by SW — report-only until measured.",
+    "No XDF, dump, or logged flash session in this repo for MED9."
+  ],
+  "hardware_tested": false,
+  "capabilities": {
+    "identify": {
+      "status": "unverified",
+      "source": "BIN size / OS-string tokens only. Sizes collide across catalog families. No dump or cited document for this family in reference/."
+    },
+    "read": {
+      "status": "not_supported",
+      "source": "No FullImage or verified bulk read path for MED9. Windowed probes only."
+    },
+    "checksum": {
+      "status": "report_only",
+      "source": "No verified corrector. correct_checksums refuses. Community additive/CRC knowledge only."
+    },
+    "seed_key": {
+      "status": "not_supported",
+      "source": "No dump-derived seed/key table. security.rs refuses unverified algorithms."
+    },
+    "write": {
+      "status": "not_supported",
+      "source": "Not in write_families(). Guided flash refuses."
+    },
+    "map_hints": {
+      "status": "unverified",
+      "source": "Placeholder addresses from community knowledge. Not from a dump or definition file. Confirm against your own dump + XDF before editing."
+    }
+  }
+}
