@@ -18,7 +18,7 @@ npm run build    # release desktop binary + copy TuneItVerse.exe to this folder
 
 After every release build, `TuneItVerse.exe` is copied to the repository root (this folder). Double-click that file to run the current version.
 
-**v3.49.0**: Maps page has working Table CSV export and import. Offline tools remain fully operational. Hardware paths still untested.
+**v3.63.0**: Added MED9_COMMON catalog family (unverified, report-only). Offline tools remain fully operational. Hardware paths still untested.
 
 Bench helper for personal dumps:
 ```bash
@@ -40,23 +40,17 @@ Live data over ELM327/OBDLink reads the ECU's Mode 01 support masks first and po
 
 Data Logging can import a CSV (including Car Scanner's long `SECONDS;PID;VALUE` export; GPS columns are dropped), replay it, and cite logged STFT/LTFT percent. That report does not emit a calibration value. Compare lists changed ranges, and a three-way report classifies stock, the working tune, and a third dump. None of these paths writes a calibration.
 
-## Current status (v3.62.1)
+## Current status (v3.63.0)
 
+- v3.63.0: ECU database expanded with Bosch MED9_COMMON (catalog only, report-only checksum, no write). All prior fail-closed gates unchanged. Not hardware-tested.
 - v3.62.1: Build fixed (duplicate command macros, ME7 borrow error, unregistered commands, version sync). A bulk Mode 23 dump is `PartialDidOnly` again and the write gate refuses it. Only the P01 Mode 3C verified read-back gives `FullImage`. Not hardware-tested.
 - v3.62.0: Value sheet lists extracted cell changes for every loaded table. An address that does not resolve is not compared, and no placeholder number is shown. Cell delta uses the same refusal. Not hardware-tested. Installers stay unsigned unless a certificate is configured.
-- v3.59.0: Trim report cites logged trim percent and does not emit a multiplier. Map-from-log names the mean RPM/MAP bin `mean_cell`. Flash and live-compare errors stay in their own words instead of a `Not connected:` prefix. Compare prints a three-way stock / tune / other report and does not patch a BIN. Not hardware-tested. Installers stay unsigned unless a certificate is configured.
-- v3.58.0: STFT accept is one cell at a time. Dashboard hit cells select the open map cell. Backup, Nissan scan, and guided flash can be cancelled, and a cancel is not a success. Workspace export/import keeps stock, tune, definition, log, notes, and the capability snapshot in the same JSON file. The log explainer cites rows and does not emit a calibration value. Installers can be signed only when a certificate is configured; this release is unsigned. Not hardware-tested.
-- v3.57.0: Connect can open a checked-in ELM trace as a replay fixture. Status says replay, not a vehicle. Flash write, unlock, and DTC clear stay refused. Not hardware-tested.
-- v3.56.0: Maps shows definition coverage (editable, read-only, skipped). Compare writes a change report with table names and exports it as text. Neither path writes a BIN. Not hardware-tested.
-- v3.55.0: DTC read, freeze frame, and live verify fail closed. A disconnected adapter is an error, not an empty code list or a soft "verify note". Not hardware-tested.
-- v3.51.0: Live Dashboard view — gauges, time-series chart, X/Y scatter and hits-per-map-cell grid from the logger buffer (Mode 01 / imported CSV). Read-only, not hardware-tested.
-
 
 This is the honest summary. [COMPLETION.md](COMPLETION.md) has the full log, and the in-app **Capabilities** page shows the per-family matrix with a source for every status.
 
 **Operational offline:**
 - BIN, text TunerPro XDF and A2L load and edit. The XDF reader supports BASEOFFSET, categories, signed / LSB-first / column-major cells and linear scaling math. 32-bit float cells are read and edited; embedded X/Y axes are read from the BIN; strided tables are read-only (layout interpretation unverified). Non-linear math, 64-bit floats and minor strides are refused or skipped and listed.
-- Table grid with 3D orbit view, undo/redo, copy/paste, interpolate/smooth, and diff highlight against the loaded and reference BIN. **New: Export current table to CSV.**
+- Table grid with 3D orbit view, undo/redo, copy/paste, interpolate/smooth, and diff highlight against the loaded and reference BIN. Table CSV export and import.
 - BIN compare.
 - Recent files and an unsaved-changes guard.
 - Offline DTC explain.
@@ -75,7 +69,7 @@ This is the honest summary. [COMPLETION.md](COMPLETION.md) has the full log, and
 
 **EDC16C41:** Identify + measured 4-byte seed/key. Checksum is **report-only**: an RSA-like 136-byte signature block at 0x1FDF78 is detected on 392203 images. No flash segment, no write.
 
-**Everything else in the catalog:** identify / report-only / unverified map hints. No write. Hardware paths (ELM/J2534/STN) are not bench-tested on this tree.
+**Everything else in the catalog (including new MED9_COMMON):** identify / report-only / unverified map hints. No write. Hardware paths (ELM/J2534/STN) are not bench-tested on this tree.
 
 Tests: `cargo test --lib` from `src-tauri/`, and `npm test` (frontend consistency check). Set `TIV_P01_BIN=/path/to/your/p01.bin` to also run the private-dump checksum tests; the dump is never committed.
 
