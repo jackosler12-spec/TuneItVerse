@@ -15,6 +15,7 @@ Usage:
   python3 python/ecu_scripting.py profile path/to/dump.bin
   python3 python/ecu_scripting.py hex path/to/dump.bin 0 256
   python3 python/ecu_scripting.py report path/to/dump.bin
+  python3 python/ecu_scripting.py strings path/to/dump.bin
 """
 
 from __future__ import annotations
@@ -25,6 +26,7 @@ import pathlib
 import sys
 import hashlib
 import zlib
+import re
 
 
 P01_128 = 131072
@@ -187,6 +189,13 @@ def hex_window(data: bytes, offset: int, length: int) -> str:
     return "\n".join(lines)
 
 
+def extract_strings(data: bytes, min_len: int = 4) -> list[str]:
+    """Extract printable ASCII strings of min_len or longer. Useful for OS IDs, part numbers."""
+    pattern = rb'[ -~]{' + str(min_len).encode() + rb',}'
+    matches = re.findall(pattern, data)
+    return [m.decode('ascii', errors='ignore') for m in matches]
+
+
 def diff_report(a: bytes, b: bytes) -> str:
     if len(a) != len(b):
         return f"# BIN diff\n\nImages differ in length ({len(a)} vs {len(b)}).\n"
@@ -256,8 +265,15 @@ def log_summary(csv_text: str) -> dict:
 DTC_TEXT = {
     "P0300": "Random/multiple cylinder misfire detected",
     "P0301": "Cylinder 1 misfire detected",
+    "P0302": "Cylinder 2 misfire detected",
+    "P0303": "Cylinder 3 misfire detected",
+    "P0304": "Cylinder 4 misfire detected",
+    "P0305": "Cylinder 5 misfire detected",
+    "P0306": "Cylinder 6 misfire detected",
     "P0171": "System too lean (Bank 1)",
     "P0172": "System too rich (Bank 1)",
+    "P0174": "System too lean (Bank 2)",
+    "P0175": "System too rich (Bank 2)",
     "P0087": "Fuel rail/system pressure too low",
     "P0088": "Fuel rail/system pressure too high",
     "P0234": "Turbocharger/supercharger overboost condition",
@@ -266,7 +282,9 @@ DTC_TEXT = {
     "P2263": "Turbocharger/supercharger boost system performance",
     "P0101": "MAF circuit range/performance",
     "P0117": "Engine coolant temperature circuit low input",
+    "P0118": "Engine coolant temperature circuit high input",
     "P0562": "System voltage low",
+    "P0563": "System voltage high",
 }
 
 
@@ -280,7 +298,7 @@ def explain_dtc(code: str) -> dict:
 
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description="TuneItVerse bench helper")
-    parser.add_argument("command", choices=["checksum", "identify", "seedkey", "p01cmp", "diff", "adapters", "profile", "hex", "report", "logsummary", "dtc"])
+    parser.add_argument("command", choices=["checksum", "identify", "seedkey", "p01cmp", "diff", "adapters", "profile", "hex", "report", "logsummary", "dtc", "strings"])
     parser.add_argument("bin_path", nargs="?")
     parser.add_argument("seed_hex", nargs="?")
     parser.add_argument("level", nargs="?", default="1")
@@ -334,10 +352,18 @@ def main(argv: list[str]) -> int:
         off = int(args.seed_hex or "0", 0)
         length = int(args.level or "256", 0)
         print(hex_window(data, off, length))
+    elif args.command == "strings":
+        strs = extract_strings(data)
+        print(f"Found {len(strs)} strings (min 4 chars):")
+        for s in strs[:100]:  # limit output
+            print(s)
+        if len(strs) > 100:
+            print(f"... and {len(strs)-100} more")
     elif args.command == "report":
         ident = identify(data)
         cs = checksum_report(data)
         prof = profile(data)
+        strs = extract_strings(data)[:20]
         print(
             "\n".join(
                 [
@@ -349,6 +375,7 @@ def main(argv: list[str]) -> int:
                     f"- Identify: {ident}",
                     f"- Checksum: {cs}",
                     f"- Profile: {prof}",
+                    f"- Sample strings: {strs}",
                 ]
             )
         )
