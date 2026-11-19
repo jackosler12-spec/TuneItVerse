@@ -1,3 +1,14 @@
+# TuneItVerse v3.63.0 (fix) — UI restored, Cargo.lock synced
+
+## v3.63.0 fix
+
+- **UI restored.** Commit `39afbd8` ("bump index.html version strings to 3.63.0") replaced 456 lines of `src/index.html` with a placeholder comment. That removed the Connect, Logging, DTC, Tables, Flash and other views, and left `main.js` bound to about 73 element IDs that no longer existed. `src/index.html` is restored from `39afbd8^`, which matches v3.62.1 (`522a635`). The only change is the three version strings, now 3.63.0. No later commit touched `index.html`.
+- **ID binding check (scripted).** Of the 82 IDs `main.js` looks up, 69 exist in `index.html`. Seven of the other 13 are created by `main.js` at runtime. The remaining six (`log-section`, `side-meta`, `side-advice`, `side-checksum`, `flash-bar`, `flash-progress`) were also missing in v3.62.1, and every use is null-guarded. They are optional, not broken.
+- **Version sync.** `Cargo.lock` was still at 3.62.1 while `Cargo.toml` was at 3.63.0, so CI's `cargo --locked` failed. `scripts/bump-version.js 3.63.0` was re-run, and only the package's own lock entry changed. `main.js`, the banner in `lib.rs`, the installer, `tauri.conf.json`, `package.json` and `index.html` now all read 3.63.0.
+- No Rust logic, write gate or flash path changed.
+
+**Not hardware-tested.**
+
 # TuneItVerse v3.62.1 — build fix + backup gate restored to fail-closed
 
 ## v3.62.1 changes
