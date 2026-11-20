@@ -1,6 +1,7 @@
 //! Windowed live readback. No import of flash.rs (avoids a module cycle).
 use serialport::SerialPort;
 use crate::vpw::{request_response, build_mode3c_read_block, parse_mode3c_response};
+use std::time::{Duration, Instant};
 
 #[derive(Debug, Clone)]
 pub struct LiveWindow { pub label: String, pub offset: usize, pub data: Vec<u8>, pub method: String }
@@ -128,7 +129,7 @@ pub fn attempt_live_backup(port: &mut Box<dyn SerialPort + Send>, ecu_family: &s
                 path: "bulk-mode23-full".into(),
                 bytes: full.len() as u32,
                 crc32: Some(crc),
-                notes: format!("{} bytes via repeated Mode 23. PartialDidOnly: not a verified full-image backup; write gate refuses it. Not hardware-tested.", full.len()),
+                notes: format!("{} bytes via repeated Mode 23 with session prep. PartialDidOnly: not a verified full-image backup; write gate refuses it. Not hardware-tested.", full.len()),
             };
         }
     }
@@ -175,8 +176,10 @@ mod family_plan_tests {
 }
 
 /// Attempt a full-image bulk dump via repeated UDS Mode 23 (ReadMemoryByAddress).
-/// Chunks of 128 bytes. Returns Ok(full_image) only if every chunk succeeds and total == expected_len.
-/// Otherwise Err with reason. Honest: many ECUs refuse large ranges or require programming session + unlock.
+/// Enters extended/programming session first, keeps session alive, chunks of 128 bytes.
+/// Returns Ok(full_image) only if every chunk succeeds and total == expected_len.
+/// Otherwise Err with reason. Honest: many ECUs refuse large ranges or require security unlock.
+/// Still labelled PartialDidOnly by the write gate. Not hardware-tested.
 pub fn bulk_mode23_dump(
     port: &mut Box<dyn SerialPort + Send>,
     ecu_family: &str,
@@ -190,11 +193,19 @@ pub fn bulk_mode23_dump(
     if proto != LiveProto::BoschUdsKwp {
         return Err("Bulk Mode 23 dump only for Bosch/UDS families in this pass".into());
     }
+    logs.push(format!("Preparing programming environment for {} bulk dump", ecu_family));
+    if let Err(e) = crate::uds::prepare_programming_environment(port, true, false) {
+        logs.push(format!("Session prep failed (continuing anyway): {}", e));
+    } else {
+        logs.push("Extended/programming session entered".into());
+    }
     let chunk = 128u32;
     let mut image = vec![0u8; expected_len];
     let mut collected = 0usize;
+    let mut last_tp = Instant::now();
     logs.push(format!("Starting bulk Mode 23 dump for {} ({} bytes, base 0x{:X})", ecu_family, expected_len, base_addr));
     for off in (0..expected_len).step_by(chunk as usize) {
+        crate::uds::keep_alive_if_due(port, &mut last_tp, Duration::from_secs(2), true);
         let addr = base_addr.saturating_add(off as u32);
         let this_len = ((expected_len - off) as u32).min(chunk);
         match crate::uds::read_memory_by_address(port, crate::uds::Alfi::ADDR4_SIZE2, addr, this_len, true) {
@@ -207,10 +218,12 @@ pub fn bulk_mode23_dump(
             }
             Ok(data) => {
                 logs.push(format!("Short response at 0x{:X}: got {} expected {}", addr, data.len(), this_len));
+                let _ = crate::uds::restore_default_environment(port, true);
                 return Err(format!("Incomplete bulk dump: short chunk at offset 0x{:X}", off));
             }
             Err(e) => {
                 logs.push(format!("Mode 23 failed at 0x{:X}: {}", addr, e));
+                let _ = crate::uds::restore_default_environment(port, true);
                 return Err(format!("Bulk dump aborted at offset 0x{:X}: {}", off, e));
             }
         }
@@ -218,6 +231,7 @@ pub fn bulk_mode23_dump(
             logs.push(format!("Progress: {} / {} bytes", collected, expected_len));
         }
     }
+    let _ = crate::uds::restore_default_environment(port, true);
     if collected == expected_len {
         logs.push(format!("Bulk Mode 23 dump complete: {} bytes collected", collected));
         Ok(image)
