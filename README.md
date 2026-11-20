@@ -18,7 +18,7 @@ npm run build    # release desktop binary + copy TuneItVerse.exe to this folder
 
 After every release build, `TuneItVerse.exe` is copied to the repository root (this folder). Double-click that file to run the current version.
 
-**v3.63.0**: Enhanced bench CLI with string extraction for better OS/part number identification from dumps. Offline tools remain fully operational. Hardware paths still untested.
+**v3.64.0**: Enhanced bulk Mode 23 dump for UDS/Bosch families now prepares extended/programming session, keeps session alive with tester present, and logs progress. Still PartialDidOnly (write gate refuses it as FullImage). Offline tools remain fully operational. Hardware paths still untested.
 
 Bench helper for personal dumps:
 ```bash
@@ -41,8 +41,9 @@ Live data over ELM327/OBDLink reads the ECU's Mode 01 support masks first and po
 
 Data Logging can import a CSV (including Car Scanner's long `SECONDS;PID;VALUE` export; GPS columns are dropped), replay it, and cite logged STFT/LTFT percent. That report does not emit a calibration value. Compare lists changed ranges, and a three-way report classifies stock, the working tune, and a third dump. None of these paths writes a calibration.
 
-## Current status (v3.63.0)
+## Current status (v3.64.0)
 
+- v3.64.0: Bulk Mode 23 dump for UDS families now enters programming session and uses keep-alive. Progress logged. Still PartialDidOnly; not FullImage. Not hardware-tested.
 - v3.63.0: Enhanced bench tools for string extraction and identification. Version sync across package.json, Cargo, tauri.conf, installer. Offline operational completeness confirmed for supported features. Not hardware-tested.
 - v3.62.1: Build fixed (duplicate command macros, ME7 borrow error, unregistered commands, version sync). A bulk Mode 23 dump is `PartialDidOnly` again and the write gate refuses it. Only the P01 Mode 3C verified read-back gives `FullImage`. Not hardware-tested.
 - v3.62.0: Value sheet lists extracted cell changes for every loaded table. An address that does not resolve is not compared, and no placeholder number is shown. Cell delta uses the same refusal. Not hardware-tested. Installers stay unsigned unless a certificate is configured.
