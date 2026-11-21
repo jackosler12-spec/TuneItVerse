@@ -1,6 +1,6 @@
 # TuneItVerse Product Direction
 
-**Updated:** 2026-11-19 (v3.63.0: version sync, enhanced bench tools for string extraction and identification. Still not bench-tested on a vehicle. Installers unsigned unless a certificate is configured.)  
+**Updated:** 2026-11-21 (v3.64.0: enhanced report-only bench CRC and DTC tools, version sync. Still not bench-tested on a vehicle. Installers unsigned unless a certificate is configured.)  
 **Status:** Software-first. VerseLink Apex PCB work is parked.
 
 ## Decision
@@ -11,7 +11,7 @@ VerseLink Apex remains a future hardware option only if a third party builds it 
 
 ## What ships today
 
-TuneItVerse v3.63.0 on Windows:
+TuneItVerse v3.64.0 on Windows:
 
 - Value sheet cites extracted stock and tuned cells for loaded tables. An address that does not resolve is skipped. `write_allowed` stays false
 - Trim report cites logged trim percent and does not emit a calibration value. Three-way compare classifies stock, the working tune, and a third dump. `write_allowed` stays false
@@ -26,7 +26,7 @@ TuneItVerse v3.63.0 on Windows:
 - Offline seed/key for GM 2-byte tables and dump-derived `seed_tables.json` pairs
 - Map-from-log occupancy. The mean RPM/MAP bin is `mean_cell`. It does not emit a VE value or a calibration factor
 - Official adapter list in the Connect page
-- Enhanced bench CLI: string extraction from BINs for better identification of OS/part numbers
+- Enhanced bench CLI: report-only whole-image CRC32, expanded DTC descriptions, string extraction
 
 ## Official adapters (now)
 
