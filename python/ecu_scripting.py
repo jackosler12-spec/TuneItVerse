@@ -16,6 +16,7 @@ Usage:
   python3 python/ecu_scripting.py hex path/to/dump.bin 0 256
   python3 python/ecu_scripting.py report path/to/dump.bin
   python3 python/ecu_scripting.py strings path/to/dump.bin
+  python3 python/ecu_scripting.py crc path/to/dump.bin
 """
 
 from __future__ import annotations
@@ -196,6 +197,17 @@ def extract_strings(data: bytes, min_len: int = 4) -> list[str]:
     return [m.decode('ascii', errors='ignore') for m in matches]
 
 
+def whole_crc32(data: bytes) -> dict:
+    """Report-only whole-image CRC32. Does not invent per-family regions or correct anything."""
+    crc = zlib.crc32(data) & 0xFFFFFFFF
+    return {
+        "bytes": len(data),
+        "crc32_hex": f"{crc:08X}",
+        "note": "Whole-image CRC32 only. Not a family checksum. Report-only. Does not enable write.",
+        "write_allowed": False,
+    }
+
+
 def diff_report(a: bytes, b: bytes) -> str:
     if len(a) != len(b):
         return f"# BIN diff\n\nImages differ in length ({len(a)} vs {len(b)}).\n"
@@ -270,6 +282,8 @@ DTC_TEXT = {
     "P0304": "Cylinder 4 misfire detected",
     "P0305": "Cylinder 5 misfire detected",
     "P0306": "Cylinder 6 misfire detected",
+    "P0307": "Cylinder 7 misfire detected",
+    "P0308": "Cylinder 8 misfire detected",
     "P0171": "System too lean (Bank 1)",
     "P0172": "System too rich (Bank 1)",
     "P0174": "System too lean (Bank 2)",
@@ -285,6 +299,12 @@ DTC_TEXT = {
     "P0118": "Engine coolant temperature circuit high input",
     "P0562": "System voltage low",
     "P0563": "System voltage high",
+    "P0011": "Camshaft position timing over-advanced (Bank 1)",
+    "P0014": "Camshaft position timing over-retarded (Bank 1)",
+    "P0420": "Catalyst system efficiency below threshold (Bank 1)",
+    "P0430": "Catalyst system efficiency below threshold (Bank 2)",
+    "P0442": "Evaporative emission control system leak detected (small leak)",
+    "P0455": "Evaporative emission control system leak detected (gross leak)",
 }
 
 
@@ -298,7 +318,7 @@ def explain_dtc(code: str) -> dict:
 
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description="TuneItVerse bench helper")
-    parser.add_argument("command", choices=["checksum", "identify", "seedkey", "p01cmp", "diff", "adapters", "profile", "hex", "report", "logsummary", "dtc", "strings"])
+    parser.add_argument("command", choices=["checksum", "identify", "seedkey", "p01cmp", "diff", "adapters", "profile", "hex", "report", "logsummary", "dtc", "strings", "crc"])
     parser.add_argument("bin_path", nargs="?")
     parser.add_argument("seed_hex", nargs="?")
     parser.add_argument("level", nargs="?", default="1")
@@ -359,11 +379,14 @@ def main(argv: list[str]) -> int:
             print(s)
         if len(strs) > 100:
             print(f"... and {len(strs)-100} more")
+    elif args.command == "crc":
+        print(whole_crc32(data))
     elif args.command == "report":
         ident = identify(data)
         cs = checksum_report(data)
         prof = profile(data)
         strs = extract_strings(data)[:20]
+        crc = whole_crc32(data)
         print(
             "\n".join(
                 [
@@ -374,6 +397,7 @@ def main(argv: list[str]) -> int:
                     f"- Bytes: {len(data)}",
                     f"- Identify: {ident}",
                     f"- Checksum: {cs}",
+                    f"- Whole CRC32: {crc}",
                     f"- Profile: {prof}",
                     f"- Sample strings: {strs}",
                 ]
