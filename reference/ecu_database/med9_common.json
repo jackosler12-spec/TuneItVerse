@@ -1,0 +1,66 @@
+{
+  "ecu_family": "MED9_COMMON",
+  "display_name": "Bosch MED9 / MED9.1 gasoline (VW/Audi/others community)",
+  "part_numbers_or_os_ids": [
+    "common MED9.1 software versions",
+    "various VW 1.8T/2.0T applications"
+  ],
+  "vehicles": [
+    "VW/Audi 1.8T / 2.0T early turbo gasoline",
+    "Other Bosch MED9 platforms"
+  ],
+  "hardware": "Bosch MED9 (TriCore based)",
+  "protocol": "CAN / KWP2000 / UDS",
+  "bin_size_bytes": 2097152,
+  "checksum": {
+    "type": "bosch_med9_report_only",
+    "description": "Report-only. No verified multipoint checksum corrector in this tree. Community knowledge of CRC regions exists but not ported or verified against dumps here.",
+    "reference_files": [],
+    "notes": "Do not invent correction regions. Personal dump required for verification."
+  },
+  "security_access": {
+    "type": "Bosch seed/key (levels 1-3 typical)",
+    "reference": "Public community algorithms exist for some MED9 variants; not integrated or verified.",
+    "levels": [
+      "Level 1: basic access",
+      "Level 3: programming"
+    ]
+  },
+  "maps_and_xdf": {
+    "has_xdf": false,
+    "description": "No verified XDF or map addresses in-repo. Community definitions exist for fuel, ignition, boost. Use personal dump + TunerPro to create.",
+    "refined_map_addrs": null
+  },
+  "notes": "Catalog entry only. Identify by size and strings. No read, checksum corrector, seed/key implementation, or write path. Hardware untested. Add personal dump and cite sources to upgrade status.",
+  "sources": [
+    "Public tuning community knowledge of Bosch MED9 family (VW/Audi). No specific dump or log in reference/.",
+    "Generic Bosch UDS/KWP patterns in uds.rs / kwp.rs"
+  ],
+  "hardware_tested": false,
+  "capabilities": {
+    "identify": {
+      "status": "unverified",
+      "source": "Size 2MB common for MED9; string patterns for Bosch/MED9 not verified against dump in this tree."
+    },
+    "read": {
+      "status": "not_supported",
+      "source": "No FullImage or bulk Mode 23 path verified for MED9. Windowed probe only."
+    },
+    "checksum": {
+      "status": "report_only",
+      "source": "No corrector implemented. Report size and entropy only."
+    },
+    "seed_key": {
+      "status": "not_supported",
+      "source": "No algorithm tables for MED9 in seed_tables.json or security.rs."
+    },
+    "write": {
+      "status": "not_supported",
+      "source": "Not in write_families(). No flash segment defined."
+    },
+    "map_hints": {
+      "status": "unverified",
+      "source": "No refined_map_addrs or XDF with cited addresses."
+    }
+  }
+}
