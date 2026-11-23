@@ -1,3 +1,14 @@
+# TuneItVerse v3.64.0 — ECU DB expansion (MED9_COMMON)
+
+## v3.64.0 changes
+
+- Added Bosch MED9_COMMON family to the ECU database (catalog / unverified). Full schema, sources, capabilities (identify unverified, all others not_supported or report_only). Index updated to 1.28. Loader includes the new JSON. No write path, no checksum corrector, no invented maps.
+- Version bumped across package.json, Cargo, tauri.conf, installer, HTML/JS.
+- Offline BIN/XDF/A2L/logging/scripts remain fully operational. Hardware paths still untested. Experimental P01 write remains off by default.
+
+**Not hardware-tested.**
+
+
 # TuneItVerse v3.63.0 (fix) — UI restored, Cargo.lock synced
 
 ## v3.63.0 fix
