@@ -41,6 +41,13 @@ pub fn dialog_open_file(kind: String) -> Result<OpenFileResult, String> {
     }
 }
 
+/// Pick a folder (local definitions). Returns only the path; nothing is read here.
+#[tauri::command]
+pub fn dialog_pick_folder() -> Result<OpenFileResult, String> {
+    let Some(path) = rfd::FileDialog::new().set_title("Choose your local definitions folder").pick_folder() else { return Ok(cancelled()); };
+    Ok(OpenFileResult { cancelled: false, path: Some(path.display().to_string()), bytes: None, text: None })
+}
+
 #[tauri::command]
 pub fn dialog_save_bytes(data: Vec<u8>, default_name: Option<String>) -> Result<OpenFileResult, String> {
     let name = default_name.unwrap_or_else(|| "tuned.bin".into());

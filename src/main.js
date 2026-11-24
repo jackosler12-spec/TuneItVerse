@@ -1514,9 +1514,15 @@ async function applyDefinitionText(text, source) {
     return;
   }
   list = Array.isArray(defs) ? defs : parseMaybe(defs);
+  await applyDefinitionList(list, source, skipped);
+}
+
+// Shared tail for text definitions and pre-parsed lists (local definitions folder).
+async function applyDefinitionList(list, source, skipped) {
+  skipped = Array.isArray(skipped) ? skipped : [];
   if (!list || !list.length) {
     setTablesStatus((source || 'Definition') + ' parsed but no tables found.');
-    return;
+    return false;
   }
   currentTables = list;
   window.__tivSkipped = skipped;
@@ -1525,7 +1531,10 @@ async function applyDefinitionText(text, source) {
   renderTableList();
   const cov = await coverageNote(list, skipped);
   setTablesStatus((source || 'Definitions') + ' loaded: ' + list.length + ' tables. Select one to extract from the BIN.' + cov);
+  return true;
 }
+window.applyDefinitionText = applyDefinitionText;
+window.applyDefinitionList = applyDefinitionList;
 
 async function loadXdfFile() {
   setTablesStatus('Opening XDF / XML…');
@@ -2520,7 +2529,7 @@ function setupAll() {
   pollHealth();
   if (healthTimer) clearInterval(healthTimer);
   healthTimer = setInterval(pollHealth, 2500);
-  console.log('TuneItVerse UI v3.63.0');
+  console.log('TuneItVerse UI v3.64.0');
 }
 
 setupNav();
