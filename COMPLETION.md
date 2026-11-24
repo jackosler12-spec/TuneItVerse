@@ -1,3 +1,17 @@
+# TuneItVerse v3.64.0 — GM multi-family checksums + hash-checked local definitions
+
+## v3.64.0 changes
+
+- **GM checksums (`gm_checksums.rs`).** Identify, verify, and in-memory correction for P01/P59, P04 V6, P08/P10, LS1 97-98/P30, E38, E92/E92A, T43, Duramax E54 LB7 and E60 LLY, and the 96-97 Vortec blackbox. Segment bounds come from each image's own pointer tables. The engine covers CRC-16/ARC, CRC-32, and byte, word and dword sums with complement and byte swap. P01 reuses `checksum::p01_segments`, so P01 CS1 still has one source of truth, and a test checks the new engine matches the old validator and corrector byte for byte.
+- **Measured.** The opt-in corpus test (`TIV_GM_CS_CORPUS`, matched by SHA-256, images never committed) reproduces **267/267** stored checksums on 33 stock images. Corrupt-then-fail and fix-then-pass were run on every image. The OS ids read match the known OS ids, and identification picks the right family on all 33. Jack's private P01 dump (`TIV_P01_BIN`) agrees with the existing validator.
+- **No write gate changed.** `flash.rs` is untouched. Correction only produces bytes for "Export corrected copy" (Save As). It never replaces the open BIN and never flashes. P01 flashing stays behind the existing experimental gate. Every other family here is identify / verify only.
+- **Local definitions folder (`local_defs.rs`).** You pick a folder. Each `.xdf` is hashed and compared with `local_defs_manifest.json` (25 entries: SHA-256, file name, size, family, OS ids, tier, item count, source and licence notes; no content). That covers 24 definition files plus the earlier-approved hkaase 12225074 text XDF (`bc8f4076...`). Unlisted or changed files are refused, and the hash is checked again at load. Table flags come from the descriptions. Unconfirmed tables, heuristic candidates, and the 70 P04 tables whose row/column order was inferred by smoothness (43 column-major and 27 row-major, all inferred) are read-only via `patch_blocked`. Against the real folder, all 25 listed files loaded with the expected table counts, and an unlisted "Phoenix" XDF was refused.
+- **UI.** The Tables view has a "Local defs" group with Defs folder, GM checksums and Export corrected copy, plus a status panel. New Tauri commands are registered: `gm_checksum_families`, `gm_checksum_verify`, `gm_checksum_fix_export`, `local_defs_manifest`, `local_defs_scan`, `local_defs_load` and `dialog_pick_folder`. `window.applyDefinitionText` is now actually exported. v347's recent-file reopen called it, but it was never set.
+- **Licensing (for review).** No Universal Patcher (GPL-3.0) config, code or text is committed. The layouts are restated as functional facts in Rust, and the method is documented in `docs/GM_CHECKSUMS_AND_LOCAL_DEFS.md`. That is a judgment call for the owner. No XDF and no BIN is committed. The unlicensed P10 Phoenix and hkaase files load only from the user's own disk.
+- **Not done.** The TableSeek token bug fix (follow-up), P59 1MB images, LT1/LT4 and Ford checksums, the EFILive `.tun` decode, and re-exporting in the TunerCat short layout.
+
+**Not hardware-tested.** No adapter, bench ECU or vehicle was used. The checksum results come only from offline images.
+
 # TuneItVerse v3.63.0 (fix) — UI restored, Cargo.lock synced
 
 ## v3.63.0 fix

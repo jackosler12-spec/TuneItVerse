@@ -41,7 +41,9 @@ Live data over ELM327/OBDLink reads the ECU's Mode 01 support masks first and po
 
 Data Logging can import a CSV (including Car Scanner's long `SECONDS;PID;VALUE` export; GPS columns are dropped), replay it, and cite logged STFT/LTFT percent. That report does not emit a calibration value. Compare lists changed ranges, and a three-way report classifies stock, the working tune, and a third dump. None of these paths writes a calibration.
 
-## Current status (v3.63.0)
+## Current status (v3.64.0)
+
+- v3.64.0: GM segment checksums for P01/P59, P04, P08/P10, LS1 97-98, E38, E92/E92A, T43, Duramax E54/E60 and 96-97 Vortec (verify, plus export of a corrected copy; no flashing for any family beyond the existing gated P01 path). Local definitions folder: XDFs stay on your disk and load only when their SHA-256 matches the committed manifest. See docs/GM_CHECKSUMS_AND_LOCAL_DEFS.md. Not hardware-tested.
 
 - v3.63.0: Enhanced bench tools for string extraction and identification. Version sync across package.json, Cargo, tauri.conf, installer. Offline operational completeness confirmed for supported features. Not hardware-tested.
 - v3.62.1: Build fixed (duplicate command macros, ME7 borrow error, unregistered commands, version sync). A bulk Mode 23 dump is `PartialDidOnly` again and the write gate refuses it. Only the P01 Mode 3C verified read-back gives `FullImage`. Not hardware-tested.

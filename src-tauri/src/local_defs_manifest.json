@@ -1,0 +1,356 @@
+{
+ "schema": 1,
+ "description": "SHA-256 manifest for definitions loaded from a user-chosen local folder. Hashes and metadata only: no definition content is stored in this repository.",
+ "entries": [
+  {
+   "sha256": "e01f6e31815fad5c1ee8cdebcb0efac4db82821b0208e7a27179e42cc178211a",
+   "file_name": "15189044_unconfirmed.xdf",
+   "size": 54048,
+   "family": "GM_Duramax_E54_LB7",
+   "os_ids": [
+    "15189044"
+   ],
+   "tier": "heuristic",
+   "items": 36,
+   "source": "Heuristic axis+smoothness scan of stock images generated for this project (no third-party definition).",
+   "licence": "No third-party content; generated for personal use.",
+   "notes": "Candidates only: purpose unknown, raw values. Every table is forced read-only. Addresses are offsets in the full-size image (TunerCat / boot-less reads must be rebuilt first)."
+  },
+  {
+   "sha256": "58127b510d3d8b956daf30ae115e4ac8d8aa17e6be5fb1a5fe0f4ac0920d43c5",
+   "file_name": "15228758_unconfirmed.xdf",
+   "size": 139037,
+   "family": "GM_Duramax_E60_LLY",
+   "os_ids": [
+    "15228758"
+   ],
+   "tier": "heuristic",
+   "items": 95,
+   "source": "Heuristic axis+smoothness scan of stock images generated for this project (no third-party definition).",
+   "licence": "No third-party content; generated for personal use.",
+   "notes": "Candidates only: purpose unknown, raw values. Every table is forced read-only. Addresses are offsets in the full-size image (TunerCat / boot-less reads must be rebuilt first)."
+  },
+  {
+   "sha256": "0500ee9d3b0c94c63392ed4340d6d6de10ddabfc340c674f382ad9c6703be820",
+   "file_name": "12617569.xdf",
+   "size": 139377,
+   "family": "GM_E38",
+   "os_ids": [
+    "12617569"
+   ],
+   "tier": "confirmed",
+   "items": 44,
+   "source": "Table addresses located by running Universal Patcher TableSeek packs (joukoy/UniversalPatcher, GPL-3.0); names/descriptions come from those packs. Not bundled with TuneItVerse; load from your own folder.",
+   "licence": "Derived from GPL-3.0 TableSeek packs. Not bundled.",
+   "notes": "Addresses are offsets in the full-size image (TunerCat / boot-less reads must be rebuilt first)."
+  },
+  {
+   "sha256": "70c6e33eecb18cfd1a2e777e96596929b5043a410cccaba1dd3b224d052387e7",
+   "file_name": "12619078.xdf",
+   "size": 141634,
+   "family": "GM_E38",
+   "os_ids": [
+    "12619078"
+   ],
+   "tier": "confirmed",
+   "items": 44,
+   "source": "Table addresses located by running Universal Patcher TableSeek packs (joukoy/UniversalPatcher, GPL-3.0); names/descriptions come from those packs. Not bundled with TuneItVerse; load from your own folder.",
+   "licence": "Derived from GPL-3.0 TableSeek packs. Not bundled.",
+   "notes": "Addresses are offsets in the full-size image (TunerCat / boot-less reads must be rebuilt first)."
+  },
+  {
+   "sha256": "faa1b8d7dd47b8ca37921aa4bbe9bff9e989665a7ecbafbfd89f7cc908bcddd3",
+   "file_name": "12628990.xdf",
+   "size": 137146,
+   "family": "GM_E38",
+   "os_ids": [
+    "12628990"
+   ],
+   "tier": "confirmed",
+   "items": 43,
+   "source": "Table addresses located by running Universal Patcher TableSeek packs (joukoy/UniversalPatcher, GPL-3.0); names/descriptions come from those packs. Not bundled with TuneItVerse; load from your own folder.",
+   "licence": "Derived from GPL-3.0 TableSeek packs. Not bundled.",
+   "notes": "Addresses are offsets in the full-size image (TunerCat / boot-less reads must be rebuilt first)."
+  },
+  {
+   "sha256": "c0a5ed8cd8a4aeeda281a5deed421a2fad9f636ebc35bfcdcaa6830c8f62a7d0",
+   "file_name": "12663390.xdf",
+   "size": 7996,
+   "family": "GM_E92",
+   "os_ids": [
+    "12663390"
+   ],
+   "tier": "confirmed",
+   "items": 3,
+   "source": "Table addresses located by running Universal Patcher TableSeek packs (joukoy/UniversalPatcher, GPL-3.0); names/descriptions come from those packs. Not bundled with TuneItVerse; load from your own folder.",
+   "licence": "Derived from GPL-3.0 TableSeek packs. Not bundled.",
+   "notes": "Addresses are offsets in the full-size image (TunerCat / boot-less reads must be rebuilt first)."
+  },
+  {
+   "sha256": "24e4043193ae4026ff105558d8b3ed9b33480e8b46b8933390dfcb147a270b80",
+   "file_name": "12663436.xdf",
+   "size": 7998,
+   "family": "GM_E92",
+   "os_ids": [
+    "12663436"
+   ],
+   "tier": "confirmed",
+   "items": 3,
+   "source": "Table addresses located by running Universal Patcher TableSeek packs (joukoy/UniversalPatcher, GPL-3.0); names/descriptions come from those packs. Not bundled with TuneItVerse; load from your own folder.",
+   "licence": "Derived from GPL-3.0 TableSeek packs. Not bundled.",
+   "notes": "Addresses are offsets in the full-size image (TunerCat / boot-less reads must be rebuilt first)."
+  },
+  {
+   "sha256": "6500cf0b2797fb6d87ca48ed05f8069c1d691aae834dee79fc0ee59575e30795",
+   "file_name": "12670743.xdf",
+   "size": 8022,
+   "family": "GM_E92",
+   "os_ids": [
+    "12670743"
+   ],
+   "tier": "confirmed",
+   "items": 3,
+   "source": "Table addresses located by running Universal Patcher TableSeek packs (joukoy/UniversalPatcher, GPL-3.0); names/descriptions come from those packs. Not bundled with TuneItVerse; load from your own folder.",
+   "licence": "Derived from GPL-3.0 TableSeek packs. Not bundled.",
+   "notes": "Addresses are offsets in the full-size image (TunerCat / boot-less reads must be rebuilt first)."
+  },
+  {
+   "sha256": "89975eec4e42bc40e23bab6c128e2a939d6090726d057d74cd2b4c8daf1e8ac3",
+   "file_name": "12672612.xdf",
+   "size": 8013,
+   "family": "GM_E92",
+   "os_ids": [
+    "12672612"
+   ],
+   "tier": "confirmed",
+   "items": 3,
+   "source": "Table addresses located by running Universal Patcher TableSeek packs (joukoy/UniversalPatcher, GPL-3.0); names/descriptions come from those packs. Not bundled with TuneItVerse; load from your own folder.",
+   "licence": "Derived from GPL-3.0 TableSeek packs. Not bundled.",
+   "notes": "Addresses are offsets in the full-size image (TunerCat / boot-less reads must be rebuilt first)."
+  },
+  {
+   "sha256": "4d4632ede9f15ef6b859126c326048af8774be8240e51b6de9954632c0c37b6e",
+   "file_name": "12677878.xdf",
+   "size": 8000,
+   "family": "GM_E92",
+   "os_ids": [
+    "12677878"
+   ],
+   "tier": "confirmed",
+   "items": 3,
+   "source": "Table addresses located by running Universal Patcher TableSeek packs (joukoy/UniversalPatcher, GPL-3.0); names/descriptions come from those packs. Not bundled with TuneItVerse; load from your own folder.",
+   "licence": "Derived from GPL-3.0 TableSeek packs. Not bundled.",
+   "notes": "Addresses are offsets in the full-size image (TunerCat / boot-less reads must be rebuilt first)."
+  },
+  {
+   "sha256": "e04b8def13f898ff91d16b10611b16c87436d3851fc2bd764d147e042943bc5f",
+   "file_name": "12691156.xdf",
+   "size": 8009,
+   "family": "GM_E92",
+   "os_ids": [
+    "12691156"
+   ],
+   "tier": "confirmed",
+   "items": 3,
+   "source": "Table addresses located by running Universal Patcher TableSeek packs (joukoy/UniversalPatcher, GPL-3.0); names/descriptions come from those packs. Not bundled with TuneItVerse; load from your own folder.",
+   "licence": "Derived from GPL-3.0 TableSeek packs. Not bundled.",
+   "notes": "Addresses are offsets in the full-size image (TunerCat / boot-less reads must be rebuilt first)."
+  },
+  {
+   "sha256": "0bb78db563fa32cb6be668ad810fec1de6dd05acec9399b439d055c36595bcbe",
+   "file_name": "12711165.xdf",
+   "size": 8005,
+   "family": "GM_E92",
+   "os_ids": [
+    "12711165"
+   ],
+   "tier": "confirmed",
+   "items": 3,
+   "source": "Table addresses located by running Universal Patcher TableSeek packs (joukoy/UniversalPatcher, GPL-3.0); names/descriptions come from those packs. Not bundled with TuneItVerse; load from your own folder.",
+   "licence": "Derived from GPL-3.0 TableSeek packs. Not bundled.",
+   "notes": "Addresses are offsets in the full-size image (TunerCat / boot-less reads must be rebuilt first)."
+  },
+  {
+   "sha256": "1ae34e9f7061f3a9761ce2b05cadf072b900d15f1edec5f19b69cef6d4acf825",
+   "file_name": "9352082.xdf",
+   "size": 1041811,
+   "family": "GM_LS1_97-98",
+   "os_ids": [
+    "9352082"
+   ],
+   "tier": "confirmed",
+   "items": 775,
+   "source": "Table addresses located by running Universal Patcher TableSeek packs (joukoy/UniversalPatcher, GPL-3.0); names/descriptions come from those packs. Not bundled with TuneItVerse; load from your own folder.",
+   "licence": "Derived from GPL-3.0 TableSeek packs. Not bundled.",
+   "notes": "Addresses are offsets in the full-size image (TunerCat / boot-less reads must be rebuilt first)."
+  },
+  {
+   "sha256": "3738651d5fcb95a0d3f47b8c5c3d9d3ea4ed66be22071337053cc0e04af381e9",
+   "file_name": "9384578.xdf",
+   "size": 1056259,
+   "family": "GM_LS1_97-98",
+   "os_ids": [
+    "9384578"
+   ],
+   "tier": "confirmed",
+   "items": 781,
+   "source": "Table addresses located by running Universal Patcher TableSeek packs (joukoy/UniversalPatcher, GPL-3.0); names/descriptions come from those packs. Not bundled with TuneItVerse; load from your own folder.",
+   "licence": "Derived from GPL-3.0 TableSeek packs. Not bundled.",
+   "notes": "Addresses are offsets in the full-size image (TunerCat / boot-less reads must be rebuilt first)."
+  },
+  {
+   "sha256": "871dcef2ab604887e24c0606a44a2db97944fc5c8c753ae76dfef8feffb40113",
+   "file_name": "12212156.xdf",
+   "size": 1944157,
+   "family": "GM_P01",
+   "os_ids": [
+    "12212156"
+   ],
+   "tier": "confirmed",
+   "items": 1335,
+   "source": "Table addresses located by running Universal Patcher TableSeek packs (joukoy/UniversalPatcher, GPL-3.0); names/descriptions come from those packs. Not bundled with TuneItVerse; load from your own folder.",
+   "licence": "Derived from GPL-3.0 TableSeek packs. Not bundled.",
+   "notes": "Addresses are offsets in the full-size image (TunerCat / boot-less reads must be rebuilt first)."
+  },
+  {
+   "sha256": "fb2a71a8116701e3ca44f7d8b78ff66dcadf402bd7b8d7cf665c0b4301478f23",
+   "file_name": "12201830.xdf",
+   "size": 824035,
+   "family": "GM_P04_V6",
+   "os_ids": [
+    "12201830"
+   ],
+   "tier": "confirmed",
+   "items": 554,
+   "source": "TinyTuner DB map 94 (GTPAddict), as shipped in Universal Patcher DB/TinyTuner.mdb.",
+   "licence": "TinyTuner author terms: 'yours to use without limitation'. Not bundled.",
+   "notes": "70 2-D tables have a storage order inferred by smoothness (43 column-major, 27 row-major); all 70 are forced read-only. Addresses are offsets in the full-size image (TunerCat / boot-less reads must be rebuilt first)."
+  },
+  {
+   "sha256": "c66aa9f983ccaf8f380a9fc55bbb2873e5f15ed124837d990e08c4452d9a8a4a",
+   "file_name": "12587430.xdf",
+   "size": 391827,
+   "family": "GM_P08_P10",
+   "os_ids": [
+    "12587430"
+   ],
+   "tier": "confirmed",
+   "items": 212,
+   "source": "hkaase/P01P59XDFRepository P10 12587430 'Phoenix V1.0' XDF, re-addressed for the full image.",
+   "licence": "No licence stated (treat as all rights reserved). Never bundle or redistribute.",
+   "notes": "Addresses are offsets in the full-size image (TunerCat / boot-less reads must be rebuilt first)."
+  },
+  {
+   "sha256": "8300f8f549f877eac449e530434f831939b54a60c3fb6f58d5d13e2c3dde5cf5",
+   "file_name": "24251030.xdf",
+   "size": 738,
+   "family": "GM_T43",
+   "os_ids": [
+    "24251030"
+   ],
+   "tier": "confirmed",
+   "items": 0,
+   "source": "Table addresses located by running Universal Patcher TableSeek packs (joukoy/UniversalPatcher, GPL-3.0); names/descriptions come from those packs. Not bundled with TuneItVerse; load from your own folder.",
+   "licence": "Derived from GPL-3.0 TableSeek packs. Not bundled.",
+   "notes": "Addresses are offsets in the full-size image (TunerCat / boot-less reads must be rebuilt first)."
+  },
+  {
+   "sha256": "fde364b23662cea64c039f8d2c8df5797b5b5c733a01dae61fb01f48f5ef58d9",
+   "file_name": "24276638.xdf",
+   "size": 732,
+   "family": "GM_T43",
+   "os_ids": [
+    "24276638"
+   ],
+   "tier": "confirmed",
+   "items": 0,
+   "source": "Table addresses located by running Universal Patcher TableSeek packs (joukoy/UniversalPatcher, GPL-3.0); names/descriptions come from those packs. Not bundled with TuneItVerse; load from your own folder.",
+   "licence": "Derived from GPL-3.0 TableSeek packs. Not bundled.",
+   "notes": "Addresses are offsets in the full-size image (TunerCat / boot-less reads must be rebuilt first)."
+  },
+  {
+   "sha256": "5e45e479dfdba9c9642179b2c60ddc88b3a9a8847ee85d84be45cd5203f204f2",
+   "file_name": "16237015_unconfirmed.xdf",
+   "size": 14282,
+   "family": "GM_Vortec_96-97_Blackbox",
+   "os_ids": [
+    "16237015"
+   ],
+   "tier": "heuristic",
+   "items": 9,
+   "source": "Heuristic axis+smoothness scan of stock images generated for this project (no third-party definition).",
+   "licence": "No third-party content; generated for personal use.",
+   "notes": "Candidates only: purpose unknown, raw values. Every table is forced read-only. Addresses are offsets in the full-size image (TunerCat / boot-less reads must be rebuilt first)."
+  },
+  {
+   "sha256": "4683997ad8d024d4bb3ba81c91c3c7307875a19292e6c089099db0b00d417b72",
+   "file_name": "16243345_unconfirmed.xdf",
+   "size": 27322,
+   "family": "GM_Vortec_96-97_Blackbox",
+   "os_ids": [
+    "16243345"
+   ],
+   "tier": "heuristic",
+   "items": 18,
+   "source": "Heuristic axis+smoothness scan of stock images generated for this project (no third-party definition).",
+   "licence": "No third-party content; generated for personal use.",
+   "notes": "Candidates only: purpose unknown, raw values. Every table is forced read-only. Addresses are offsets in the full-size image (TunerCat / boot-less reads must be rebuilt first)."
+  },
+  {
+   "sha256": "fbd036de345a8ef448a588bfff2a7d29a733c428f92cf5cce4973d8031d3a6a4",
+   "file_name": "16256445_unconfirmed.xdf",
+   "size": 14275,
+   "family": "GM_Vortec_96-97_Blackbox",
+   "os_ids": [
+    "16256445"
+   ],
+   "tier": "heuristic",
+   "items": 9,
+   "source": "Heuristic axis+smoothness scan of stock images generated for this project (no third-party definition).",
+   "licence": "No third-party content; generated for personal use.",
+   "notes": "Candidates only: purpose unknown, raw values. Every table is forced read-only. Addresses are offsets in the full-size image (TunerCat / boot-less reads must be rebuilt first)."
+  },
+  {
+   "sha256": "d6b93b19552c079e26ef45490e10b13c30094f1767239f72f18c1a96cdd72a48",
+   "file_name": "16256455_unconfirmed.xdf",
+   "size": 14238,
+   "family": "GM_Vortec_96-97_Blackbox",
+   "os_ids": [
+    "16256455"
+   ],
+   "tier": "heuristic",
+   "items": 9,
+   "source": "Heuristic axis+smoothness scan of stock images generated for this project (no third-party definition).",
+   "licence": "No third-party content; generated for personal use.",
+   "notes": "Candidates only: purpose unknown, raw values. Every table is forced read-only. Addresses are offsets in the full-size image (TunerCat / boot-less reads must be rebuilt first)."
+  },
+  {
+   "sha256": "fd7571920fbf24c9f6d8657a853ae214b4ba3d2830b0f4eb2a4fd17446c4f537",
+   "file_name": "9378495_unconfirmed.xdf",
+   "size": 24446,
+   "family": "GM_Vortec_96-97_Blackbox",
+   "os_ids": [
+    "9378495"
+   ],
+   "tier": "heuristic",
+   "items": 16,
+   "source": "Heuristic axis+smoothness scan of stock images generated for this project (no third-party definition).",
+   "licence": "No third-party content; generated for personal use.",
+   "notes": "Candidates only: purpose unknown, raw values. Every table is forced read-only. Addresses are offsets in the full-size image (TunerCat / boot-less reads must be rebuilt first)."
+  },
+  {
+   "sha256": "bc8f40766ed364f8c4d4ecc82deabc909f8e50cbd1ad56265fec30fb27de681d",
+   "file_name": "12225074 - 512KB 2001 to 2004 Holden model years.xdf",
+   "size": 603960,
+   "family": "GM_P01",
+   "os_ids": [
+    "12225074"
+   ],
+   "tier": "untagged",
+   "items": 355,
+   "source": "hkaase/P01P59XDFRepository P01-512KB/12225074 (text TunerPro XDF).",
+   "licence": "No licence stated (treat as all rights reserved). Never bundle or redistribute.",
+   "notes": "Approved earlier for local loading. 347 tables parse and extract on a 12225074 dump (8 skipped by the parser). Descriptions carry no confirmed/unconfirmed tags, so tables are shown as untagged."
+  }
+ ]
+}

@@ -254,6 +254,8 @@ pub fn run() {
             bin_inspect::bin_hex_window, bin_inspect::bin_profile, bin_inspect::bin_tune_report,
             log_studio::log_session_summary, log_studio::log_replay_frame, log_studio::log_trim_suggestion, log_studio::explain_log_cmd, log_studio::bin_diff_report, log_studio::change_report_cmd, log_studio::three_way_report_cmd, live_dashboard::dashboard_snapshot,
             bulk_dump_mode23, validate_me7_checksums_cmd, correct_me7_checksums_cmd,
+            gm_checksums::gm_checksum_families, gm_checksums::gm_checksum_verify, gm_checksums::gm_checksum_fix_export,
+            local_defs::local_defs_manifest, local_defs::local_defs_scan, local_defs::local_defs_load, file_dialog::dialog_pick_folder,
         ])
         .run(tauri::generate_context!())
         .expect("error while running TuneItVerse");

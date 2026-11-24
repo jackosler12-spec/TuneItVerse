@@ -2,14 +2,14 @@
 <html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8">
-  <title>TuneItVerse v3.63.0</title>
+  <title>TuneItVerse v3.64.0</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-logo">
       <div class="sidebar-logo-mark">TV</div>
-      <div class="sidebar-logo-text">TuneItVerse <span class="version">v3.63.0</span></div>
+      <div class="sidebar-logo-text">TuneItVerse <span class="version">v3.64.0</span></div>
     </div>
     <nav class="sidebar-nav" id="sidebar-nav">
       <button type="button" class="nav-item active" data-view="dashboard">Dashboard</button>
@@ -299,6 +299,13 @@
         </div>
         <div class="toolbar-sep"></div>
         <div class="toolbar-group">
+          <span class="toolbar-label">Local defs</span>
+          <button id="btn-local-defs-folder" class="btn" type="button" title="Choose a folder of XDFs on your disk. Each file is checked against the SHA-256 manifest; nothing is bundled.">Defs folder</button>
+          <button id="btn-gm-cs-verify" class="btn" type="button" title="Check GM segment checksums (P01/P59, P04, P08/P10, LS1, E38, E92, T43, Duramax, 96-97 Vortec). Offline only.">GM checksums</button>
+          <button id="btn-gm-cs-export" class="btn" type="button" title="Export a checksum-corrected copy. Does not flash, does not replace the open BIN, does not change any write gate.">Export corrected copy</button>
+        </div>
+        <div class="toolbar-sep"></div>
+        <div class="toolbar-group">
           <span class="toolbar-label">Session</span>
           <button id="btn-export-workspace" class="btn" type="button">Export</button>
           <button id="btn-import-workspace" class="btn" type="button">Import</button>
@@ -326,6 +333,14 @@
         <span class="bin-chip muted" id="bin-dirty-chip" hidden>Unsaved edits</span>
         <span id="bin-cap-strip" class="cap-strip"></span>
       </div>
+      <section id="local-defs-panel" class="panel quiet-panel" hidden>
+        <div class="panel-header">
+          <span class="panel-title">Local definitions and GM checksums</span>
+          <button id="btn-local-defs-close" class="btn" type="button">Close</button>
+        </div>
+        <pre id="local-defs-status" class="mono-block">Choose a definitions folder or check a BIN's GM checksums.</pre>
+        <div id="local-defs-list" class="scroll-pane"></div>
+      </section>
       <div class="tables-layout">
         <aside class="tables-list-panel panel quiet-panel">
           <div class="panel-header">
@@ -537,7 +552,7 @@
     <div id="shortcut-help" class="shortcut-help" hidden role="dialog" aria-label="Keyboard shortcuts"></div>
 
     <footer class="status-bar">
-      <div class="status-left" id="status-left">TuneItVerse 3.63.0</div>
+      <div class="status-left" id="status-left">TuneItVerse 3.64.0</div>
       <div class="status-center" id="status-center">No invented live values</div>
       <div class="status-right" id="status-right">Desktop app required</div>
     </footer>
@@ -552,5 +567,6 @@
   <script src="adapter_status.js"></script>
   <script src="v347.js"></script>
   <script src="live_dashboard.js"></script>
+  <script src="v364.js"></script>
 </body>
 </html>
