@@ -1,1 +1,143 @@
-PLACEHOLDER_INDEX
+{
+  "version": "1.28",
+  "updated": "2026-11-25",
+  "description": "Master index of TuneItVerse ECU database entries. v3.64.0: added BOSCH_MED9_COMMON starter family (2MB FSI), version sync, offline polish. All entries schema-validated.",
+  "families": [
+    {
+      "id": "P01_0411",
+      "file": "p01_0411.json",
+      "display_name": "Holden LS1 / GM P01 0411 PCM",
+      "bin_size_bytes": 524288,
+      "primary_protocol": "VPW",
+      "status": "identify: verified_dump, read: verified_log, checksum: verified_dump, seed_key: verified_log, write: experimental, map_hints: public_source"
+    },
+    {
+      "id": "EDC16C41",
+      "file": "edc16c41_nissan_patrol.json",
+      "display_name": "Bosch EDC16C41 Nissan Patrol GU V Wagon (23710-VS43B / ZD30CRD variants) — vehicle mapping unconfirmed",
+      "bin_size_bytes": 2097152,
+      "primary_protocol": "CAN/KWP",
+      "status": "identify: verified_dump, read: not_supported, checksum: report_only, seed_key: reference_doc, write: not_supported, map_hints: unverified"
+    },
+    {
+      "id": "GM_P59",
+      "file": "gm_p59.json",
+      "display_name": "GM P59 PCM (Truck/SUV, catalog)",
+      "bin_size_bytes": 1048576,
+      "primary_protocol": "VPW",
+      "status": "identify: public_source, read: not_supported, checksum: report_only, seed_key: public_source, write: not_supported, map_hints: not_supported"
+    },
+    {
+      "id": "MED17_COMMON",
+      "file": "med17_common.json",
+      "display_name": "Bosch MED17 (common petrol, catalog)",
+      "bin_size_bytes": 4194304,
+      "primary_protocol": "CAN/UDS",
+      "status": "identify: unverified, read: not_supported, checksum: report_only, seed_key: not_supported, write: not_supported, map_hints: unverified"
+    },
+    {
+      "id": "EDC17_COMMON",
+      "file": "edc17_common.json",
+      "display_name": "Bosch EDC17 (common diesel, catalog)",
+      "bin_size_bytes": 4194304,
+      "primary_protocol": "CAN/UDS",
+      "status": "identify: unverified, read: not_supported, checksum: report_only, seed_key: not_supported, write: not_supported, map_hints: unverified"
+    },
+    {
+      "id": "ME7_COMMON",
+      "file": "me7_common.json",
+      "display_name": "Bosch ME7 (VW/Audi 1.8T / early 2.0T community)",
+      "bin_size_bytes": 1048576,
+      "primary_protocol": "KWP2000",
+      "status": "identify: unverified, read: not_supported, checksum: report_only, seed_key: not_supported, write: not_supported, map_hints: unverified"
+    },
+    {
+      "id": "DELPHI_DCM",
+      "file": "delphi_dcm.json",
+      "display_name": "Delphi DCM (common diesel, catalog)",
+      "bin_size_bytes": 1048576,
+      "primary_protocol": "CAN/KWP",
+      "status": "identify: unverified, read: not_supported, checksum: report_only, seed_key: not_supported, write: not_supported, map_hints: not_supported"
+    },
+    {
+      "id": "SIEMENS_SID803",
+      "file": "siemens_sid803.json",
+      "display_name": "Siemens SID803 (PSA/Renault diesel, catalog)",
+      "bin_size_bytes": 1048576,
+      "primary_protocol": "CAN/KWP",
+      "status": "identify: unverified, read: not_supported, checksum: report_only, seed_key: not_supported, write: not_supported, map_hints: not_supported"
+    },
+    {
+      "id": "HONDA_KEIHIN",
+      "file": "honda_keihin.json",
+      "display_name": "Honda Keihin (common, catalog)",
+      "bin_size_bytes": 524288,
+      "primary_protocol": "KWP/CAN",
+      "status": "identify: unverified, read: not_supported, checksum: report_only, seed_key: not_supported, write: not_supported, map_hints: not_supported"
+    },
+    {
+      "id": "EDC15_COMMON",
+      "file": "edc15_common.json",
+      "display_name": "Bosch EDC15 (common diesel, catalog)",
+      "bin_size_bytes": 524288,
+      "primary_protocol": "KWP",
+      "status": "identify: unverified, read: not_supported, checksum: report_only, seed_key: not_supported, write: not_supported, map_hints: unverified"
+    },
+    {
+      "id": "ME9_COMMON",
+      "file": "me9_common.json",
+      "display_name": "Bosch ME9 (common petrol, catalog)",
+      "bin_size_bytes": 1048576,
+      "primary_protocol": "KWP/CAN",
+      "status": "identify: unverified, read: not_supported, checksum: report_only, seed_key: not_supported, write: not_supported, map_hints: unverified"
+    },
+    {
+      "id": "SIMOS18",
+      "file": "simos18.json",
+      "display_name": "Siemens Simos 18 (VW EA888 Gen3, catalog)",
+      "bin_size_bytes": 4194304,
+      "primary_protocol": "CAN/UDS",
+      "status": "identify: unverified, read: not_supported, checksum: report_only, seed_key: not_supported, write: not_supported, map_hints: unverified"
+    },
+    {
+      "id": "TRIONIC8",
+      "file": "trionic8.json",
+      "display_name": "Saab Trionic 8 (catalog)",
+      "bin_size_bytes": 524288,
+      "primary_protocol": "KWP",
+      "status": "identify: unverified, read: not_supported, checksum: report_only, seed_key: not_supported, write: not_supported, map_hints: not_supported"
+    },
+    {
+      "id": "TRANSTRON_4HK1",
+      "file": "transtron_4hk1.json",
+      "display_name": "Transtron 4HK1 (Isuzu diesel, catalog)",
+      "bin_size_bytes": 1048576,
+      "primary_protocol": "CAN/KWP",
+      "status": "identify: unverified, read: not_supported, checksum: report_only, seed_key: not_supported, write: not_supported, map_hints: unverified"
+    },
+    {
+      "id": "GM_P10",
+      "file": "gm_p10.json",
+      "display_name": "GM P10 PCM (catalog)",
+      "bin_size_bytes": 1048576,
+      "primary_protocol": "VPW",
+      "status": "identify: public_source, read: not_supported, checksum: report_only, seed_key: public_source, write: not_supported, map_hints: not_supported"
+    },
+    {
+      "id": "GM_P12",
+      "file": "gm_p12.json",
+      "display_name": "GM P12 PCM (catalog)",
+      "bin_size_bytes": 1048576,
+      "primary_protocol": "VPW",
+      "status": "identify: public_source, read: not_supported, checksum: report_only, seed_key: public_source, write: not_supported, map_hints: not_supported"
+    },
+    {
+      "id": "BOSCH_MED9_COMMON",
+      "file": "bosch_med9_common.json",
+      "display_name": "Bosch MED9 (common VW/Audi 2.0T FSI community)",
+      "bin_size_bytes": 2097152,
+      "primary_protocol": "CAN/KWP",
+      "status": "identify: unverified, read: not_supported, checksum: report_only, seed_key: not_supported, write: not_supported, map_hints: unverified"
+    }
+  ]
+}
