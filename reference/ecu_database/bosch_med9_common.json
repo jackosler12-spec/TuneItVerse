@@ -1,1 +1,78 @@
-PLACEHOLDER
+{
+  "ecu_family": "BOSCH_MED9_COMMON",
+  "display_name": "Bosch MED9 (common VW/Audi 2.0T FSI community)",
+  "part_numbers_or_os_ids": [
+    "MED9.1",
+    "MED9.5",
+    "06F 906 055",
+    "06F 907 551"
+  ],
+  "vehicles": [
+    "VW Golf/Jetta/Passat 2.0T FSI",
+    "Audi A3/A4 2.0T FSI",
+    "early EA113 FSI engines"
+  ],
+  "hardware": "Bosch MED9.x (29F800 or similar flash)",
+  "protocol": "KWP2000 / UDS on CAN",
+  "bin_size_bytes": 2097152,
+  "flash_memory_map": {
+    "full_flash": "2MB typical for MED9 dumps",
+    "cal_region": "Confirm against personal dump; community maps vary by SW version"
+  },
+  "checksum": {
+    "type": "bosch_med9_multipoint_or_crc",
+    "description": "MED9 uses multipoint checksums or CRC over cal blocks. Report-only until verified against a personal dump.",
+    "reference_files": [],
+    "routine": "Size-dispatched; 2MB images report unsupported until measured routine lands."
+  },
+  "security_access": {
+    "type": "UDS/KWP 0x27 seed/key",
+    "reference": "security.rs family dispatch; extend seed_tables.json with dump-derived pairs",
+    "levels": [
+      "Level 1 diagnostic",
+      "Level 2 programming"
+    ]
+  },
+  "maps_and_xdf": {
+    "has_xdf": false,
+    "description": "Community MED9 maps: requested torque, ignition, lambda, boost. Addresses are starting hints only.",
+    "refined_map_addrs": {
+      "ignition_timing": "0x3C000",
+      "fuel_map": "0x38000",
+      "boost_target": "0x42000",
+      "driver_wish": "0x30000"
+    }
+  },
+  "notes": "Starter family for common 2MB MED9 FSI dumps. Confirm OS on your own bench read. Personal dumps only. Unverified catalog entry. Refusing live write and checksum correction.",
+  "sources": [
+    "Community MED9 dump size conventions (2MB common); exact CS layout varies by SW — report-only until a measured table exists.",
+    "No XDF or logged flash session in this repo for MED9."
+  ],
+  "hardware_tested": false,
+  "capabilities": {
+    "identify": {
+      "status": "unverified",
+      "source": "BIN size / OS-string tokens only. Sizes collide across catalog families. No dump, logged session or cited document for this in reference/."
+    },
+    "read": {
+      "status": "not_supported",
+      "source": "No read/backup path exposed in the UI for this family. No dump, logged session or cited document for this in reference/."
+    },
+    "checksum": {
+      "status": "report_only",
+      "source": "Report-only. correct_checksums refuses 2 MB images (no verified MED9 routine)."
+    },
+    "seed_key": {
+      "status": "not_supported",
+      "source": "security.rs returns KeyAlgorithmUnverified; no key is sent. Add dump-derived pairs to seed_tables.json."
+    },
+    "write": {
+      "status": "not_supported",
+      "source": "Not in write_families(); guided flash refuses."
+    },
+    "map_hints": {
+      "status": "unverified",
+      "source": "Placeholder addresses carried from community knowledge. No cited source; they are NOT from a dump or definition file. Confirm against your own dump + XDF/A2L before editing."
+    }
+  }
+}
