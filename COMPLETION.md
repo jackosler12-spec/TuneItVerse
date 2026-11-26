@@ -1,3 +1,12 @@
+# TuneItVerse v3.64.0 — adaptive bulk dump + serial voltage helpers
+
+## v3.64.0 changes
+
+- **Adaptive bulk Mode 23 dump.** `bulk_mode23_dump` in `live_verify.rs` now tries 256-byte chunks first and falls back to 128/64 on short or failed responses for that window. Progress logs every 32 KB. Still always PartialDidOnly (no OS ID / checksum verification); write gate refuses it. Requires programming session + security unlock for most large ranges. Not hardware-tested.
+- **Serial voltage monitoring notes.** `voltage_watch.rs` documents safe use of ELM `AT RV` between chunks when not in binary programming mode. Added `observe_and_classify` helper and `SERIAL_RV_POLL_INTERVAL_MS`. J2534 continuous Vbatt unchanged. Pre/post PID 0x42 still the default for serial.
+- Version synced to 3.64.0. Offline BIN/XDF/A2L/logging/scripts remain fully operational. Experimental P01 write stays off by default and untested. EDC16 checksum stays report-only.
+- **Not hardware-tested.** No adapter and no vehicle were used. Installers stay unsigned unless a certificate is configured.
+
 # TuneItVerse v3.63.0 (fix) — UI restored, Cargo.lock synced
 
 ## v3.63.0 fix

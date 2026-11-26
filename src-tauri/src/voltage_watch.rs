@@ -1,5 +1,9 @@
 //! Adapter-side supply monitoring. Never sends a diagnostic request during a write.
-//! J2534 Vbatt is an IOCTL on the pass-thru. Serial PID 0x42 is pre/post only.
+//! J2534 Vbatt is an IOCTL on the pass-thru. Serial PID 0x42 / AT RV is pre/post only
+//! unless the session is not in binary programming mode (ELM AT RV is safe outside binary).
+//!
+//! For serial mid-transfer monitoring: poll `AT RV` between chunks when the adapter is in
+//! text mode and no binary programming session is active. Abort on sag before the next chunk.
 
 use serde::Serialize;
 
@@ -24,6 +28,16 @@ impl VoltageWatch {
         }
         self.samples = self.samples.saturating_add(1);
         self.min_seen = Some(self.min_seen.map(|m| m.min(volts)).unwrap_or(volts));
+    }
+
+    /// Record a warning if the sample is in the warn band.
+    pub fn observe_and_classify(&mut self, volts: f32, min_v: f32) -> SupplyClass {
+        self.observe(volts);
+        let c = classify(volts, min_v);
+        if c == SupplyClass::Warn {
+            self.warns = self.warns.saturating_add(1);
+        }
+        c
     }
 }
 
@@ -66,6 +80,9 @@ pub fn parse_at_rv(text: &str) -> Option<f32> {
 pub fn sag_message(volts: f32, min_v: f32) -> String {
     format!("Supply sag mid-write: {volts:.2} V (min {min_v:.2}). Transfer aborted before the next chunk.")
 }
+
+/// Recommended poll interval for serial AT RV between transfer chunks (when not in binary mode).
+pub const SERIAL_RV_POLL_INTERVAL_MS: u64 = 500;
 
 #[cfg(test)]
 mod tests {
@@ -112,5 +129,14 @@ mod tests {
         w.observe(0.0);
         assert_eq!(w.samples, 2);
         assert_eq!(w.min_seen, Some(12.4));
+    }
+
+    #[test]
+    fn observe_and_classify_counts_warns() {
+        let mut w = VoltageWatch::default();
+        assert_eq!(w.observe_and_classify(12.6, 12.5), SupplyClass::Warn);
+        assert_eq!(w.warns, 1);
+        assert_eq!(w.observe_and_classify(13.0, 12.5), SupplyClass::Ok);
+        assert_eq!(w.warns, 1);
     }
 }

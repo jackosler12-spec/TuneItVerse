@@ -175,8 +175,10 @@ mod family_plan_tests {
 }
 
 /// Attempt a full-image bulk dump via repeated UDS Mode 23 (ReadMemoryByAddress).
-/// Chunks of 128 bytes. Returns Ok(full_image) only if every chunk succeeds and total == expected_len.
+/// Adaptive chunk size: starts at 256, falls back to 128 on short/fail for that window.
+/// Returns Ok(full_image) only if every chunk succeeds and total == expected_len.
 /// Otherwise Err with reason. Honest: many ECUs refuse large ranges or require programming session + unlock.
+/// Result is always PartialDidOnly (no OS ID / checksum verification). Not hardware-tested.
 pub fn bulk_mode23_dump(
     port: &mut Box<dyn SerialPort + Send>,
     ecu_family: &str,
@@ -190,38 +192,54 @@ pub fn bulk_mode23_dump(
     if proto != LiveProto::BoschUdsKwp {
         return Err("Bulk Mode 23 dump only for Bosch/UDS families in this pass".into());
     }
-    let chunk = 128u32;
+    logs.push(format!(
+        "Starting adaptive bulk Mode 23 dump for {} ({} bytes, base 0x{:X}). Prefer programming session + security unlock for large ranges. PartialDidOnly only.",
+        ecu_family, expected_len, base_addr
+    ));
     let mut image = vec![0u8; expected_len];
     let mut collected = 0usize;
-    logs.push(format!("Starting bulk Mode 23 dump for {} ({} bytes, base 0x{:X})", ecu_family, expected_len, base_addr));
-    for off in (0..expected_len).step_by(chunk as usize) {
+    let mut off = 0usize;
+    while off < expected_len {
+        let remaining = (expected_len - off) as u32;
+        let mut try_chunk = if remaining >= 256 { 256u32 } else { remaining };
+        if try_chunk < 64 { try_chunk = remaining.max(1); }
         let addr = base_addr.saturating_add(off as u32);
-        let this_len = ((expected_len - off) as u32).min(chunk);
-        match crate::uds::read_memory_by_address(port, crate::uds::Alfi::ADDR4_SIZE2, addr, this_len, true) {
-            Ok(data) if data.len() as u32 == this_len => {
-                let end = off + data.len();
-                if end <= expected_len {
-                    image[off..end].copy_from_slice(&data);
-                    collected += data.len();
+        let mut success = false;
+        for attempt_chunk in [try_chunk, 128u32.min(remaining), 64u32.min(remaining)].iter().copied().filter(|&c| c > 0) {
+            match crate::uds::read_memory_by_address(port, crate::uds::Alfi::ADDR4_SIZE2, addr, attempt_chunk, true) {
+                Ok(data) if data.len() as u32 == attempt_chunk => {
+                    let end = off + data.len();
+                    if end <= expected_len {
+                        image[off..end].copy_from_slice(&data);
+                        collected += data.len();
+                        off = end;
+                        success = true;
+                        if attempt_chunk < try_chunk {
+                            logs.push(format!("Fell back to {}-byte chunk at 0x{:X}", attempt_chunk, addr));
+                        }
+                        break;
+                    }
+                }
+                Ok(data) => {
+                    logs.push(format!("Short response at 0x{:X}: got {} expected {}", addr, data.len(), attempt_chunk));
+                }
+                Err(e) => {
+                    logs.push(format!("Mode 23 failed at 0x{:X} (chunk {}): {}", addr, attempt_chunk, e));
                 }
             }
-            Ok(data) => {
-                logs.push(format!("Short response at 0x{:X}: got {} expected {}", addr, data.len(), this_len));
-                return Err(format!("Incomplete bulk dump: short chunk at offset 0x{:X}", off));
-            }
-            Err(e) => {
-                logs.push(format!("Mode 23 failed at 0x{:X}: {}", addr, e));
-                return Err(format!("Bulk dump aborted at offset 0x{:X}: {}", off, e));
-            }
         }
-        if off % (16 * 1024) == 0 {
+        if !success {
+            return Err(format!("Bulk dump aborted at offset 0x{:X}: no successful chunk", off));
+        }
+        if off % (32 * 1024) == 0 || off == expected_len {
             logs.push(format!("Progress: {} / {} bytes", collected, expected_len));
         }
     }
     if collected == expected_len {
-        logs.push(format!("Bulk Mode 23 dump complete: {} bytes collected", collected));
+        logs.push(format!("Bulk Mode 23 dump complete: {} bytes collected (adaptive chunks). PartialDidOnly — write gate refuses. Not hardware-tested.", collected));
         Ok(image)
     } else {
         Err(format!("Bulk dump incomplete: collected {} of {} bytes", collected, expected_len))
     }
 }
+

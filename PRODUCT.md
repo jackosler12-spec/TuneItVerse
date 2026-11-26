@@ -1,6 +1,6 @@
 # TuneItVerse Product Direction
 
-**Updated:** 2026-11-19 (v3.63.0: version sync, enhanced bench tools for string extraction and identification. Still not bench-tested on a vehicle. Installers unsigned unless a certificate is configured.)  
+**Updated:** 2026-11-19 (v3.64.0: adaptive bulk Mode 23 dump, serial voltage poll helper. Still not bench-tested on a vehicle. Installers unsigned unless a certificate is configured.)  
 **Status:** Software-first. VerseLink Apex PCB work is parked.
 
 ## Decision
