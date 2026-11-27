@@ -1,3 +1,12 @@
+# TuneItVerse v3.64.0 — enhanced bulk dump + bench heuristics
+
+## v3.64.0 changes
+
+- **Enhanced bulk Mode 23 dump**: adaptive chunk sizing (starts 256, grows to 1024 on success, shrinks on short/error), better progress logging, explicit note that unlock + programming session is usually required. Still fail-closed; FullImage only on complete success. Not hardware-tested.
+- **Bench CLI expansions**: new `maps` command for heuristic low-entropy table region candidates, `fullreport` combining identify + strings + candidates + notes. No invented calibration values.
+- Version sync to 3.64.0. Offline tools remain fully operational. All write paths and hardware status unchanged (experimental/report-only where previously stated).
+- **Not hardware-tested.**
+
 # TuneItVerse v3.63.0 (fix) — UI restored, Cargo.lock synced
 
 ## v3.63.0 fix

@@ -196,6 +196,35 @@ def extract_strings(data: bytes, min_len: int = 4) -> list[str]:
     return [m.decode('ascii', errors='ignore') for m in matches]
 
 
+def map_candidates(data: bytes, min_entropy: float = 0.45) -> list[dict]:
+    """Heuristic scan for possible table regions (structured low-entropy data)."""
+    cands = []
+    step = 512
+    for off in range(0, len(data) - 2048, step):
+        block = data[off:off+2048]
+        ent = entropy(block)
+        nonzero = sum(1 for b in block if b not in (0, 0xFF))
+        if ent < min_entropy and nonzero > 100:
+            cands.append({"offset": hex(off), "entropy": round(ent, 3), "nonzero_ratio": round(nonzero/2048, 2)})
+    # sort by lowest entropy
+    cands.sort(key=lambda x: x["entropy"])
+    return cands[:15]
+
+
+def full_report(data: bytes) -> dict:
+    ident = identify(data)
+    strings = extract_strings(data, 5)[:40]
+    cands = map_candidates(data)
+    return {
+        "identify": ident,
+        "size_bytes": len(data),
+        "sha256_short": hashlib.sha256(data).hexdigest()[:16],
+        "interesting_strings": strings,
+        "possible_table_regions": cands,
+        "notes": "Heuristic only. Confirm maps against known definitions or your own dump analysis. No calibration values invented.",
+    }
+
+
 def diff_report(a: bytes, b: bytes) -> str:
     if len(a) != len(b):
         return f"# BIN diff\n\nImages differ in length ({len(a)} vs {len(b)}).\n"
@@ -298,7 +327,7 @@ def explain_dtc(code: str) -> dict:
 
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description="TuneItVerse bench helper")
-    parser.add_argument("command", choices=["checksum", "identify", "seedkey", "p01cmp", "diff", "adapters", "profile", "hex", "report", "logsummary", "dtc", "strings"])
+    parser.add_argument("command", choices=["checksum", "identify", "seedkey", "p01cmp", "diff", "adapters", "profile", "hex", "report", "logsummary", "dtc", "strings", "maps", "fullreport"])
     parser.add_argument("bin_path", nargs="?")
     parser.add_argument("seed_hex", nargs="?")
     parser.add_argument("level", nargs="?", default="1")
@@ -359,6 +388,14 @@ def main(argv: list[str]) -> int:
             print(s)
         if len(strs) > 100:
             print(f"... and {len(strs)-100} more")
+    elif args.command == "maps":
+        cands = map_candidates(data)
+        print(f"Possible table region candidates (heuristic, lowest entropy first):")
+        for c in cands:
+            print(c)
+    elif args.command == "fullreport":
+        import json
+        print(json.dumps(full_report(data), indent=2))
     elif args.command == "report":
         ident = identify(data)
         cs = checksum_report(data)

@@ -190,11 +190,14 @@ pub fn bulk_mode23_dump(
     if proto != LiveProto::BoschUdsKwp {
         return Err("Bulk Mode 23 dump only for Bosch/UDS families in this pass".into());
     }
-    let chunk = 128u32;
+    // Adaptive chunk: start larger, fall back on short/error. Many ECUs accept 256-1024 on unlocked session.
+    let mut chunk = 256u32;
     let mut image = vec![0u8; expected_len];
     let mut collected = 0usize;
-    logs.push(format!("Starting bulk Mode 23 dump for {} ({} bytes, base 0x{:X})", ecu_family, expected_len, base_addr));
-    for off in (0..expected_len).step_by(chunk as usize) {
+    logs.push(format!("Starting enhanced bulk Mode 23 dump for {} ({} bytes, base 0x{:X}, initial chunk {})", ecu_family, expected_len, base_addr, chunk));
+    logs.push("Note: full success requires ECU support for large memory reads in current session. Unlock + programming session often required. Not hardware-tested.".into());
+    let mut off = 0usize;
+    while off < expected_len {
         let addr = base_addr.saturating_add(off as u32);
         let this_len = ((expected_len - off) as u32).min(chunk);
         match crate::uds::read_memory_by_address(port, crate::uds::Alfi::ADDR4_SIZE2, addr, this_len, true) {
@@ -203,19 +206,25 @@ pub fn bulk_mode23_dump(
                 if end <= expected_len {
                     image[off..end].copy_from_slice(&data);
                     collected += data.len();
+                    off = end;
+                    // Grow chunk on success
+                    if chunk < 1024 { chunk = (chunk * 2).min(1024); }
                 }
             }
             Ok(data) => {
-                logs.push(format!("Short response at 0x{:X}: got {} expected {}", addr, data.len(), this_len));
-                return Err(format!("Incomplete bulk dump: short chunk at offset 0x{:X}", off));
+                logs.push(format!("Short response at 0x{:X}: got {} expected {}; shrinking chunk", addr, data.len(), this_len));
+                chunk = (chunk / 2).max(64);
+                if chunk < 64 { return Err(format!("Incomplete bulk dump: short chunk at offset 0x{:X}", off)); }
+                // retry same off with smaller
             }
             Err(e) => {
-                logs.push(format!("Mode 23 failed at 0x{:X}: {}", addr, e));
-                return Err(format!("Bulk dump aborted at offset 0x{:X}: {}", off, e));
+                logs.push(format!("Mode 23 failed at 0x{:X}: {}; shrinking chunk", addr, e));
+                chunk = (chunk / 2).max(64);
+                if chunk < 64 { return Err(format!("Bulk dump aborted at offset 0x{:X}: {}", off, e)); }
             }
         }
-        if off % (16 * 1024) == 0 {
-            logs.push(format!("Progress: {} / {} bytes", collected, expected_len));
+        if collected % (32 * 1024) == 0 && collected > 0 {
+            logs.push(format!("Progress: {} / {} bytes (chunk now {})", collected, expected_len, chunk));
         }
     }
     if collected == expected_len {
