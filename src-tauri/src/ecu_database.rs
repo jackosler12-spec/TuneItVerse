@@ -164,6 +164,7 @@ const SID803_JSON: &str = include_str!("../../reference/ecu_database/siemens_sid
 const HONDA_JSON: &str = include_str!("../../reference/ecu_database/honda_keihin.json");
 const EDC15_JSON: &str = include_str!("../../reference/ecu_database/edc15_common.json");
 const ME9_JSON: &str = include_str!("../../reference/ecu_database/me9_common.json");
+const MED9_JSON: &str = include_str!("../../reference/ecu_database/med9_common.json");
 const SIMOS18_JSON: &str = include_str!("../../reference/ecu_database/simos18.json");
 const TRIONIC8_JSON: &str = include_str!("../../reference/ecu_database/trionic8.json");
 const TRANSTRON_JSON: &str = include_str!("../../reference/ecu_database/transtron_4hk1.json");
@@ -176,7 +177,7 @@ const DB_FILES: &[(&str, &str)] = &[
     ("p01_0411.json", P01_JSON), ("edc16c41_nissan_patrol.json", EDC16_JSON), ("gm_p59.json", P59_JSON),
     ("med17_common.json", MED17_JSON), ("edc17_common.json", EDC17_JSON), ("me7_common.json", ME7_JSON),
     ("delphi_dcm.json", DELPHI_JSON), ("siemens_sid803.json", SID803_JSON), ("honda_keihin.json", HONDA_JSON),
-    ("edc15_common.json", EDC15_JSON), ("me9_common.json", ME9_JSON), ("simos18.json", SIMOS18_JSON),
+    ("edc15_common.json", EDC15_JSON), ("me9_common.json", ME9_JSON), ("med9_common.json", MED9_JSON), ("simos18.json", SIMOS18_JSON),
     ("trionic8.json", TRIONIC8_JSON), ("transtron_4hk1.json", TRANSTRON_JSON),
     ("gm_p10.json", P10_JSON), ("gm_p12.json", P12_JSON),
 ];
