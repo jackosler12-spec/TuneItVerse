@@ -1,0 +1,45 @@
+{
+  "ecu_family": "MED9_COMMON",
+  "display_name": "Bosch MED9 / MED9.1 gasoline (VW/Audi/others)",
+  "part_numbers_or_os_ids": [
+    "MED9.1",
+    "0261xxxxxx",
+    "common 1.8T/2.0T OS variants"
+  ],
+  "vehicles": [
+    "VW Golf GTI MK5/MK6",
+    "Audi A3/A4 1.8T/2.0T",
+    "Many EA113 applications"
+  ],
+  "hardware": "Bosch MED9.x gasoline ECU",
+  "protocol": "CAN/KWP or UDS depending on variant",
+  "bin_size_bytes": 2097152,
+  "checksum": {
+    "type": "bosch_med9_report_only",
+    "description": "Report-only. No measured layout in this tree.",
+    "reference_files": [],
+    "routine": "report-only"
+  },
+  "security_access": {
+    "type": "KWP/UDS 0x27",
+    "reference": "Public community notes only; no measured pairs in seed_tables.json",
+    "levels": ["diagnostic", "extended"]
+  },
+  "maps_and_xdf": {
+    "has_xdf": false,
+    "description": "Community map locations exist in public forums; verify against personal dump."
+  },
+  "notes": "Catalog entry for common MED9 family. Identify by size and strings. No write path. Personal dumps only.",
+  "sources": [
+    "General public knowledge from tuning communities (e.g. open source projects and forums). No commercial bins. Unverified in this tree."
+  ],
+  "hardware_tested": false,
+  "capabilities": {
+    "identify": {"status": "unverified", "source": "BIN size + string scan. No dump verified here."},
+    "read": {"status": "not_supported", "source": "No FullImage path implemented."},
+    "checksum": {"status": "report_only", "source": "No corrector."},
+    "seed_key": {"status": "not_supported", "source": "Add pairs to seed_tables.json from personal dumps."},
+    "write": {"status": "not_supported", "source": "Not in write_families()."},
+    "map_hints": {"status": "unverified", "source": "Public community locations; confirm on dump."}
+  }
+}
