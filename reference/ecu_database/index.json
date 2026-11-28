@@ -1,7 +1,7 @@
 {
-  "version": "1.27",
-  "updated": "2026-11-13",
-  "description": "Master index of TuneItVerse ECU database entries. v3.61.0: bulk Mode 23 dump scaffolded for UDS families;  + source on every family (schema validated by ecu_database.rs tests), GM P10/P12 added from PcmHammer PcmInfo.cs, P59 corrected to 1 MiB.",
+  "version": "1.28",
+  "updated": "2026-11-28",
+  "description": "Master index of TuneItVerse ECU database entries. v3.64.0: added MED9_COMMON catalog entry. Prior: bulk Mode 23, GM P10/P12, schema validated.",
   "families": [
     {
       "id": "P01_0411",
@@ -130,9 +130,17 @@
       "bin_size_bytes": 1048576,
       "primary_protocol": "J1850 VPW (PcmHammer kernel Kernel-P12.bin @ 0xFF2000; upstream comment 'or FF0000?')",
       "status": "identify: unverified, read: not_supported, checksum: not_supported, seed_key: public_source, write: not_supported, map_hints: not_supported"
+    },
+    {
+      "id": "MED9_COMMON",
+      "file": "med9_common.json",
+      "display_name": "Bosch MED9 / MED9.1 gasoline (VW/Audi/others)",
+      "bin_size_bytes": 2097152,
+      "primary_protocol": "CAN/KWP",
+      "status": "identify: unverified, read: not_supported, checksum: report_only, seed_key: not_supported, write: not_supported, map_hints: unverified"
     }
   ],
-  "notes": "Statuses describe what is measured in-repo. Only P01_0411 has FullImage backup + experimental kernel write (typed confirm). Offline map editor, BIN tools, logging replay, scripts fully operational. Hardware paths exist but untested. Personal dumps only; cite sources; mark unverified. Index 1.25 adds structured map hints (addr/size/scale/unit) for EDC16C41, P59, and Transtron.",
+  "notes": "Statuses describe what is measured in-repo. Only P01_0411 has FullImage backup + experimental kernel write (typed confirm). Offline map editor, BIN tools, logging replay, scripts fully operational. Hardware paths exist but untested. Personal dumps only; cite sources; mark unverified.",
   "status_enum": [
     "verified_dump",
     "verified_log",
