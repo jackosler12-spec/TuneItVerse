@@ -49,7 +49,7 @@ def identify(data: bytes) -> dict:
     size = len(data)
     family = {
         P01_128: "P01_0411 (128KB slice)",
-        P01_512: "P01_0411 or HONDA_KEIHIN — confirm OS string",
+        P01_512: "P01_0411 or HONDA_KEIHIN or MED9 — confirm OS string",
         1048576: "ME7_COMMON",
         EDC16: "EDC16/EDC17/MED17/DELPHI 2MB",
         SID803: "SIEMENS_SID803 (1.5MB)",
