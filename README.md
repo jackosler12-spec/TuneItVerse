@@ -18,7 +18,7 @@ npm run build    # release desktop binary + copy TuneItVerse.exe to this folder
 
 After every release build, `TuneItVerse.exe` is copied to the repository root (this folder). Double-click that file to run the current version.
 
-**v3.63.0**: Enhanced bench CLI with string extraction for better OS/part number identification from dumps. Offline tools remain fully operational. Hardware paths still untested.
+**v3.64.0**: Expanded ECU DB with MED9_COMMON catalog entry + enhanced identify. Enhanced bench CLI with string extraction for better OS/part number identification from dumps. Offline tools remain fully operational. Hardware paths still untested.
 
 Bench helper for personal dumps:
 ```bash
@@ -41,9 +41,9 @@ Live data over ELM327/OBDLink reads the ECU's Mode 01 support masks first and po
 
 Data Logging can import a CSV (including Car Scanner's long `SECONDS;PID;VALUE` export; GPS columns are dropped), replay it, and cite logged STFT/LTFT percent. That report does not emit a calibration value. Compare lists changed ranges, and a three-way report classifies stock, the working tune, and a third dump. None of these paths writes a calibration.
 
-## Current status (v3.63.0)
+## Current status (v3.64.0)
 
-- v3.63.0: Enhanced bench tools for string extraction and identification. Version sync across package.json, Cargo, tauri.conf, installer. Offline operational completeness confirmed for supported features. Not hardware-tested.
+- v3.64.0: Enhanced bench tools for string extraction and identification. Version sync across package.json, Cargo, tauri.conf, installer. Offline operational completeness confirmed for supported features. Not hardware-tested.
 - v3.62.1: Build fixed (duplicate command macros, ME7 borrow error, unregistered commands, version sync). A bulk Mode 23 dump is `PartialDidOnly` again and the write gate refuses it. Only the P01 Mode 3C verified read-back gives `FullImage`. Not hardware-tested.
 - v3.62.0: Value sheet lists extracted cell changes for every loaded table. An address that does not resolve is not compared, and no placeholder number is shown. Cell delta uses the same refusal. Not hardware-tested. Installers stay unsigned unless a certificate is configured.
 - v3.59.0: Trim report cites logged trim percent and does not emit a multiplier. Map-from-log names the mean RPM/MAP bin `mean_cell`. Flash and live-compare errors stay in their own words instead of a `Not connected:` prefix. Compare prints a three-way stock / tune / other report and does not patch a BIN. Not hardware-tested. Installers stay unsigned unless a certificate is configured.
